@@ -28,7 +28,7 @@ export function SiteHeader() {
               />
             </span>
             <span className="font-mono text-sm font-bold tracking-[0.22em]">
-              SIMA<span className="text-primary">LYTICS</span>
+              SIM<span className="text-primary">ALYTICS</span>
             </span>
           </Link>
 

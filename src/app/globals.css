@@ -121,8 +121,8 @@
 }
 
 .animate-marquee {
-  /* 45s na kopii = výrazně pomalejší, klidnější investiční tempo */
-  animation: marquee calc(var(--ticker-speed, 45s) * 2) linear infinite;
+  /* 120 s na kopii ≈ 100 px/s – pomalé, čitelné tempo */
+  animation: marquee calc(var(--ticker-speed, 120s) * 2) linear infinite;
   will-change: transform;
 }
 
