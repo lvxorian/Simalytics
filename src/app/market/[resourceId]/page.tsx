@@ -12,8 +12,12 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import {
-  INTERVAL_OPTIONS,
+  aggregateDaily,
+  bollingerBands,
+  ema,
   resolveIntervalOption,
+  rsi,
+  sma,
   toCandles,
   type Candle,
 } from "@/lib/candles";
@@ -25,7 +29,8 @@ import {
   getWatchedIds,
   isTracked,
 } from "@/lib/data";
-import { formatPrice } from "@/lib/format";
+import { getMarketSummary } from "@/lib/simcotools";
+import { formatCompact, formatPrice } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -79,23 +84,16 @@ export default async function MarketItemPage({
   let vwap: { time: number; value: number }[] | undefined;
   let dataSource = "";
 
-  if (opt.key === "1d") {
+  if (opt.key === "1d" || opt.key === "1w" || opt.key === "1M") {
     // Denní svíčky z backfillu (Simco Tools, ~3 měsíce, s objemem a VWAP)
     const daily = await getDailyCandles(id);
-    candles = daily.map((c) => ({
+    const dailyCandles: Candle[] = daily.map((c) => ({
       time: dayToUnix(c.day),
       open: c.open,
       high: c.high,
       low: c.low,
       close: c.close,
     }));
-    volume = daily
-      .filter((c) => c.volume !== null)
-      .map((c) => ({ time: dayToUnix(c.day), value: c.volume! }));
-    vwap = daily
-      .filter((c) => c.vwap !== null)
-      .map((c) => ({ time: dayToUnix(c.day), value: c.vwap! }));
-    dataSource = "denní svíčky · Simco Tools";
 
     // Dnešní (rozpracovaná) svíčka z našich ticků – Simco Tools ji
     // publikuje až po skončení dne
@@ -110,11 +108,27 @@ export default async function MarketItemPage({
       ),
       86400
     );
-    const lastStored = candles[candles.length - 1]?.time ?? 0;
+    const lastStored = dailyCandles[dailyCandles.length - 1]?.time ?? 0;
     const today = todayCandles[todayCandles.length - 1];
     if (today && today.time > lastStored) {
-      candles.push(today);
-      dataSource = "denní svíčky + dnešní ticky";
+      dailyCandles.push(today);
+    }
+    dataSource = "denní svíčky · Simco Tools";
+
+    if (opt.key === "1d") {
+      candles = dailyCandles;
+      volume = daily
+        .filter((c) => c.volume !== null)
+        .map((c) => ({ time: dayToUnix(c.day), value: c.volume! }));
+      vwap = daily
+        .filter((c) => c.vwap !== null)
+        .map((c) => ({ time: dayToUnix(c.day), value: c.vwap! }));
+      if (today) dataSource = "denní svíčky + dnešní ticky";
+    } else {
+      // weekly / monthly agregace
+      candles = aggregateDaily(dailyCandles, opt.key);
+      dataSource =
+        opt.key === "1w" ? "týdenní svíčky · agregace z denních" : "měsíční svíčky · agregace z denních";
     }
   } else {
     // Intraday TF agregované z našich ticků (poller každých 5 minut)
@@ -122,6 +136,16 @@ export default async function MarketItemPage({
     candles = toCandles(ticks, opt.seconds);
     dataSource = `ticky · posledních ${opt.days} dní`;
   }
+
+  // ── Technické indikátory (server-side výpočet) ────────────────────
+  const bb = bollingerBands(candles, 20, 2);
+  const indicators = {
+    sma: sma(candles, 20),
+    ema: ema(candles, 50),
+    bbUpper: bb.upper,
+    bbLower: bb.lower,
+    rsi: rsi(candles, 14),
+  };
 
   const lastTick =
     candles.length > 0 ? candles[candles.length - 1].close : null;
@@ -132,12 +156,16 @@ export default async function MarketItemPage({
       ? ((lastTick - base) / base) * 100
       : null;
 
+  // ── Market summary ze Simco Tools (objem, 5m svíčka, denní VWAP) ──
+  const summary = await getMarketSummary(id, 0);
+
   const periodHigh = candles.length ? Math.max(...candles.map((c) => c.high)) : null;
   const periodLow = candles.length ? Math.min(...candles.map((c) => c.low)) : null;
   const periodAvg = candles.length
     ? candles.reduce((sum, c) => sum + c.close, 0) / candles.length
     : null;
 
+  const img = item.image_url;
   const up = (change24h ?? 0) > 0;
   const down = (change24h ?? 0) < 0;
   const chartMode = mode === "area" ? "area" : "candles";
@@ -157,7 +185,7 @@ export default async function MarketItemPage({
       {/* ── Hero: ikona + cena + 24h ─────────────────────────── */}
       <div className="flex flex-wrap items-center gap-5">
         <ItemIcon
-          url={item.image_url}
+          url={img}
           name={item.name}
           size={64}
           className="rounded-xl bg-secondary p-1.5 ring-1 ring-inset ring-white/10"
@@ -182,24 +210,32 @@ export default async function MarketItemPage({
               {formatPrice(lastTick)}
             </span>
             <ChangeBadge value={change24h} />
-            <span className="text-xs text-muted-foreground">
-              24h změna
-            </span>
+            <span className="text-xs text-muted-foreground">24h změna</span>
           </div>
         </div>
       </div>
 
       {/* ── Přepínače intervalu a typu grafu ─────────────────── */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-1 rounded-full border border-border/80 bg-card p-1">
-          {INTERVAL_OPTIONS.map((o) => {
+        <div className="no-scrollbar flex items-center gap-1 overflow-x-auto rounded-full border border-border/80 bg-card p-1">
+          {(
+            [
+              { key: "5m", label: "5m" },
+              { key: "15m", label: "15m" },
+              { key: "1h", label: "1H" },
+              { key: "4h", label: "4H" },
+              { key: "1d", label: "1D" },
+              { key: "1w", label: "1W" },
+              { key: "1M", label: "1M" },
+            ] as const
+          ).map((o) => {
             const active = o.key === opt.key;
             return (
               <Link
                 key={o.key}
                 href={`/market/${id}${buildQuery({ interval: o.key, mode })}`}
                 className={cn(
-                  "rounded-full px-3.5 py-1.5 font-mono text-xs transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
+                  "shrink-0 rounded-full px-3.5 py-1.5 font-mono text-xs transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
                   active
                     ? "bg-primary text-primary-foreground"
                     : "text-muted-foreground hover:text-foreground"
@@ -241,7 +277,7 @@ export default async function MarketItemPage({
         </div>
       </div>
 
-      {!tracked && opt.key !== "1d" && (
+      {!tracked && opt.key !== "1d" && opt.key !== "1w" && opt.key !== "1M" && (
         <div className="flex items-start gap-2 rounded-xl border border-border/80 bg-card px-4 py-3 text-sm text-muted-foreground">
           <Info className="mt-0.5 size-4 shrink-0 text-primary" />
           <p>
@@ -261,6 +297,7 @@ export default async function MarketItemPage({
               mode={chartMode}
               volume={opt.key === "1d" ? volume : undefined}
               vwap={opt.key === "1d" ? vwap : undefined}
+              indicators={indicators}
             />
           ) : (
             <div className="flex h-72 flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
@@ -274,11 +311,55 @@ export default async function MarketItemPage({
         </CardContent>
       </Card>
 
-      {/* ── Statistiky období ────────────────────────────────── */}
+      {/* ── Statistiky období + live summary ─────────────────── */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <MiniStat label="Max. období" value={formatPrice(periodHigh)} />
         <MiniStat label="Min. období" value={formatPrice(periodLow)} />
         <MiniStat label="Průměr" value={formatPrice(periodAvg)} />
+        <MiniStat
+          label="Objem (den)"
+          value={
+            summary ? formatCompact(summary.volume) : formatCompact(volume?.reduce((s, v) => s + v.value, 0) ?? null)
+          }
+        />
+        <MiniStat
+          label="VWAP (včera)"
+          value={formatPrice(summary?.lastDayCandlestick?.vwap ?? null)}
+        />
+        <MiniStat
+          label="5m změna"
+          value={
+            summary
+              ? `${summary.fiveMinutesCandlestick.previousClosePercentageChange > 0 ? "+" : ""}${(summary.fiveMinutesCandlestick.previousClosePercentageChange * 100).toFixed(2)} %`
+              : "–"
+          }
+          tone={
+            summary
+              ? summary.fiveMinutesCandlestick.previousClosePercentageChange > 0
+                ? "up"
+                : summary.fiveMinutesCandlestick.previousClosePercentageChange < 0
+                  ? "down"
+                  : "neutral"
+              : "neutral"
+          }
+        />
+        <MiniStat
+          label="Denní změna (API)"
+          value={
+            summary
+              ? `${summary.pricePercentChange > 0 ? "+" : ""}${(summary.pricePercentChange * 100).toFixed(2)} %`
+              : "–"
+          }
+          tone={
+            summary
+              ? summary.pricePercentChange > 0
+                ? "up"
+                : summary.pricePercentChange < 0
+                  ? "down"
+                  : "neutral"
+              : "neutral"
+          }
+        />
         <MiniStat label="Zdroj dat" value={dataSource} small />
       </div>
     </div>
@@ -289,17 +370,26 @@ function MiniStat({
   label,
   value,
   small,
+  tone = "neutral",
 }: {
   label: string;
   value: string;
   small?: boolean;
+  tone?: "up" | "down" | "neutral";
 }) {
   return (
     <div className="rounded-xl border border-border/80 bg-card px-4 py-3">
       <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
         {label}
       </div>
-      <div className={cn("mt-1 font-mono", small ? "text-sm" : "text-lg font-semibold")}>
+      <div
+        className={cn(
+          "mt-1 font-mono",
+          small ? "text-sm" : "text-lg font-semibold",
+          tone === "up" && "text-up",
+          tone === "down" && "text-down"
+        )}
+      >
         {value}
       </div>
     </div>

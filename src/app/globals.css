@@ -1,48 +1,48 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-/* Aplikace je dark-only (premium trading terminál) */
+/* Aplikace je dark-only – investiční tool: tlumená navy/ink paleta */
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --radius: 0.75rem;
+  --radius: 0.625rem;
 
-  /* Hluboká čerň s dotykem modři – OLED */
-  --background: #05070b;
-  --foreground: #e8edf4;
+  /* Ink pozadí s dotykem modři (méně čisté černé, víc "finance") */
+  --background: #0b0e14;
+  --foreground: #e6e9ef;
 
-  --card: #0a0d14;
-  --card-foreground: #e8edf4;
-  --popover: #0c1017;
-  --popover-foreground: #e8edf4;
+  --card: #11151f;
+  --card-foreground: #e6e9ef;
+  --popover: #12161f;
+  --popover-foreground: #e6e9ef;
 
-  /* Značková zlatá (Bybit vibe) */
-  --primary: #f7a600;
-  --primary-foreground: #05070b;
+  /* Primár: tlumená modrá – důvěryhodnost investičního toolu */
+  --primary: #5b8def;
+  --primary-foreground: #0b0e14;
 
-  --secondary: #131826;
-  --secondary-foreground: #e8edf4;
-  --muted: #0f131c;
-  --muted-foreground: #8d97ab;
-  --accent: #182031;
-  --accent-foreground: #e8edf4;
+  --secondary: #1a2030;
+  --secondary-foreground: #e6e9ef;
+  --muted: #151a26;
+  --muted-foreground: #8a93a6;
+  --accent: #1e2637;
+  --accent-foreground: #e6e9ef;
 
-  --destructive: #f6465d;
-  --destructive-foreground: #05070b;
+  --destructive: #e5484d;
+  --destructive-foreground: #0b0e14;
 
-  --border: #1a2029;
-  --input: #1a2029;
-  --ring: #f7a600;
+  --border: #232a38;
+  --input: #232a38;
+  --ring: #5b8def;
 
-  /* Sémantika trhu – jednotná napříč aplikací */
-  --up: #2ebd85;
-  --down: #f6465d;
+  /* Sémantika trhu – klasičtější, méně neonová než Bybit */
+  --up: #22ab94;
+  --down: #ec5063;
 
-  --chart-1: #2ebd85;
-  --chart-2: #f6465d;
-  --chart-3: #f7a600;
-  --chart-4: #22d3ee;
-  --chart-5: #a78bfa;
+  --chart-1: #22ab94;
+  --chart-2: #ec5063;
+  --chart-3: #5b8def;
+  --chart-4: #d4a72c;
+  --chart-5: #9d7bde;
 }
 
 @theme inline {
@@ -79,8 +79,8 @@
   --color-up: var(--up);
   --color-down: var(--down);
 
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", monospace;
+  --font-sans: var(--font-ibm-plex-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-ibm-plex-mono), ui-monospace, "SFMono-Regular", monospace;
 }
 
 @layer base {
@@ -94,7 +94,6 @@
 
   body {
     @apply bg-background text-foreground antialiased;
-    /* tabulková čísla – klíčová pro finanční UI */
     font-variant-numeric: tabular-nums;
   }
 
@@ -104,15 +103,14 @@
   }
 }
 
-/* ── Pozadí: decentní mesh gradient (fixed, nepohybuje se se scrollen) ── */
+/* ── Pozadí: jemný modrý nádech nahoře (fixed, nepohybuje se) ── */
 .bg-mesh {
   background:
-    radial-gradient(52rem 30rem at 12% -8%, rgb(247 166 0 / 0.07), transparent 60%),
-    radial-gradient(46rem 28rem at 88% -6%, rgb(46 189 133 / 0.06), transparent 60%),
-    radial-gradient(60rem 40rem at 50% 118%, rgb(34 211 238 / 0.04), transparent 62%);
+    radial-gradient(52rem 30rem at 15% -10%, rgb(91 141 239 / 0.05), transparent 60%),
+    radial-gradient(46rem 28rem at 85% -8%, rgb(34 171 148 / 0.04), transparent 60%);
 }
 
-/* ── Ticker tape (sliding lista) ─────────────────────────────────── */
+/* ── Ticker tape ─────────────────────────────────────────────── */
 @keyframes marquee {
   from {
     transform: translateX(0);
@@ -123,11 +121,11 @@
 }
 
 .animate-marquee {
-  animation: marquee var(--ticker-speed, 80s) linear infinite;
+  /* 45s na kopii = výrazně pomalejší, klidnější investiční tempo */
+  animation: marquee calc(var(--ticker-speed, 45s) * 2) linear infinite;
   will-change: transform;
 }
 
-/* Přejetí myší=listu zastavíš (standard u trading aplikací) */
 .ticker-hover-pause:hover .animate-marquee {
   animation-play-state: paused;
 }
@@ -138,7 +136,7 @@
   }
 }
 
-/* ── Scrollbary ──────────────────────────────────────────────────── */
+/* ── Scrollbary ──────────────────────────────────────────────── */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -147,14 +145,13 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #232a36;
+  background: #232a38;
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #2e3745;
 }
 
-/* Skrytý horizontal scrollbar (mobilní navigace) */
 .no-scrollbar {
   scrollbar-width: none;
 }

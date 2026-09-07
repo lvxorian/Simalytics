@@ -1,11 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AlertTriangle, CalendarClock, Factory, Landmark, TrendingDown, TrendingUp } from "lucide-react";
+import { AlertTriangle, Building2, CalendarClock, Factory, Landmark, TrendingDown, TrendingUp } from "lucide-react";
 
 import { AutoRefresh } from "@/components/auto-refresh";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getEvents, getGovernmentOrders, getPhaseRanges } from "@/lib/simcotools";
+import {
+  getBuildingCounts,
+  getEvents,
+  getGovernmentOrders,
+  getPhaseRanges,
+  getRealmSummaries,
+} from "@/lib/simcotools";
+import { formatCompact } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -29,10 +36,12 @@ function formatDate(iso: string): string {
 }
 
 export default async function StatistikyPage() {
-  const [phaseRanges, events, orders] = await Promise.all([
+  const [phaseRanges, events, orders, summaries, buildings] = await Promise.all([
     getPhaseRanges().catch(() => []),
     getEvents().catch(() => []),
     getGovernmentOrders(12).catch(() => []),
+    getRealmSummaries(8).catch(() => []),
+    getBuildingCounts("all").catch(() => ({ buildings: [], total: 0 })),
   ]);
 
   const now = new Date();
@@ -61,6 +70,73 @@ export default async function StatistikyPage() {
           Zdroj: Simco Tools (data v češtině).
         </p>
       </div>
+
+      {/* Makro ekonomika realmu */}
+      {summaries.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            <Landmark className="size-4" />
+            Ekonomika realmu
+          </h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <MacroStat
+              label="Aktivní firmy"
+              value={summaries[0].activeCompanies.toLocaleString("cs-CZ")}
+              delta={pctDelta(summaries[0].activeCompanies, summaries[1]?.activeCompanies)}
+            />
+            <MacroStat
+              label="Hodnota firem"
+              value={formatCompact(summaries[0].companiesValue)}
+              delta={pctDelta(summaries[0].companiesValue, summaries[1]?.companiesValue)}
+            />
+            <MacroStat
+              label="Celkem budov"
+              value={summaries[0].totalBuildings.toLocaleString("cs-CZ")}
+              delta={pctDelta(summaries[0].totalBuildings, summaries[1]?.totalBuildings)}
+            />
+            <MacroStat
+              label="Prodané bondy"
+              value={formatCompact(summaries[0].bondsSold)}
+              delta={pctDelta(summaries[0].bondsSold, summaries[1]?.bondsSold)}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Denní data z {formatDate(summaries[0].date)} · zdroj Simco Tools
+            realm summaries.
+          </p>
+        </section>
+      )}
+
+      {/* Top budovy v realmu */}
+      {buildings.buildings.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            <Building2 className="size-4" />
+            Top budovy ({buildings.total.toLocaleString("cs-CZ")} celkem)
+          </h2>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {buildings.buildings.slice(0, 9).map((b) => (
+              <div
+                key={b.id}
+                className="rounded-xl border border-border/80 bg-card px-4 py-3"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate text-sm font-medium">{b.name}</span>
+                  <span className="shrink-0 font-mono text-sm">
+                    {b.count.toLocaleString("cs-CZ")}
+                  </span>
+                </div>
+                <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-primary/70"
+                    style={{ width: `${Math.min(100, b.proportion * 100 * 3)}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Fáze ekonomiky */}
       <section className="space-y-3">
@@ -230,6 +306,45 @@ export default async function StatistikyPage() {
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+function pctDelta(current: number | undefined, previous: number | undefined): number | null {
+  if (!current || !previous || previous === 0) return null;
+  return ((current - previous) / previous) * 100;
+}
+
+function MacroStat({
+  label,
+  value,
+  delta,
+}: {
+  label: string;
+  value: string;
+  delta: number | null;
+}) {
+  return (
+    <div className="rounded-xl border border-border/80 bg-card p-4">
+      <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+        {label}
+      </div>
+      <div className="mt-2 font-mono text-xl font-semibold tabular-nums">
+        {value}
+      </div>
+      {delta !== null && (
+        <div
+          className={cn(
+            "mt-0.5 font-mono text-xs",
+            delta > 0 && "text-up",
+            delta < 0 && "text-down",
+            delta === 0 && "text-muted-foreground"
+          )}
+        >
+          {delta > 0 ? "+" : ""}
+          {delta.toFixed(2)} % vs. včera
+        </div>
+      )}
     </div>
   );
 }
