@@ -1,0 +1,106 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* Aplikace je dark-only (Bloomberg terminal estetika) */
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --radius: 0.5rem;
+
+  /* základní paleta – hluboká čerň s namodralým nádechem */
+  --background: #0a0c10;
+  --foreground: #e4e9f0;
+
+  --card: #10141b;
+  --card-foreground: #e4e9f0;
+  --popover: #0f131a;
+  --popover-foreground: #e4e9f0;
+
+  /* akcent – terminálová jantarová (Bloomberg) */
+  --primary: #f5a623;
+  --primary-foreground: #0a0c10;
+
+  --secondary: #161c26;
+  --secondary-foreground: #e4e9f0;
+  --muted: #131822;
+  --muted-foreground: #8b95a7;
+  --accent: #1a2230;
+  --accent-foreground: #e4e9f0;
+
+  --destructive: #ef5350;
+  --destructive-foreground: #0a0c10;
+
+  --border: #1c232f;
+  --input: #1c232f;
+  --ring: #f5a623;
+
+  --chart-1: #26a69a; /* zelená – růst (TradingView default) */
+  --chart-2: #ef5350; /* červená – pokles */
+  --chart-3: #f5a623; /* jantarová – akcent */
+  --chart-4: #22d3ee; /* kyanová – linky */
+  --chart-5: #a78bfa; /* fialová – extra */
+}
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    /* tabulková čísla – klíčová pro finanční UI */
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Terminálové scrollbary */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #232a36;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #2e3745;
+}
