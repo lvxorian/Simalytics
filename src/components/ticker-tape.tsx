@@ -92,6 +92,7 @@ export async function TickerTape() {
                       url={entry.image_url}
                       name={entry.name}
                       size={30}
+                      bare
                     />
                     <span className="font-medium text-foreground/90">
                       {entry.name}
