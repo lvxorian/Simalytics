@@ -4,8 +4,9 @@ import { itemImageUrl } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 /**
- * Ikona komodity s konzistentním "mince" stylem napříč celou appkou
- * (tabulky, tickery, karty, grafy). Lokální soubory z public/icons.
+ * Ikona komodity – čistá, bez rámečku/pozadí, aby nevynikla "krabička"
+ * ale samotný produkt (ticker, tabulky, karty, grafy). Lokální soubory
+ * z public/icons.
  */
 export function ItemIcon({
   url,
@@ -25,10 +26,7 @@ export function ItemIcon({
       <div
         aria-hidden
         style={{ width: size, height: size }}
-        className={cn(
-          "shrink-0 rounded-lg bg-secondary ring-1 ring-inset ring-white/5",
-          className
-        )}
+        className={cn("shrink-0", className)}
       />
     );
   }
@@ -40,10 +38,7 @@ export function ItemIcon({
       width={size}
       height={size}
       style={{ width: size, height: size }}
-      className={cn(
-        "shrink-0 rounded-lg bg-secondary/80 object-contain p-1 ring-1 ring-inset ring-white/5",
-        className
-      )}
+      className={cn("shrink-0 object-contain", className)}
     />
   );
 }

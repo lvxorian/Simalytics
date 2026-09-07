@@ -247,7 +247,7 @@ function MoversCard({
               <ItemIcon
                 url={row.image_url}
                 name={row.name}
-                size={30}
+                size={36}
               />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium group-hover:text-primary">

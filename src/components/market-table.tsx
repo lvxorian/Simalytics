@@ -211,7 +211,7 @@ export function MarketTable({
                         watched={watchedIds?.has(row.item_id) ?? false}
                         size="sm"
                       />
-                      <ItemIcon url={row.image_url} name={row.name} size={32} />
+                      <ItemIcon url={row.image_url} name={row.name} size={38} />
                       <div>
                         <Link
                           href={`/market/${row.item_id}`}

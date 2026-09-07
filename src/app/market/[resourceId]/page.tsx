@@ -180,8 +180,7 @@ export default async function MarketItemPage({
         <ItemIcon
           url={img}
           name={item.name}
-          size={64}
-          className="rounded-xl bg-secondary p-1.5 ring-1 ring-inset ring-white/10"
+          size={72}
         />
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">

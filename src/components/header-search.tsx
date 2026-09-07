@@ -158,9 +158,9 @@ export function HeaderSearch() {
                         <Image
                           src={img}
                           alt={r.name}
-                          width={28}
-                          height={28}
-                          className="rounded bg-secondary p-0.5"
+                          width={32}
+                          height={32}
+                          className="object-contain"
                         />
                       )}
                       <div className="min-w-0 flex-1">

@@ -21,9 +21,10 @@ export const metadata: Metadata = {
   title: "Tržní statistiky",
 };
 
+/** Fáze ekonomiky dle hry: Recese / Stabilní / Růst (každá s emote). */
 const PHASE_LABELS: Record<string, string> = {
-  normal: "Normální",
-  boom: "Konjunktura 📈",
+  normal: "Stabilní 😐",
+  boom: "Růst 📈",
   recession: "Recese 📉",
 };
 

@@ -39,7 +39,7 @@ export function WatchlistCard({
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-center gap-3">
-          <ItemIcon url={row.image_url} name={row.name} size={36} />
+          <ItemIcon url={row.image_url} name={row.name} size={44} />
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold group-hover:text-primary">
               {row.name}

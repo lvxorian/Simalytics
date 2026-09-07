@@ -88,9 +88,9 @@ export function PositionsTable({
                       <Image
                         src={itemImageUrl(p.image_url)!}
                         alt={p.item_name}
-                        width={28}
-                        height={28}
-                        className="rounded bg-secondary p-0.5"
+                        width={34}
+                        height={34}
+                        className="object-contain"
                       />
                     )}
                     <div>

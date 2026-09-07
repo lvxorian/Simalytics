@@ -86,13 +86,12 @@ export async function TickerTape() {
                   <Link
                     href={`/market/${entry.id}`}
                     tabIndex={copy === 1 ? -1 : undefined}
-                    className="flex items-center gap-2 border-r border-border/40 px-4 py-2 text-xs transition-colors hover:bg-accent/60"
+                    className="flex items-center gap-2.5 border-r border-border/40 px-5 py-2.5 text-sm transition-colors hover:bg-accent/60"
                   >
                     <ItemIcon
                       url={entry.image_url}
                       name={entry.name}
-                      size={18}
-                      className="rounded"
+                      size={30}
                     />
                     <span className="font-medium text-foreground/90">
                       {entry.name}
@@ -102,13 +101,13 @@ export async function TickerTape() {
                     </span>
                     <span
                       className={cn(
-                        "flex items-center gap-1 font-mono text-[11px] font-medium",
+                        "flex items-center gap-1 font-mono text-sm font-medium",
                         up && "text-up",
                         down && "text-down",
                         !up && !down && "text-muted-foreground"
                       )}
                     >
-                      {(up || down) && <Caret up={up} />}
+                      {(up || down) && <Caret up={up} className="size-2.5" />}
                       {entry.change24h === null
                         ? "–"
                         : `${up ? "+" : down ? "−" : ""}${Math.abs(entry.change24h).toFixed(2)} %`}

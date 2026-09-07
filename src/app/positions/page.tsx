@@ -168,7 +168,7 @@ export default async function PositionsPage() {
                         <ItemIcon
                           url={p.image_url}
                           name={p.item_name}
-                          size={24}
+                          size={30}
                         />
                         <span className="font-medium">{p.item_name}</span>
                         <Badge variant="outline" className="font-mono text-[10px]">
