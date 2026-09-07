@@ -1,11 +1,12 @@
 import type { Quality } from "@/lib/types";
 
-/** Formátování ceny: 1 234,56 $ */
+/** Formátování ceny: 1 234,56 $ (narrowSymbol = jen $, ne "US$") */
 export function formatPrice(value: number | null | undefined): string {
   if (value === null || value === undefined) return "–";
   return new Intl.NumberFormat("cs-CZ", {
     style: "currency",
     currency: "USD",
+    currencyDisplay: "narrowSymbol",
     maximumFractionDigits: 2,
   }).format(value);
 }

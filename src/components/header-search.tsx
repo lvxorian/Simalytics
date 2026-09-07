@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2, Search, X } from "lucide-react";
 
-import { itemImageUrl } from "@/lib/format";
+import { formatPrice, itemImageUrl } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 type SearchResult = {
@@ -174,11 +174,7 @@ export function HeaderSearch() {
                         )}
                       </div>
                       <span className="shrink-0 font-mono text-xs text-muted-foreground">
-                        {new Intl.NumberFormat("cs-CZ", {
-                          style: "currency",
-                          currency: "USD",
-                          maximumFractionDigits: 2,
-                        }).format(r.price)}
+                        {formatPrice(r.price)}
                       </span>
                     </Link>
                   </li>
