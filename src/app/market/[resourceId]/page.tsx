@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Info } from "lucide-react";
@@ -7,8 +6,10 @@ import { ArrowLeft, Info } from "lucide-react";
 import { PriceChart } from "@/components/price-chart";
 import { StarButton } from "@/components/star-button";
 import { AutoRefresh } from "@/components/auto-refresh";
-import { Card, CardContent } from "@/components/ui/card";
+import { ChangeBadge } from "@/components/change-badge";
+import { ItemIcon } from "@/components/item-icon";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import {
   INTERVAL_OPTIONS,
@@ -24,7 +25,7 @@ import {
   getWatchedIds,
   isTracked,
 } from "@/lib/data";
-import { formatPrice, itemImageUrl } from "@/lib/format";
+import { formatPrice } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -137,7 +138,6 @@ export default async function MarketItemPage({
     ? candles.reduce((sum, c) => sum + c.close, 0) / candles.length
     : null;
 
-  const img = itemImageUrl(item.image_url);
   const up = (change24h ?? 0) > 0;
   const down = (change24h ?? 0) < 0;
   const chartMode = mode === "area" ? "area" : "candles";
@@ -148,57 +148,50 @@ export default async function MarketItemPage({
 
       <Link
         href="/"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
         <ArrowLeft className="size-4" />
         Zpět na trh
       </Link>
 
-      {/* Hlavička položky */}
-      <div className="flex flex-wrap items-center gap-4">
-        {img && (
-          <Image
-            src={img}
-            alt={item.name}
-            width={48}
-            height={48}
-            className="rounded bg-secondary p-1"
-          />
-        )}
+      {/* ── Hero: ikona + cena + 24h ─────────────────────────── */}
+      <div className="flex flex-wrap items-center gap-5">
+        <ItemIcon
+          url={item.image_url}
+          name={item.name}
+          size={64}
+          className="rounded-xl bg-secondary p-1.5 ring-1 ring-inset ring-white/10"
+        />
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight">{item.name}</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+              {item.name}
+            </h1>
             {item.db_letter && (
-              <Badge variant="outline" className="font-mono">
+              <Badge variant="outline" className="font-mono text-[10px]">
                 {item.db_letter}
               </Badge>
             )}
-            <Badge variant="outline" className="font-mono">
+            <Badge variant="outline" className="font-mono text-[10px]">
               Q0
             </Badge>
             <StarButton itemId={id} watched={watchedIds.has(id)} />
           </div>
-          <div className="flex items-baseline gap-3">
-            <span className="font-mono text-3xl font-semibold text-primary">
+          <div className="mt-1 flex flex-wrap items-center gap-3">
+            <span className="font-mono text-3xl font-semibold tabular-nums text-foreground">
               {formatPrice(lastTick)}
             </span>
-            <span
-              className={cn(
-                "font-mono text-sm",
-                up && "text-emerald-400",
-                down && "text-red-400",
-                !up && !down && "text-muted-foreground"
-              )}
-            >
-              24h: {change24h === null ? "–" : `${change24h > 0 ? "+" : ""}${change24h.toFixed(2)} %`}
+            <ChangeBadge value={change24h} />
+            <span className="text-xs text-muted-foreground">
+              24h změna
             </span>
           </div>
         </div>
       </div>
 
-      {/* Přepínače intervalu a typu grafu */}
+      {/* ── Přepínače intervalu a typu grafu ─────────────────── */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-1">
+        <div className="flex items-center gap-1 rounded-full border border-border/80 bg-card p-1">
           {INTERVAL_OPTIONS.map((o) => {
             const active = o.key === opt.key;
             return (
@@ -206,7 +199,7 @@ export default async function MarketItemPage({
                 key={o.key}
                 href={`/market/${id}${buildQuery({ interval: o.key, mode })}`}
                 className={cn(
-                  "rounded-md px-3 py-1.5 font-mono text-xs transition-colors",
+                  "rounded-full px-3.5 py-1.5 font-mono text-xs transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
                   active
                     ? "bg-primary text-primary-foreground"
                     : "text-muted-foreground hover:text-foreground"
@@ -218,7 +211,7 @@ export default async function MarketItemPage({
           })}
         </div>
 
-        <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-1">
+        <div className="flex items-center gap-1 rounded-full border border-border/80 bg-card p-1">
           {(
             [
               { key: "candles", label: "Svíčky" },
@@ -235,7 +228,7 @@ export default async function MarketItemPage({
                 key={o.key}
                 href={href}
                 className={cn(
-                  "rounded-md px-3 py-1.5 text-xs transition-colors",
+                  "rounded-full px-3.5 py-1.5 text-xs transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
                   active
                     ? "bg-secondary text-foreground"
                     : "text-muted-foreground hover:text-foreground"
@@ -249,8 +242,8 @@ export default async function MarketItemPage({
       </div>
 
       {!tracked && opt.key !== "1d" && (
-        <div className="flex items-start gap-2 rounded-lg border border-border bg-card px-4 py-3 text-sm text-muted-foreground">
-          <Info className="mt-0.5 size-4 shrink-0" />
+        <div className="flex items-start gap-2 rounded-xl border border-border/80 bg-card px-4 py-3 text-sm text-muted-foreground">
+          <Info className="mt-0.5 size-4 shrink-0 text-primary" />
           <p>
             Intraday ticky se sbírají každých 5 minut jen pro sledované
             položky – přidej komoditu do watchlistu (hvězdička), aby se
@@ -259,8 +252,8 @@ export default async function MarketItemPage({
         </div>
       )}
 
-      {/* Graf */}
-      <Card className="py-2">
+      {/* ── Graf ─────────────────────────────────────────────── */}
+      <Card className="overflow-hidden rounded-xl border-border/80 py-2">
         <CardContent className="px-2">
           {candles.length > 0 ? (
             <PriceChart
@@ -281,8 +274,8 @@ export default async function MarketItemPage({
         </CardContent>
       </Card>
 
-      {/* Statistiky období */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      {/* ── Statistiky období ────────────────────────────────── */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <MiniStat label="Max. období" value={formatPrice(periodHigh)} />
         <MiniStat label="Min. období" value={formatPrice(periodLow)} />
         <MiniStat label="Průměr" value={formatPrice(periodAvg)} />
@@ -302,11 +295,11 @@ function MiniStat({
   small?: boolean;
 }) {
   return (
-    <div className="rounded-lg border border-border bg-card px-4 py-3">
-      <div className="text-xs uppercase tracking-wider text-muted-foreground">
+    <div className="rounded-xl border border-border/80 bg-card px-4 py-3">
+      <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
         {label}
       </div>
-      <div className={cn("font-mono", small ? "text-sm" : "text-lg")}>
+      <div className={cn("mt-1 font-mono", small ? "text-sm" : "text-lg font-semibold")}>
         {value}
       </div>
     </div>

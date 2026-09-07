@@ -1,44 +1,48 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-/* Aplikace je dark-only (Bloomberg terminal estetika) */
+/* Aplikace je dark-only (premium trading terminál) */
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --radius: 0.5rem;
+  --radius: 0.75rem;
 
-  /* základní paleta – hluboká čerň s namodralým nádechem */
-  --background: #0a0c10;
-  --foreground: #e4e9f0;
+  /* Hluboká čerň s dotykem modři – OLED */
+  --background: #05070b;
+  --foreground: #e8edf4;
 
-  --card: #10141b;
-  --card-foreground: #e4e9f0;
-  --popover: #0f131a;
-  --popover-foreground: #e4e9f0;
+  --card: #0a0d14;
+  --card-foreground: #e8edf4;
+  --popover: #0c1017;
+  --popover-foreground: #e8edf4;
 
-  /* akcent – terminálová jantarová (Bloomberg) */
-  --primary: #f5a623;
-  --primary-foreground: #0a0c10;
+  /* Značková zlatá (Bybit vibe) */
+  --primary: #f7a600;
+  --primary-foreground: #05070b;
 
-  --secondary: #161c26;
-  --secondary-foreground: #e4e9f0;
-  --muted: #131822;
-  --muted-foreground: #8b95a7;
-  --accent: #1a2230;
-  --accent-foreground: #e4e9f0;
+  --secondary: #131826;
+  --secondary-foreground: #e8edf4;
+  --muted: #0f131c;
+  --muted-foreground: #8d97ab;
+  --accent: #182031;
+  --accent-foreground: #e8edf4;
 
-  --destructive: #ef5350;
-  --destructive-foreground: #0a0c10;
+  --destructive: #f6465d;
+  --destructive-foreground: #05070b;
 
-  --border: #1c232f;
-  --input: #1c232f;
-  --ring: #f5a623;
+  --border: #1a2029;
+  --input: #1a2029;
+  --ring: #f7a600;
 
-  --chart-1: #26a69a; /* zelená – růst (TradingView default) */
-  --chart-2: #ef5350; /* červená – pokles */
-  --chart-3: #f5a623; /* jantarová – akcent */
-  --chart-4: #22d3ee; /* kyanová – linky */
-  --chart-5: #a78bfa; /* fialová – extra */
+  /* Sémantika trhu – jednotná napříč aplikací */
+  --up: #2ebd85;
+  --down: #f6465d;
+
+  --chart-1: #2ebd85;
+  --chart-2: #f6465d;
+  --chart-3: #f7a600;
+  --chart-4: #22d3ee;
+  --chart-5: #a78bfa;
 }
 
 @theme inline {
@@ -71,6 +75,12 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+
+  --color-up: var(--up);
+  --color-down: var(--down);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", monospace;
 }
 
 @layer base {
@@ -87,9 +97,48 @@
     /* tabulková čísla – klíčová pro finanční UI */
     font-variant-numeric: tabular-nums;
   }
+
+  ::selection {
+    background: color-mix(in oklab, var(--primary) 30%, transparent);
+    color: #fff;
+  }
 }
 
-/* Terminálové scrollbary */
+/* ── Pozadí: decentní mesh gradient (fixed, nepohybuje se se scrollen) ── */
+.bg-mesh {
+  background:
+    radial-gradient(52rem 30rem at 12% -8%, rgb(247 166 0 / 0.07), transparent 60%),
+    radial-gradient(46rem 28rem at 88% -6%, rgb(46 189 133 / 0.06), transparent 60%),
+    radial-gradient(60rem 40rem at 50% 118%, rgb(34 211 238 / 0.04), transparent 62%);
+}
+
+/* ── Ticker tape (sliding lista) ─────────────────────────────────── */
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  animation: marquee var(--ticker-speed, 80s) linear infinite;
+  will-change: transform;
+}
+
+/* Přejetí myší=listu zastavíš (standard u trading aplikací) */
+.ticker-hover-pause:hover .animate-marquee {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee {
+    animation: none;
+  }
+}
+
+/* ── Scrollbary ──────────────────────────────────────────────────── */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -103,4 +152,12 @@
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #2e3745;
+}
+
+/* Skrytý horizontal scrollbar (mobilní navigace) */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }

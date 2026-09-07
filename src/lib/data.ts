@@ -385,6 +385,58 @@ export async function getPricesAround24hAgo(
   return map;
 }
 
+/**
+ * Sparkline body pro sadu položek (posledních `hours` hodin, jeden
+ * batch query → downsample na ~`targetPoints` bodů na položku).
+ * Klíč mapy = item_id, hodnota = pole cen v časovém pořadí.
+ */
+export async function getSparklines(
+  itemIds: number[],
+  quality = 0,
+  hours = 24,
+  targetPoints = 28
+): Promise<Map<number, number[]>> {
+  if (itemIds.length === 0) return new Map();
+
+  const db = getDb();
+  const since = new Date(Date.now() - hours * 60 * 60 * 1000);
+
+  const rows = (await db`
+    select item_id, price
+    from price_history
+    where quality = ${quality}
+      and recorded_at >= ${since}
+      and item_id in ${db(itemIds)}
+    order by item_id, recorded_at asc
+  `) as unknown as { item_id: number; price: string }[];
+
+  const byItem = new Map<number, number[]>();
+  for (const row of rows) {
+    let series = byItem.get(row.item_id);
+    if (!series) {
+      series = [];
+      byItem.set(row.item_id, series);
+    }
+    series.push(Number(row.price));
+  }
+
+  // Downsample: rovnoměrný výběr včetně posledního bodu
+  const result = new Map<number, number[]>();
+  for (const [id, series] of byItem) {
+    if (series.length <= targetPoints) {
+      result.set(id, series);
+      continue;
+    }
+    const step = (series.length - 1) / (targetPoints - 1);
+    const picked: number[] = [];
+    for (let i = 0; i < targetPoints; i++) {
+      picked.push(series[Math.round(i * step)]);
+    }
+    result.set(id, picked);
+  }
+  return result;
+}
+
 // ── DENNÍ SVÍČKY (backfill ze Simco Tools) ──────────────────────────
 
 export type DailyCandle = {

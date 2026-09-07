@@ -80,8 +80,8 @@ export default async function StatistikyPage() {
                 <div
                   className={cn(
                     "font-mono text-2xl font-semibold",
-                    currentPhase.phase === "boom" && "text-emerald-400",
-                    currentPhase.phase === "recession" && "text-red-400"
+                    currentPhase.phase === "boom" && "text-up",
+                    currentPhase.phase === "recession" && "text-down"
                   )}
                 >
                   {PHASE_LABELS[currentPhase.phase] ?? currentPhase.phase}
@@ -137,12 +137,12 @@ export default async function StatistikyPage() {
               return (
                 <div
                   key={e.id}
-                  className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3"
+                  className="flex items-center gap-3 rounded-xl border border-border/80 bg-card px-4 py-3"
                 >
                   {slower ? (
-                    <TrendingDown className="size-4 shrink-0 text-red-400" />
+                    <TrendingDown className="size-4 shrink-0 text-down" />
                   ) : (
-                    <TrendingUp className="size-4 shrink-0 text-emerald-400" />
+                    <TrendingUp className="size-4 shrink-0 text-up" />
                   )}
                   <div className="min-w-0 flex-1">
                     <Link
@@ -160,8 +160,8 @@ export default async function StatistikyPage() {
                     className={cn(
                       "font-mono",
                       slower
-                        ? "border-red-500/40 bg-red-500/10 text-red-400"
-                        : "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
+                        ? "border-red-500/40 bg-red-500/10 text-down"
+                        : "border-emerald-500/40 bg-emerald-500/10 text-up"
                     )}
                   >
                     {e.speedModifier > 0 ? "+" : ""}
@@ -193,7 +193,7 @@ export default async function StatistikyPage() {
             {orders.map((o) => (
               <div
                 key={o.id}
-                className="rounded-lg border border-border bg-card p-4"
+                className="rounded-xl border border-border/80 bg-card p-4"
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 font-medium">

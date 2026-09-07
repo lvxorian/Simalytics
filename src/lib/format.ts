@@ -54,8 +54,8 @@ export const QUALITY_LABELS: Record<Quality, string> = {
 /** Barva podle zisku – konzistentní napříč celou aplikací. */
 export function plColorClass(value: number | null | undefined): string {
   if (value === null || value === undefined) return "text-muted-foreground";
-  if (value > 0) return "text-emerald-400";
-  if (value < 0) return "text-red-400";
+  if (value > 0) return "text-up";
+  if (value < 0) return "text-down";
   return "text-muted-foreground";
 }
 

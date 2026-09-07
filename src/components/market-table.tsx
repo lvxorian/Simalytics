@@ -1,6 +1,5 @@
-import Image from "next/image";
 import Link from "next/link";
-import { ArrowDownRight, ArrowUpRight, ChartCandlestick } from "lucide-react";
+import { ChartCandlestick, Search } from "lucide-react";
 
 import {
   Table,
@@ -10,16 +9,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ChangeBadge } from "@/components/change-badge";
+import { ItemIcon } from "@/components/item-icon";
+import { Sparkline } from "@/components/sparkline";
 import { StarButton } from "@/components/star-button";
 import { cn } from "@/lib/utils";
 import {
   formatCompact,
   formatDateTime,
-  formatPercent,
   formatPrice,
-  itemImageUrl,
 } from "@/lib/format";
 import type { LatestPriceRow } from "@/lib/types";
 
@@ -28,35 +27,43 @@ export type MarketRow = LatestPriceRow & { change24h: number | null };
 export function MarketTable({
   rows,
   watchedIds,
+  sparklines,
 }: {
   rows: MarketRow[];
   watchedIds?: Set<number>;
+  sparklines?: Map<number, number[]>;
 }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-card">
-      <Table>
-        <TableHeader>
-          <TableRow className="hover:bg-transparent">
-            <TableHead className="pl-4">Položka</TableHead>
-            <TableHead className="text-right">Cena</TableHead>
-            <TableHead className="text-right">24h změna</TableHead>
-            <TableHead className="hidden text-right md:table-cell">
-              Nabídka
-            </TableHead>
-            <TableHead className="hidden text-right lg:table-cell">
-              Aktualizováno
-            </TableHead>
-            <TableHead className="w-10 pr-4" />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((row) => {
-            const img = itemImageUrl(row.image_url);
-            const up = (row.change24h ?? 0) > 0;
-            const down = (row.change24h ?? 0) < 0;
+    <section className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+          <Search className="size-4" />
+          Celý trh ({rows.length})
+        </h2>
+      </div>
 
-            return (
-              <TableRow key={row.item_id} className="group">
+      <div className="overflow-hidden rounded-xl border border-border/80 bg-card">
+        <Table>
+          <TableHeader>
+            <TableRow className="border-border/60 hover:bg-transparent">
+              <TableHead className="pl-4">Položka</TableHead>
+              <TableHead className="text-right">Cena</TableHead>
+              <TableHead className="text-right">24h změna</TableHead>
+              <TableHead className="hidden text-right md:table-cell">
+                Trend 24h
+              </TableHead>
+              <TableHead className="hidden text-right md:table-cell">
+                Nabídka
+              </TableHead>
+              <TableHead className="hidden text-right lg:table-cell">
+                Aktualizováno
+              </TableHead>
+              <TableHead className="w-10 pr-4" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row) => (
+              <TableRow key={row.item_id} className="group border-border/40">
                 <TableCell className="pl-4 font-medium">
                   <div className="flex items-center gap-3">
                     <StarButton
@@ -64,15 +71,7 @@ export function MarketTable({
                       watched={watchedIds?.has(row.item_id) ?? false}
                       size="sm"
                     />
-                    {img && (
-                      <Image
-                        src={img}
-                        alt={row.name}
-                        width={28}
-                        height={28}
-                        className="rounded bg-secondary p-0.5"
-                      />
-                    )}
+                    <ItemIcon url={row.image_url} name={row.name} size={32} />
                     <div>
                       <Link
                         href={`/market/${row.item_id}`}
@@ -99,18 +98,18 @@ export function MarketTable({
                 </TableCell>
 
                 <TableCell className="text-right">
-                  <span
-                    className={cn(
-                      "inline-flex items-center gap-1 font-mono text-sm",
-                      up && "text-emerald-400",
-                      down && "text-red-400",
-                      !up && !down && "text-muted-foreground"
-                    )}
-                  >
-                    {up && <ArrowUpRight className="size-3.5" />}
-                    {down && <ArrowDownRight className="size-3.5" />}
-                    {formatPercent(row.change24h)}
-                  </span>
+                  <ChangeBadge value={row.change24h} />
+                </TableCell>
+
+                <TableCell className="hidden text-right md:table-cell">
+                  <div className="flex justify-end">
+                    <Sparkline
+                      data={sparklines?.get(row.item_id)}
+                      uid={`mt-${row.item_id}`}
+                      width={96}
+                      height={30}
+                    />
+                  </div>
                 </TableCell>
 
                 <TableCell className="hidden text-right font-mono text-muted-foreground md:table-cell">
@@ -137,17 +136,17 @@ export function MarketTable({
                   </Button>
                 </TableCell>
               </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
-    </div>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </section>
   );
 }
 
 export function MarketTableSkeleton({ count = 8 }: { count?: number }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-card">
+    <div className="overflow-hidden rounded-xl border border-border/80 bg-card">
       <Table>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
@@ -169,5 +168,3 @@ export function MarketTableSkeleton({ count = 8 }: { count?: number }) {
     </div>
   );
 }
-
-export { Badge };

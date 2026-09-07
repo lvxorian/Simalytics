@@ -1,6 +1,19 @@
 import type { Metadata } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
+
 import { SiteHeader } from "@/components/site-header";
+import { TickerTape } from "@/components/ticker-tape";
 import "./globals.css";
+
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin", "latin-ext"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin", "latin-ext"],
+});
 
 export const metadata: Metadata = {
   title: {
@@ -15,10 +28,12 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="cs" className="dark">
+    <html lang="cs" className={`dark ${geistSans.variable} ${geistMono.variable}`}>
       <body className="min-h-screen bg-background font-sans text-foreground antialiased">
+        <div className="bg-mesh pointer-events-none fixed inset-0 -z-10" />
         <SiteHeader />
-        <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-6">
+        <TickerTape />
+        <main className="mx-auto w-full max-w-7xl px-4 pb-20 pt-8">
           {children}
         </main>
       </body>

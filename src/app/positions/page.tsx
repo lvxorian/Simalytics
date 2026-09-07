@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import { Plus, ScrollText, Target } from "lucide-react";
 
 import { AutoRefresh } from "@/components/auto-refresh";
 import { AddNoteForm } from "@/components/add-note-form";
+import { ItemIcon } from "@/components/item-icon";
 import { PositionsTable } from "@/components/positions-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -53,13 +53,13 @@ export default async function PositionsPage() {
 
   if (dbError) {
     return (
-      <Card className="mx-auto mt-16 max-w-2xl border-dashed">
+      <Card className="mx-auto mt-24 max-w-2xl border-dashed">
         <CardHeader className="items-center text-center">
           <Target className="mx-auto mb-2 size-10 text-muted-foreground" />
           <CardTitle className="text-lg">Databáze není dostupná</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-center text-sm text-muted-foreground">
-          <code className="block break-all font-mono text-xs text-red-300">
+          <code className="block break-all font-mono text-xs text-down">
             {dbError}
           </code>
         </CardContent>
@@ -84,14 +84,17 @@ export default async function PositionsPage() {
     <div className="space-y-8">
       <AutoRefresh intervalMs={60_000} />
 
-      <div className="flex items-end justify-between">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Pozice</h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="mb-2 inline-flex items-center rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.2em] text-primary">
+            Portfolio
+          </p>
+          <h1 className="text-3xl font-semibold tracking-tight">Pozice</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             Buy Low, Sell High – a přitom si loguj, proč.
           </p>
         </div>
-        <Button asChild size="sm" className="gap-2">
+        <Button asChild size="sm" className="gap-2 rounded-full">
           <Link href="/positions/new">
             <Plus className="size-4" />
             Nová pozice
@@ -100,7 +103,7 @@ export default async function PositionsPage() {
       </div>
 
       {/* Souhrn */}
-      <div className="grid gap-4 sm:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-4">
         <SummaryCard
           label="Otevřené pozice"
           value={String(openPositions.length)}
@@ -126,7 +129,7 @@ export default async function PositionsPage() {
         {openPositions.length > 0 ? (
           <PositionsTable positions={openPositions} />
         ) : (
-          <div className="rounded-lg border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
+          <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
             Žádné otevřené pozice. Když uvidíš na trhu šanci,{" "}
             <Link
               href="/positions/new"
@@ -145,10 +148,10 @@ export default async function PositionsPage() {
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
             Uzavřené pozice
           </h2>
-          <div className="overflow-hidden rounded-lg border border-border bg-card">
+          <div className="overflow-hidden rounded-xl border border-border/80 bg-card">
             <Table>
               <TableHeader>
-                <TableRow className="hover:bg-transparent">
+                <TableRow className="border-border/60 hover:bg-transparent">
                   <TableHead className="pl-4">Položka</TableHead>
                   <TableHead className="text-right">Nákup</TableHead>
                   <TableHead className="text-right">Prodej</TableHead>
@@ -159,18 +162,14 @@ export default async function PositionsPage() {
               </TableHeader>
               <TableBody>
                 {closedPositions.map((p) => (
-                  <TableRow key={p.id}>
+                  <TableRow key={p.id} className="border-border/40">
                     <TableCell className="pl-4">
                       <div className="flex items-center gap-2.5">
-                        {itemImageUrl(p.image_url) && (
-                          <Image
-                            src={itemImageUrl(p.image_url)!}
-                            alt={p.item_name}
-                            width={24}
-                            height={24}
-                            className="rounded bg-secondary p-0.5"
-                          />
-                        )}
+                        <ItemIcon
+                          url={p.image_url}
+                          name={p.item_name}
+                          size={24}
+                        />
                         <span className="font-medium">{p.item_name}</span>
                         <Badge variant="outline" className="font-mono text-[10px]">
                           Q{p.quality}
@@ -221,7 +220,7 @@ export default async function PositionsPage() {
         </h2>
 
         {openPositions.length > 0 && (
-          <Card>
+          <Card className="rounded-xl border-border/80">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm">Přidat poznámku</CardTitle>
             </CardHeader>
@@ -241,7 +240,7 @@ export default async function PositionsPage() {
             {log.map((entry) => (
               <div
                 key={entry.id}
-                className="rounded-lg border border-border bg-card p-4"
+                className="rounded-xl border border-border/80 bg-card p-4"
               >
                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                   <Badge
@@ -280,7 +279,7 @@ export default async function PositionsPage() {
             ))}
           </div>
         ) : (
-          <div className="rounded-lg border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
+          <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
             Log je zatím prázdný. Zápisy se vytvářejí automaticky při otevření
             či uzavření pozice.
           </div>
@@ -300,31 +299,27 @@ function SummaryCard({
   tone?: "up" | "down" | "neutral";
 }) {
   return (
-    <Card className="gap-1 py-4">
-      <CardHeader className="px-4">
-        <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          {label}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="px-4">
-        <div
-          className={cn(
-            "font-mono text-xl font-semibold",
-            tone === "up" && "text-emerald-400",
-            tone === "down" && "text-red-400"
-          )}
-        >
-          {value}
-        </div>
-      </CardContent>
-    </Card>
+    <div className="rounded-xl border border-border/80 bg-card p-4">
+      <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+        {label}
+      </div>
+      <div
+        className={cn(
+          "mt-2 font-mono text-xl font-semibold tabular-nums",
+          tone === "up" && "text-up",
+          tone === "down" && "text-down"
+        )}
+      >
+        {value}
+      </div>
+    </div>
   );
 }
 
 function eventTypeBadgeClass(eventType: string): string {
   switch (eventType) {
     case "OPENED":
-      return "border-primary/40 bg-primary/10 text-primary";
+      return "border-up/40 bg-up/10 text-up";
     case "CLOSED":
       return "border-sky-500/40 bg-sky-500/10 text-sky-400";
     default:
