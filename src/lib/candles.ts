@@ -51,18 +51,21 @@ export function toCandles(
   return [...buckets.values()].sort((a, b) => a.time - b.time);
 }
 
-/** Intervalové volby pro přepínač na stránce grafu. */
+/**
+ * Intervalové volby pro přepínač na stránce grafu.
+ * `days` = jak hlubokou historii ticků tahat pro daný TF
+ * (minimální TF = interval polleru – ticky sbíráme každých 5 min).
+ */
 export const INTERVAL_OPTIONS = [
-  { key: "1h", label: "1H", seconds: 60 * 60 },
-  { key: "6h", label: "6H", seconds: 6 * 60 * 60 },
-  { key: "1d", label: "1D", seconds: 24 * 60 * 60 },
-  { key: "7d", label: "1W", seconds: 7 * 24 * 60 * 60 },
+  { key: "5m", label: "5m", seconds: 5 * 60, days: 2 },
+  { key: "15m", label: "15m", seconds: 15 * 60, days: 7 },
+  { key: "1h", label: "1H", seconds: 60 * 60, days: 30 },
+  { key: "4h", label: "4H", seconds: 4 * 60 * 60, days: 90 },
+  { key: "1d", label: "1D", seconds: 24 * 60 * 60, days: 95 },
 ] as const;
 
 export type IntervalKey = (typeof INTERVAL_OPTIONS)[number]["key"];
 
-export function resolveInterval(key: string | undefined): number {
-  return (
-    INTERVAL_OPTIONS.find((o) => o.key === key)?.seconds ?? 24 * 60 * 60
-  );
+export function resolveIntervalOption(key: string | undefined) {
+  return INTERVAL_OPTIONS.find((o) => o.key === key) ?? INTERVAL_OPTIONS[4];
 }

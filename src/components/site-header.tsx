@@ -7,7 +7,9 @@ import { cn } from "@/lib/utils";
 
 const NAV = [
   { href: "/", label: "Trh" },
+  { href: "/watchlist", label: "Watchlist" },
   { href: "/positions", label: "Pozice" },
+  { href: "/statistiky", label: "Statistiky" },
 ] as const;
 
 export function SiteHeader() {

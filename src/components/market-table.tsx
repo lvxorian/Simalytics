@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { StarButton } from "@/components/star-button";
 import { cn } from "@/lib/utils";
 import {
   formatCompact,
@@ -24,7 +25,13 @@ import type { LatestPriceRow } from "@/lib/types";
 
 export type MarketRow = LatestPriceRow & { change24h: number | null };
 
-export function MarketTable({ rows }: { rows: MarketRow[] }) {
+export function MarketTable({
+  rows,
+  watchedIds,
+}: {
+  rows: MarketRow[];
+  watchedIds?: Set<number>;
+}) {
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-card">
       <Table>
@@ -52,6 +59,11 @@ export function MarketTable({ rows }: { rows: MarketRow[] }) {
               <TableRow key={row.item_id} className="group">
                 <TableCell className="pl-4 font-medium">
                   <div className="flex items-center gap-3">
+                    <StarButton
+                      itemId={row.item_id}
+                      watched={watchedIds?.has(row.item_id) ?? false}
+                      size="sm"
+                    />
                     {img && (
                       <Image
                         src={img}

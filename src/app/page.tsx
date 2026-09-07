@@ -5,7 +5,7 @@ import { AutoRefresh } from "@/components/auto-refresh";
 import { MarketTable, type MarketRow } from "@/components/market-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { getLatestPrices, getPricesAround24hAgo } from "@/lib/data";
+import { getLatestPrices, getPricesAround24hAgo, getWatchedIds } from "@/lib/data";
 import { formatPercent, formatPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -13,11 +13,16 @@ export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   let rows: MarketRow[] = [];
+  let watchedIds = new Set<number>();
   let dbError: string | null = null;
 
   try {
-    const latest = await getLatestPrices(0);
+    const [latest, watched] = await Promise.all([
+      getLatestPrices(0),
+      getWatchedIds(),
+    ]);
     const dayAgo = await getPricesAround24hAgo(latest.map((r) => r.item_id));
+    watchedIds = watched;
     rows = latest.map((r) => {
       const base = dayAgo.get(r.item_id);
       const change24h =
@@ -83,7 +88,7 @@ export default async function DashboardPage() {
         />
       </div>
 
-      <MarketTable rows={rows} />
+      <MarketTable rows={rows} watchedIds={watchedIds} />
     </div>
   );
 }

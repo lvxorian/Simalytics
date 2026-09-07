@@ -384,3 +384,142 @@ export async function getPricesAround24hAgo(
   }
   return map;
 }
+
+// ── DENNÍ SVÍČKY (backfill ze Simco Tools) ──────────────────────────
+
+export type DailyCandle = {
+  day: string; // YYYY-MM-DD
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number | null;
+  vwap: number | null;
+};
+
+/** Denní svíčky z market_candles_daily (historie ~3 měsíce). */
+export async function getDailyCandles(
+  itemId: number,
+  quality = 0
+): Promise<DailyCandle[]> {
+  const db = getDb();
+  const rows = (await db`
+    select day::text as day, open, high, low, close, volume, vwap
+    from market_candles_daily
+    where resource_id = ${itemId} and quality = ${quality}
+    order by day asc
+  `) as unknown as {
+    day: string;
+    open: string;
+    high: string;
+    low: string;
+    close: string;
+    volume: string | null;
+    vwap: string | null;
+  }[];
+
+  return rows.map((r) => ({
+    day: r.day,
+    open: Number(r.open),
+    high: Number(r.high),
+    low: Number(r.low),
+    close: Number(r.close),
+    volume: r.volume === null ? null : Number(r.volume),
+    vwap: r.vwap === null ? null : Number(r.vwap),
+  }));
+}
+
+/** Sbírá poller pro tuto položku intraday ticky? */
+export async function isTracked(itemId: number): Promise<boolean> {
+  const db = getDb();
+  const rows = await db`
+    select track_ticks from items where id = ${itemId} limit 1
+  ` as unknown as { track_ticks: boolean }[];
+  return rows[0]?.track_ticks ?? false;
+}
+
+// ── WATCHLIST ───────────────────────────────────────────────────────
+
+export type WatchlistRow = {
+  item_id: number;
+  name: string;
+  image_url: string | null;
+  category: string | null;
+  price: number | null;
+  recorded_at: string | null;
+  change24h: number | null;
+};
+
+/** Položky ve watchlistu včetně aktuální ceny a 24h změny. */
+export async function getWatchlistRows(): Promise<WatchlistRow[]> {
+  const db = getDb();
+
+  const rows = (await db`
+    select i.id as item_id, i.name, i.image_url, i.category,
+           latest.price, latest.recorded_at
+    from watchlist w
+    join items i on i.id = w.item_id
+    join lateral (
+      select price, recorded_at
+      from price_history ph
+      where ph.item_id = w.item_id and ph.quality = w.quality
+      order by ph.recorded_at desc
+      limit 1
+    ) latest on true
+    order by w.created_at desc
+  `) as unknown as {
+    item_id: number;
+    name: string;
+    image_url: string | null;
+    category: string | null;
+    price: string;
+    recorded_at: Date;
+  }[];
+
+  const dayAgo = await getPricesAround24hAgo(rows.map((r) => r.item_id));
+
+  return rows.map((r) => ({
+    item_id: r.item_id,
+    name: r.name,
+    image_url: r.image_url,
+    category: r.category,
+    price: Number(r.price),
+    recorded_at: iso(r.recorded_at),
+    change24h: (() => {
+      const base = dayAgo.get(r.item_id);
+      return base && base > 0 ? (Number(r.price) - base) / base * 100 : null;
+    })(),
+  }));
+}
+
+/** ID položek ve watchlistu (pro hvězdičky). */
+export async function getWatchedIds(): Promise<Set<number>> {
+  const db = getDb();
+  const rows = await db`select item_id from watchlist`;
+  return new Set(rows.map((r) => r.item_id as number));
+}
+
+/** Přidá/odebere položku z watchlistu, vrací nový stav (true = sleduje). */
+export async function toggleWatchlist(
+  itemId: number,
+  quality = 0
+): Promise<boolean> {
+  const db = getDb();
+
+  const existing = await db`
+    select id from watchlist where item_id = ${itemId} and quality = ${quality} limit 1
+  `;
+
+  if (existing.length > 0) {
+    await db`delete from watchlist where item_id = ${itemId} and quality = ${quality}`;
+    return false;
+  }
+
+  await db`
+    insert into watchlist (item_id, quality) values (${itemId}, ${quality})
+    on conflict (item_id, quality) do nothing
+  `;
+  // sledovaná položka má smysl jen s ticky – zapni sběr
+  await db`update items set track_ticks = true where id = ${itemId}`;
+  return true;
+}

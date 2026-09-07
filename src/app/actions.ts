@@ -6,6 +6,7 @@ import {
   addConditionNote,
   closePosition,
   openPosition,
+  toggleWatchlist,
 } from "@/lib/data";
 
 export type ActionState = { ok: boolean; error?: string };
@@ -97,6 +98,15 @@ export async function closePositionAction(
       error: err instanceof Error ? err.message : "Neznámá chyba.",
     };
   }
+}
+
+/** Přidá/odebere položku z watchlistu (hvězdička). */
+export async function toggleWatchlistAction(itemId: number): Promise<boolean> {
+  const watched = await toggleWatchlist(itemId);
+  revalidatePath("/watchlist");
+  revalidatePath("/");
+  revalidatePath(`/market/${itemId}`);
+  return watched;
 }
 
 /** Přidá poznámku do condition logu existující pozice. */

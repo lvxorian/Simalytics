@@ -8,13 +8,18 @@ trh, historické grafy (TradingView **Lightweight Charts**) a eviduje pozice
 **Buy Low / Sell High** včetně logu podmínek (Condition Logging).
 
 ```
-SimCompanies API ──(GitHub Actions cron · 15 min)──▶ Neon PostgreSQL
-                                                        │
-                              Next.js (server components) │
-                              ├─ /                Trh + 24h změny
-                              ├─ /market/[id]     Svíčkové/liniové grafy
-                              ├─ /positions       Pozice + P/L
-                              └─ /positions/new   Otevřít pozici + podmínky
+Simco Tools API ──(cron-job.org · 5 min)──▶ /api/cron/ticks ──▶ Neon
+   (ticky obchodů)                                          PostgreSQL ▲
+SimCompanies API ─(GitHub Actions · 15 min)── fetch-market.mjs ─────┘
+Simco Tools API ──(backfill skript)── denní svíčky + objem + VWAP ──┘
+
+Next.js (server components)
+├─ /                Trh + 24h změny + hvězdičky watchlistu
+├─ /watchlist       Sledované komodity (ticky každých 5 min)
+├─ /market/[id]     Grafy 5m/15m/1H/4H/1D, denní s objemem a VWAP
+├─ /positions       Pozice + P/L + condition logging
+├─ /statistiky      Eventy, vládní zakázky, fáze ekonomiky
+└─ /positions/new   Otevřít pozici + podmínky
 ```
 
 ## Struktura projektu
@@ -107,6 +112,44 @@ Lokální test skriptu: `npm run fetch:market` (hodnoty do env z `.env.local`).
   dotaz po „cold startu“ trvá o kousek déle – pro tento use-case nevadí.
 - Pozice jsou chráněné jen tím, že přístup k DB má výhradně server
   (service credentials nikdy nejsou v prohlížeči).
+
+## Simco Tools API – zdroj historie a ticků
+
+Aplikace kombinuje dvě datové zdroje (viz [API docs](https://api.simcotools.com/docs/simcotools.yaml),
+limit 2 req/s, zdarma):
+
+- **Denní svíčky** (`/market/resources/{id}/{q}/candlesticks`) – ~3 měsíce
+  historie s OHLC, skutečným **objemem** a **VWAP**. Backfill skriptem
+  `npm run backfill:candles` (všechny položky, jednorázově / pravidelně).
+- **Ticky obchodů** (`/market/prices`) – 1 request = poslední skutečný
+  obchod pro VŠECHNY resource+kvality. Poller `/api/cron/ticks` ukládá
+  intraday data pro položky s `track_ticks = true` (watchlist + základní 37).
+- **Katalog** (`/resources`) – kompletní seznam komodit s českými názvy
+  (`npm run import:catalog`).
+- **Statistiky** – eventy, vládní zakázky, fáze ekonomiky (stránka /statistiky).
+
+### Timeframy grafů
+
+| TF | Zdroj | Historie |
+|----|-------|----------|
+| **1D** | Simco Tools candlesticks + dnešní ticky | ~3 měsíce zpět ✓ |
+| **5m** (minimum) | náš poller | od nasazení polleru |
+| 15m / 1H / 4H | náš poller | od nasazení polleru |
+
+Minimální timeframe = interval polleru (5 min). Intraday ticky se ukládají
+jen pro sledované položky (šetří Neon free tier).
+
+## Deployment na Vercel + poller přes cron-job.org
+
+1. Repo připoj k [vercel.com](https://vercel.com) (Hobby zdarma) – Next.js
+   se detekuje automaticky.
+2. Environment variables v projektu: `DATABASE_URL` (Neon pooled),
+   `CRON_SECRET` (náhodný string).
+3. Poller: na [cron-job.org](https://cron-job.org) (zdarma) vytvoř job:
+   - URL: `https://TVUJ-APP.vercel.app/api/cron/ticks`
+   - Interval: každých 5 minut
+   - Headers: `Authorization: Bearer <CRON_SECRET>`
+4. GitHub Actions zůstává jako záložní sync cen z herního API (15 min).
 
 ## Rozšíření (roadmapa)
 

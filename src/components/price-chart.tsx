@@ -6,28 +6,40 @@ import {
   CandlestickSeries,
   ColorType,
   CrosshairMode,
+  HistogramSeries,
+  LineSeries,
+  LineStyle,
   createChart,
   type IChartApi,
   type UTCTimestamp,
 } from "lightweight-charts";
 import type { Candle } from "@/lib/candles";
 
+export type VolumePoint = { time: number; value: number };
+export type LinePoint = { time: number; value: number };
+
 type PriceChartProps = {
   candles: Candle[];
   /** "candles" = svíčky, "area" = plynulá linie s gradientem */
   mode?: "candles" | "area";
   height?: number;
+  /** Objemový histogram (jen denní data ze Simco Tools) */
+  volume?: VolumePoint[];
+  /** VWAP linka (jen denní data) */
+  vwap?: LinePoint[];
 };
 
 /**
  * Financální graf postavený na TradingView Lightweight Charts (v5 API:
  * chart.addSeries(CandlestickSeries, …)). Všechna data čekají na klientu,
- * komponenta je čistě vizuální – čísla i čas musí být UTC unix sekundy.
+ * komponenta je čistě vizuální – čas je UTC unix sekundy.
  */
 export function PriceChart({
   candles,
   mode = "candles",
-  height = 440,
+  height = 460,
+  volume,
+  vwap,
 }: PriceChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -50,11 +62,11 @@ export function PriceChart({
       },
       rightPriceScale: {
         borderColor: "rgba(139,149,167,0.15)",
-        scaleMargins: { top: 0.1, bottom: 0.1 },
+        scaleMargins: { top: 0.1, bottom: volume && volume.length > 0 ? 0.24 : 0.1 },
       },
       timeScale: {
         borderColor: "rgba(139,149,167,0.15)",
-        timeVisible: true,
+        timeVisible: mode === "area" || true,
         secondsVisible: false,
       },
       crosshair: { mode: CrosshairMode.Normal },
@@ -62,13 +74,16 @@ export function PriceChart({
     });
     chartRef.current = chart;
 
+    const upColor = "#26a69a";
+    const downColor = "#ef5350";
+
     if (mode === "candles") {
       const series = chart.addSeries(CandlestickSeries, {
-        upColor: "#26a69a",
-        downColor: "#ef5350",
+        upColor,
+        downColor,
         borderVisible: false,
-        wickUpColor: "#26a69a",
-        wickDownColor: "#ef5350",
+        wickUpColor: upColor,
+        wickDownColor: downColor,
       });
       series.setData(
         candles.map((c) => ({
@@ -94,13 +109,48 @@ export function PriceChart({
       );
     }
 
+    // Objemový histogram (vlastní cenová osa dole)
+    if (volume && volume.length > 0) {
+      const volSeries = chart.addSeries(HistogramSeries, {
+        priceScaleId: "vol",
+        priceFormat: { type: "volume" },
+        lastValueVisible: false,
+        priceLineVisible: false,
+      });
+      volSeries.priceScale().applyOptions({
+        scaleMargins: { top: 0.82, bottom: 0 },
+      });
+      volSeries.setData(
+        volume.map((v) => ({
+          time: v.time as UTCTimestamp,
+          value: v.value,
+          color: "rgba(139,149,167,0.35)",
+        }))
+      );
+    }
+
+    // VWAP linka (jantarová, přerušovaná)
+    if (vwap && vwap.length > 0) {
+      const vwapSeries = chart.addSeries(LineSeries, {
+        color: "#f5a623",
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      });
+      vwapSeries.setData(
+        vwap.map((p) => ({ time: p.time as UTCTimestamp, value: p.value }))
+      );
+    }
+
     chart.timeScale().fitContent();
 
     return () => {
       chart.remove();
       chartRef.current = null;
     };
-  }, [candles, mode]);
+  }, [candles, mode, volume, vwap]);
 
   return (
     <div
