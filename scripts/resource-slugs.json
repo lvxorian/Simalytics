@@ -1,0 +1,755 @@
+[
+ {
+  "slug": "water",
+  "id": 2,
+  "name": "}).then(({data:i})=>{n({type:L"
+ },
+ {
+  "slug": "apples",
+  "id": 3,
+  "name": null
+ },
+ {
+  "slug": "oranges",
+  "id": 4,
+  "name": null
+ },
+ {
+  "slug": "grapes",
+  "id": 5,
+  "name": null
+ },
+ {
+  "slug": "grain",
+  "id": 6,
+  "name": null
+ },
+ {
+  "slug": "steak",
+  "id": 7,
+  "name": null
+ },
+ {
+  "slug": "sausages",
+  "id": 8,
+  "name": null
+ },
+ {
+  "slug": "eggs",
+  "id": 9,
+  "name": null
+ },
+ {
+  "slug": "crude-oil",
+  "id": 10,
+  "name": null
+ },
+ {
+  "slug": "petrol",
+  "id": 11,
+  "name": null
+ },
+ {
+  "slug": "diesel",
+  "id": 12,
+  "name": null
+ },
+ {
+  "slug": "transport",
+  "id": 13,
+  "name": null
+ },
+ {
+  "slug": "minerals",
+  "id": 14,
+  "name": null
+ },
+ {
+  "slug": "bauxite",
+  "id": 15,
+  "name": null
+ },
+ {
+  "slug": "silicon",
+  "id": 16,
+  "name": null
+ },
+ {
+  "slug": "chemicals",
+  "id": 17,
+  "name": null
+ },
+ {
+  "slug": "aluminium",
+  "id": 18,
+  "name": null
+ },
+ {
+  "slug": "plastic",
+  "id": 19,
+  "name": null
+ },
+ {
+  "slug": "processors",
+  "id": 20,
+  "name": null
+ },
+ {
+  "slug": "electronic-components",
+  "id": 21,
+  "name": null
+ },
+ {
+  "slug": "batteries",
+  "id": 22,
+  "name": null
+ },
+ {
+  "slug": "displays",
+  "id": 23,
+  "name": null
+ },
+ {
+  "slug": "smart-phones",
+  "id": 24,
+  "name": null
+ },
+ {
+  "slug": "tablets",
+  "id": 25,
+  "name": null
+ },
+ {
+  "slug": "laptops",
+  "id": 26,
+  "name": null
+ },
+ {
+  "slug": "monitors",
+  "id": 27,
+  "name": null
+ },
+ {
+  "slug": "televisions",
+  "id": 28,
+  "name": null
+ },
+ {
+  "slug": "plant-research",
+  "id": 29,
+  "name": null
+ },
+ {
+  "slug": "energy-research",
+  "id": 30,
+  "name": null
+ },
+ {
+  "slug": "mining-research",
+  "id": 31,
+  "name": null
+ },
+ {
+  "slug": "electronics-research",
+  "id": 32,
+  "name": null
+ },
+ {
+  "slug": "breeding-research",
+  "id": 33,
+  "name": null
+ },
+ {
+  "slug": "chemistry-research",
+  "id": 34,
+  "name": null
+ },
+ {
+  "slug": "software",
+  "id": 35,
+  "name": null
+ },
+ {
+  "slug": "cotton",
+  "id": 40,
+  "name": null
+ },
+ {
+  "slug": "fabric",
+  "id": 41,
+  "name": null
+ },
+ {
+  "slug": "iron-ore",
+  "id": 42,
+  "name": null
+ },
+ {
+  "slug": "steel",
+  "id": 43,
+  "name": null
+ },
+ {
+  "slug": "sand",
+  "id": 44,
+  "name": null
+ },
+ {
+  "slug": "glass",
+  "id": 45,
+  "name": null
+ },
+ {
+  "slug": "leather",
+  "id": 46,
+  "name": null
+ },
+ {
+  "slug": "on-board-computer",
+  "id": 47,
+  "name": null
+ },
+ {
+  "slug": "electric-motor",
+  "id": 48,
+  "name": null
+ },
+ {
+  "slug": "luxury-car-interior",
+  "id": 49,
+  "name": null
+ },
+ {
+  "slug": "car-interior",
+  "id": 50,
+  "name": null
+ },
+ {
+  "slug": "car-body",
+  "id": 51,
+  "name": null
+ },
+ {
+  "slug": "combustion-engine",
+  "id": 52,
+  "name": null
+ },
+ {
+  "slug": "economy-e-car",
+  "id": 53,
+  "name": null
+ },
+ {
+  "slug": "luxury-e-car",
+  "id": 54,
+  "name": null
+ },
+ {
+  "slug": "economy-car",
+  "id": 55,
+  "name": null
+ },
+ {
+  "slug": "luxury-car",
+  "id": 56,
+  "name": null
+ },
+ {
+  "slug": "truck",
+  "id": 57,
+  "name": null
+ },
+ {
+  "slug": "automotive-research",
+  "id": 58,
+  "name": null
+ },
+ {
+  "slug": "fashion-research",
+  "id": 59,
+  "name": null
+ },
+ {
+  "slug": "underwear",
+  "id": 60,
+  "name": null
+ },
+ {
+  "slug": "gloves",
+  "id": 61,
+  "name": null
+ },
+ {
+  "slug": "dress",
+  "id": 62,
+  "name": null
+ },
+ {
+  "slug": "simmi-shoes",
+  "id": 63,
+  "name": null
+ },
+ {
+  "slug": "handbags",
+  "id": 64,
+  "name": null
+ },
+ {
+  "slug": "sneakers",
+  "id": 65,
+  "name": null
+ },
+ {
+  "slug": "seeds",
+  "id": 66,
+  "name": null
+ },
+ {
+  "slug": "xmas-crackers",
+  "id": 67,
+  "name": null
+ },
+ {
+  "slug": "gold-ore",
+  "id": 68,
+  "name": null
+ },
+ {
+  "slug": "golden-bars",
+  "id": 69,
+  "name": null
+ },
+ {
+  "slug": "gold-watch",
+  "id": 70,
+  "name": null
+ },
+ {
+  "slug": "necklace",
+  "id": 71,
+  "name": null
+ },
+ {
+  "slug": "sugarcane",
+  "id": 72,
+  "name": null
+ },
+ {
+  "slug": "ethanol",
+  "id": 73,
+  "name": null
+ },
+ {
+  "slug": "methane",
+  "id": 74,
+  "name": null
+ },
+ {
+  "slug": "carbon-fiber",
+  "id": 75,
+  "name": null
+ },
+ {
+  "slug": "carbon-composite",
+  "id": 76,
+  "name": null
+ },
+ {
+  "slug": "fuselage",
+  "id": 77,
+  "name": null
+ },
+ {
+  "slug": "wing",
+  "id": 78,
+  "name": null
+ },
+ {
+  "slug": "high-grade-e-components",
+  "id": 79,
+  "name": null
+ },
+ {
+  "slug": "flight-computer",
+  "id": 80,
+  "name": null
+ },
+ {
+  "slug": "cockpit",
+  "id": 81,
+  "name": null
+ },
+ {
+  "slug": "attitude-control",
+  "id": 82,
+  "name": null
+ },
+ {
+  "slug": "rocket-fuel",
+  "id": 83,
+  "name": null
+ },
+ {
+  "slug": "fuel-tank",
+  "id": 84,
+  "name": null
+ },
+ {
+  "slug": "solid-rocket",
+  "id": 85,
+  "name": null
+ },
+ {
+  "slug": "rocket-engine",
+  "id": 86,
+  "name": null
+ },
+ {
+  "slug": "heat-shield",
+  "id": 87,
+  "name": null
+ },
+ {
+  "slug": "ion-drive",
+  "id": 88,
+  "name": null
+ },
+ {
+  "slug": "jet-engine",
+  "id": 89,
+  "name": null
+ },
+ {
+  "slug": "sub-orbital-second-stage",
+  "id": 90,
+  "name": null
+ },
+ {
+  "slug": "sub-orbital-rocket2",
+  "id": 91,
+  "name": null
+ },
+ {
+  "slug": "orbital-booster",
+  "id": 92,
+  "name": null
+ },
+ {
+  "slug": "starship",
+  "id": 93,
+  "name": null
+ },
+ {
+  "slug": "jumbojet2",
+  "id": 95,
+  "name": null
+ },
+ {
+  "slug": "private-jet",
+  "id": 96,
+  "name": null
+ },
+ {
+  "slug": "single-engine",
+  "id": 97,
+  "name": null
+ },
+ {
+  "slug": "quadcopter",
+  "id": 98,
+  "name": null
+ },
+ {
+  "slug": "satellite",
+  "id": 99,
+  "name": null
+ },
+ {
+  "slug": "aero-research",
+  "id": 100,
+  "name": null
+ },
+ {
+  "slug": "reinforced-concrete",
+  "id": 101,
+  "name": null
+ },
+ {
+  "slug": "bricks",
+  "id": 102,
+  "name": null
+ },
+ {
+  "slug": "cement",
+  "id": 103,
+  "name": null
+ },
+ {
+  "slug": "clay",
+  "id": 104,
+  "name": null
+ },
+ {
+  "slug": "limestone",
+  "id": 105,
+  "name": null
+ },
+ {
+  "slug": "wood",
+  "id": 106,
+  "name": null
+ },
+ {
+  "slug": "steel-beams",
+  "id": 107,
+  "name": null
+ },
+ {
+  "slug": "planks",
+  "id": 108,
+  "name": null
+ },
+ {
+  "slug": "windows",
+  "id": 109,
+  "name": null
+ },
+ {
+  "slug": "tools",
+  "id": 110,
+  "name": null
+ },
+ {
+  "slug": "construction-units",
+  "id": 111,
+  "name": null
+ },
+ {
+  "slug": "bulldozer",
+  "id": 112,
+  "name": null
+ },
+ {
+  "slug": "materials-research",
+  "id": 113,
+  "name": null
+ },
+ {
+  "slug": "robots",
+  "id": 114,
+  "name": null
+ },
+ {
+  "slug": "cow",
+  "id": 115,
+  "name": null
+ },
+ {
+  "slug": "pig",
+  "id": 116,
+  "name": null
+ },
+ {
+  "slug": "milk",
+  "id": 117,
+  "name": null
+ },
+ {
+  "slug": "coffee-beans",
+  "id": 118,
+  "name": null
+ },
+ {
+  "slug": "coffee-ground",
+  "id": 119,
+  "name": null
+ },
+ {
+  "slug": "vegetables",
+  "id": 120,
+  "name": null
+ },
+ {
+  "slug": "bread",
+  "id": 121,
+  "name": null
+ },
+ {
+  "slug": "cheese",
+  "id": 122,
+  "name": null
+ },
+ {
+  "slug": "apple-pie",
+  "id": 123,
+  "name": null
+ },
+ {
+  "slug": "orange-juice",
+  "id": 124,
+  "name": null
+ },
+ {
+  "slug": "apple-cider",
+  "id": 125,
+  "name": null
+ },
+ {
+  "slug": "ginger-beer",
+  "id": 126,
+  "name": null
+ },
+ {
+  "slug": "pizza",
+  "id": 127,
+  "name": null
+ },
+ {
+  "slug": "pasta",
+  "id": 128,
+  "name": null
+ },
+ {
+  "slug": "hamburger",
+  "id": 129,
+  "name": null
+ },
+ {
+  "slug": "lasagna",
+  "id": 130,
+  "name": null
+ },
+ {
+  "slug": "meatballs",
+  "id": 131,
+  "name": null
+ },
+ {
+  "slug": "cocktails",
+  "id": 132,
+  "name": null
+ },
+ {
+  "slug": "flour",
+  "id": 133,
+  "name": null
+ },
+ {
+  "slug": "butter",
+  "id": 134,
+  "name": null
+ },
+ {
+  "slug": "sugar",
+  "id": 135,
+  "name": null
+ },
+ {
+  "slug": "cocoa-beans",
+  "id": 136,
+  "name": null
+ },
+ {
+  "slug": "dough",
+  "id": 137,
+  "name": null
+ },
+ {
+  "slug": "gravy-boat",
+  "id": 138,
+  "name": null
+ },
+ {
+  "slug": "fodder",
+  "id": 139,
+  "name": null
+ },
+ {
+  "slug": "chocolate",
+  "id": 140,
+  "name": null
+ },
+ {
+  "slug": "vegetable-oil",
+  "id": 141,
+  "name": null
+ },
+ {
+  "slug": "salad",
+  "id": 142,
+  "name": null
+ },
+ {
+  "slug": "samosas",
+  "id": 143,
+  "name": null
+ },
+ {
+  "slug": "xmas-ornament",
+  "id": 144,
+  "name": null
+ },
+ {
+  "slug": "recipes",
+  "id": 145,
+  "name": null
+ },
+ {
+  "slug": "pumpkin",
+  "id": 146,
+  "name": null
+ },
+ {
+  "slug": "jack-o-lantern",
+  "id": 147,
+  "name": null
+ },
+ {
+  "slug": "witch-costume",
+  "id": 148,
+  "name": null
+ },
+ {
+  "slug": "pumpkin-soup",
+  "id": 149,
+  "name": null
+ },
+ {
+  "slug": "tree",
+  "id": 150,
+  "name": null
+ },
+ {
+  "slug": "easter-bunny",
+  "id": 151,
+  "name": null
+ },
+ {
+  "slug": "ramadan-sweets",
+  "id": 152,
+  "name": null
+ },
+ {
+  "slug": "icecream-chocolate",
+  "id": 153,
+  "name": null
+ },
+ {
+  "slug": "icecream-apple",
+  "id": 154,
+  "name": null
+ },
+ {
+  "slug": "cream-egg",
+  "id": 155,
+  "name": null
+ },
+ {
+  "id": 1,
+  "slug": "power"
+ },
+ {
+  "id": 94,
+  "slug": "starship"
+ }
+]

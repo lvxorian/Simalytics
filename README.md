@@ -29,6 +29,7 @@ db/
   schema.sql              # tabulky + seed (spusť v Neon SQL editoru nebo psql)
 scripts/
   fetch-market.mjs        # stahovač cen → Neon (postgres.js, přímé SQL)
+  download-icons.mjs      # ikony komodit z CDN → public/icons + items.image_url
 .github/workflows/
   fetch-market.yml        # cron */15 * * * *
 src/
@@ -76,6 +77,13 @@ Názvy/kategorie/ikony komodit jsou připravené v `db/seed-names.sql`:
 
 ```bash
 npm run db:names
+```
+
+Ikony se stahují z oficiálního CDN do `public/icons/{id}.png` a `image_url`
+v DB pak ukazuje na lokální cestu (žádný hotlink, funguje i na Vercelu):
+
+```bash
+npm run icons:download      # -- --force pro opětovné stažení
 ```
 
 ID odpovídá URL encyklopedie: `simcompanies.com/encyclopedia/resource/{id}/`

@@ -12,6 +12,7 @@
     "db:names": "node scripts/apply-seed-names.mjs",
     "db:upgrade": "node scripts/apply-upgrades.mjs",
     "import:catalog": "node scripts/import-catalog.mjs",
+    "icons:download": "node scripts/download-icons.mjs",
     "backfill:candles": "node scripts/backfill-candles.mjs",
     "fetch:market": "node scripts/fetch-market.mjs"
   },

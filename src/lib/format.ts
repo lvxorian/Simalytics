@@ -60,11 +60,11 @@ export function plColorClass(value: number | null | undefined): string {
 }
 
 /**
- * Obrázky z encyklopedie mohou být relativní cesty –
- * doplň doménu SimCompanies, aby je zvládl next/image.
+ * Lokální ikony (public/icons → cesty /icons/…) servíruj as-is,
+ * relativní cesty z encyklopedie doplň o doménu SimCompanies.
  */
 export function itemImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
-  if (url.startsWith("http")) return url;
+  if (url.startsWith("http") || url.startsWith("/")) return url;
   return `https://www.simcompanies.com${url}`;
 }
