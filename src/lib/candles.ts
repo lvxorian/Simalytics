@@ -17,6 +17,19 @@ export type Candle = {
 
 export type PriceTick = { recorded_at: string; price: number };
 
+/**
+ * Max počet svíček v jednom grafu – pojistka proti obřím mezerám
+ * (např. 90 dní po 4h = 540, 2 dny po 5m = 576; vše pod limitem).
+ */
+const MAX_BUCKETS = 3000;
+
+/**
+ * Svíčky z ticků s kontinuitou jako na reálných trzích:
+ * - open každé svíčky = close předchozí (žádné "odtržené" dojičky),
+ * - high/low zahrnuje i open (rozsah přes mezery),
+ * - prázdné buckety se vyplní plochou svíčkou z předchozího close
+ *   (trh bez obchodů = vodorovná linka, ne díry v grafu).
+ */
 export function toCandles(
   ticks: PriceTick[],
   intervalSeconds: number
@@ -26,7 +39,7 @@ export function toCandles(
       new Date(a.recorded_at).getTime() - new Date(b.recorded_at).getTime()
   );
 
-  const buckets = new Map<number, Candle>();
+  const buckets = new Map<number, { high: number; low: number; close: number }>();
 
   for (const tick of sorted) {
     const timeSec = Math.floor(new Date(tick.recorded_at).getTime() / 1000);
@@ -35,13 +48,7 @@ export function toCandles(
 
     const existing = buckets.get(bucketStart);
     if (!existing) {
-      buckets.set(bucketStart, {
-        time: bucketStart,
-        open: price,
-        high: price,
-        low: price,
-        close: price,
-      });
+      buckets.set(bucketStart, { high: price, low: price, close: price });
     } else {
       existing.high = Math.max(existing.high, price);
       existing.low = Math.min(existing.low, price);
@@ -49,7 +56,75 @@ export function toCandles(
     }
   }
 
-  return [...buckets.values()].sort((a, b) => a.time - b.time);
+  if (buckets.size === 0) return [];
+
+  const starts = [...buckets.keys()].sort((a, b) => a - b);
+  const first = starts[0];
+  const last = starts[starts.length - 1];
+
+  const out: Candle[] = [];
+  let prevClose: number | null = null;
+
+  for (
+    let t = first;
+    t <= last && out.length < MAX_BUCKETS;
+    t += intervalSeconds
+  ) {
+    const bucket = buckets.get(t);
+    const open = prevClose ?? bucket?.close ?? 0;
+
+    if (bucket) {
+      out.push({
+        time: t,
+        open,
+        high: Math.max(bucket.high, open),
+        low: Math.min(bucket.low, open),
+        close: bucket.close,
+      });
+      prevClose = bucket.close;
+    } else if (prevClose !== null) {
+      // bucket bez obchodů – plochá svíčka na předchozím close
+      out.push({
+        time: t,
+        open: prevClose,
+        high: prevClose,
+        low: prevClose,
+        close: prevClose,
+      });
+    }
+    // před prvním bucketem nic nevyplňujeme (není odkud brát cenu)
+  }
+
+  return out;
+}
+
+/**
+ * Agreguje denní objemy na týdenní/měsíční buckety (součet).
+ */
+export function aggregateVolumePoints(
+  points: { time: number; value: number }[],
+  mode: "1w" | "1M"
+): { time: number; value: number }[] {
+  const buckets = new Map<number, number>();
+
+  for (const p of points) {
+    const d = new Date(p.time * 1000);
+    let key: number;
+    if (mode === "1w") {
+      const diffToMonday = (d.getUTCDay() + 6) % 7;
+      const monday = new Date(d);
+      monday.setUTCDate(d.getUTCDate() - diffToMonday);
+      monday.setUTCHours(0, 0, 0, 0);
+      key = Math.floor(monday.getTime() / 1000);
+    } else {
+      key = Math.floor(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1) / 1000);
+    }
+    buckets.set(key, (buckets.get(key) ?? 0) + p.value);
+  }
+
+  return [...buckets.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([time, value]) => ({ time, value }));
 }
 
 // ── Weekly / monthly agregace z denních svíček ──────────────────────

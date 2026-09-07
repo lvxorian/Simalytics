@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Activity } from "lucide-react";
+
+import { HeaderSearch } from "@/components/header-search";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -56,7 +58,9 @@ export function SiteHeader() {
             })}
           </nav>
 
-          <div className="ml-auto hidden shrink-0 items-center gap-2 rounded-full border border-up/20 bg-up/5 px-3 py-1.5 font-mono text-[10px] font-medium tracking-wider text-up md:flex">
+          <HeaderSearch />
+
+          <div className="hidden shrink-0 items-center gap-2 rounded-full border border-up/20 bg-up/5 px-3 py-1.5 font-mono text-[10px] font-medium tracking-wider text-up md:flex">
             <span className="relative flex size-1.5">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-up opacity-60" />
               <span className="relative inline-flex size-1.5 rounded-full bg-up" />

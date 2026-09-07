@@ -13,11 +13,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import {
   aggregateDaily,
-  bollingerBands,
-  ema,
+  aggregateVolumePoints,
   resolveIntervalOption,
-  rsi,
-  sma,
   toCandles,
   type Candle,
 } from "@/lib/candles";
@@ -137,15 +134,11 @@ export default async function MarketItemPage({
     dataSource = `ticky · posledních ${opt.days} dní`;
   }
 
-  // ── Technické indikátory (server-side výpočet) ────────────────────
-  const bb = bollingerBands(candles, 20, 2);
-  const indicators = {
-    sma: sma(candles, 20),
-    ema: ema(candles, 50),
-    bbUpper: bb.upper,
-    bbLower: bb.lower,
-    rsi: rsi(candles, 14),
-  };
+  // Objemy pro 1W/1M (agregace denních objemů)
+  let displayVolume = volume;
+  if ((opt.key === "1w" || opt.key === "1M") && volume) {
+    displayVolume = aggregateVolumePoints(volume, opt.key);
+  }
 
   const lastTick =
     candles.length > 0 ? candles[candles.length - 1].close : null;
@@ -295,9 +288,15 @@ export default async function MarketItemPage({
             <PriceChart
               candles={candles}
               mode={chartMode}
-              volume={opt.key === "1d" ? volume : undefined}
-              vwap={opt.key === "1d" ? vwap : undefined}
-              indicators={indicators}
+              extras={{
+                volume: opt.key === "1d" || opt.key === "1w" || opt.key === "1M"
+                  ? displayVolume
+                  : undefined,
+                vwap: opt.key === "1d" ? vwap : undefined,
+                high: periodHigh ?? undefined,
+                low: periodLow ?? undefined,
+                average: periodAvg ?? undefined,
+              }}
             />
           ) : (
             <div className="flex h-72 flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
