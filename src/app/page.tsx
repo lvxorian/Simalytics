@@ -3,17 +3,23 @@ import { ArrowRight, Flame, Plus, Snowflake } from "lucide-react";
 
 import { AutoRefresh } from "@/components/auto-refresh";
 import { ChangeBadge } from "@/components/change-badge";
+import { DailyReportCard } from "@/components/daily-report-card";
 import { ItemIcon } from "@/components/item-icon";
 import { MarketTable, type MarketRow } from "@/components/market-table";
 import { Sparkline } from "@/components/sparkline";
 import { Button } from "@/components/ui/button";
 import {
+  getActiveContests,
   getLatestPrices,
+  getLatestVwaps,
+  getPositionsWithPnl,
   getPricesAround24hAgo,
   getSparklines,
   getWatchedIds,
 } from "@/lib/data";
+import { buildDailyReport, type ReportEvent } from "@/lib/daily-report";
 import { formatCompact, formatPrice } from "@/lib/format";
+import { getEvents } from "@/lib/simcotools";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -49,7 +55,6 @@ export default async function DashboardPage() {
   } catch (err) {
     dbError = err instanceof Error ? err.message : String(err);
   }
-
   if (dbError || rows.length === 0) {
     return <SetupNotice error={dbError} />;
   }
@@ -72,6 +77,48 @@ export default async function DashboardPage() {
   const biggestValue = [...rows]
     .sort((a, b) => (b.quantity ?? 0) - (a.quantity ?? 0))
     .slice(0, 5);
+
+  // ── Denní report (rule-based, bez AI) ─────────────────────────
+  // Data se dotahují paralelně; když některý zdroj selže (eventy ze
+  // Simco Tools), report se stejně sestaví ze zbytku – stejný vzor
+  // jako skener. Selže-li DB, page spadne do SetupNotice výše.
+  let report = null;
+  try {
+    const [vwaps, contests, positions, events] = await Promise.all([
+      getLatestVwaps(rows.map((r) => r.item_id)),
+      getActiveContests(),
+      getPositionsWithPnl({ open: true }),
+      getEvents().catch(() => []),
+    ]);
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const activeEvents: ReportEvent[] = events
+      .filter((e) => e.until.slice(0, 10) >= todayStr)
+      .map((e) => ({
+        resourceId: e.resource,
+        speedModifier: e.speedModifier,
+        until: e.until,
+      }));
+    report = buildDailyReport({
+      rows,
+      vwap: vwaps,
+      events: activeEvents,
+      contests: new Map(
+        [...contests].map(([id, c]) => [id, { name: c.name, endDate: c.endDate }])
+      ),
+      positions: positions.map((p) => ({
+        item_id: p.item_id,
+        item_name: p.item_name,
+        quantity: p.quantity,
+        buy_price: p.buy_price,
+        current_price: p.current_price,
+        unrealized_pl: p.unrealized_pl,
+        unrealized_pl_pct: p.unrealized_pl_pct,
+      })),
+    });
+  } catch {
+    // Report je doplněk – selhání (např. prázdné tabulky VWAP) nesmí
+    // shodit celý dashboard.
+  }
 
   return (
     <div className="space-y-8">
@@ -126,6 +173,9 @@ export default async function DashboardPage() {
           tone="down"
         />
       </section>
+
+      {/* ── Denní report + investiční doporučení ────────────── */}
+      {report && <DailyReportCard report={report} />}
 
       {/* ── Top gainers / losers ─────────────────────────────── */}
       <section className="grid gap-4 lg:grid-cols-2">
