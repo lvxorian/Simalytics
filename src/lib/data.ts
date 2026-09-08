@@ -97,27 +97,28 @@ export async function getLatestPrices(quality = 0): Promise<LatestPriceRow[]> {
   }));
 }
 
-/** Historie cen jedné položky (pro graf). */
+/** Historie cen jedné položky (pro graf). Volume = reálný 5m objem od 004. */
 export async function getPriceHistory(
   itemId: number,
   quality = 0,
   sinceDays = 30
-): Promise<{ recorded_at: string; price: number }[]> {
+): Promise<{ recorded_at: string; price: number; volume: number | null }[]> {
   const db = getDb();
   const since = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000);
 
   const rows = (await db`
-    select recorded_at, price
+    select recorded_at, price, volume
     from price_history
     where item_id = ${itemId} and quality = ${quality}
       and recorded_at >= ${since}
     order by recorded_at asc
     limit 20000
-  `) as unknown as RawTick[];
+  `) as unknown as { recorded_at: string; price: string; volume: number | null }[];
 
   return rows.map((r) => ({
-    recorded_at: iso(r.recorded_at),
+    recorded_at: new Date(r.recorded_at).toISOString(),
     price: Number(r.price),
+    volume: r.volume === null ? null : Number(r.volume),
   }));
 }
 

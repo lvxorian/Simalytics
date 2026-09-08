@@ -1,5 +1,5 @@
 import { getDb } from "@/lib/db";
-import { getMarketPrices } from "@/lib/simcotools";
+import { getMarketPrices, getFollowedSummaries } from "@/lib/simcotools";
 import { evaluateAlerts } from "@/lib/alerts";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +26,23 @@ export async function GET(req: Request) {
     const tracked = await db`select id from items where track_ticks = true`;
     const trackedIds = new Set(tracked.map((r) => r.id as number));
 
+    // Reálné obchodované objemy (5min bucket, shodný s naším pollerem):
+    // market/followed v jednom requestu pro všechny sledované položky
+    let volumeByItem = new Map<number, number>();
+    try {
+      const summaries = await getFollowedSummaries(
+        [...trackedIds].map((id) => ({ resourceId: id, quality: 0 }))
+      );
+      volumeByItem = new Map(
+        summaries.map((s) => [
+          s.resourceId,
+          s.fiveMinutesCandlestick?.volume ?? s.volume ?? 0,
+        ])
+      );
+    } catch {
+      // Objemy jsou bonus – výpadek nesmí zablokovat ukládání cen
+    }
+
     const rows = ticks
       .filter(
         (t) => t.quality === 0 && trackedIds.has(t.resourceId) && t.price > 0
@@ -35,6 +52,7 @@ export async function GET(req: Request) {
         quality: 0,
         price: t.price,
         quantity: null,
+        volume: volumeByItem.get(t.resourceId) ?? null,
         recorded_at: t.datetime,
         source: "simcotools",
       }));
@@ -48,6 +66,7 @@ export async function GET(req: Request) {
           "quality",
           "price",
           "quantity",
+          "volume",
           "recorded_at",
           "source"
         )}
@@ -72,6 +91,7 @@ export async function GET(req: Request) {
       received: ticks.length,
       inserted,
       tracked: trackedIds.size,
+      volumes: volumeByItem.size,
       alerts,
       at: new Date().toISOString(),
     });

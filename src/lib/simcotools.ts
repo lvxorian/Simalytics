@@ -47,6 +47,19 @@ export type SimcoTradeTick = {
   price: number;
 };
 
+/** Market summary jedné položky z batch endpointu market/followed. */
+export type SimcoFollowedSummary = {
+  resourceId: number;
+  resourceName?: string;
+  quality: number;
+  timestamp: string;
+  price: number;
+  /** Objem za posledních 5 minut (reálné obchody). */
+  volume?: number;
+  fiveMinutesCandlestick?: { volume?: number } | null;
+  lastDayCandlestick?: { volume?: number; vwap?: number } | null;
+};
+
 export type SimcoEvent = {
   id: number;
   resource: number;
@@ -232,6 +245,24 @@ export async function getMarketPrices(): Promise<SimcoTradeTick[]> {
     `/v1/realms/${REALM_ID}/market/prices`
   );
   return data.prices ?? [];
+}
+
+/**
+ * Batch market summary pro konkrétní resource+quality páry (1 request).
+ * Format parametru: "9q0,8q0,…" – vrací fiveMinutesCandlestick.volume
+ * = SKUTEČNÝ obchodovaný objem za posledních 5 minut.
+ */
+export async function getFollowedSummaries(
+  pairs: { resourceId: number; quality: number }[]
+): Promise<SimcoFollowedSummary[]> {
+  if (pairs.length === 0) return [];
+  const resources = pairs.map((p) => `${p.resourceId}q${p.quality}`).join(",");
+  const data = await simcoFetch<{ summaries: SimcoFollowedSummary[] }>(
+    `/v1/realms/${REALM_ID}/market/followed?resources=${encodeURIComponent(
+      resources
+    )}`
+  );
+  return data.summaries ?? [];
 }
 
 /** Poslední obchod pro konkrétní resource a kvalitu. */

@@ -80,13 +80,14 @@ function buildRawBuckets(
 
   const buckets = new Map<
     number,
-    { open: number; high: number; low: number; close: number }
+    { open: number; high: number; low: number; close: number; volume?: number }
   >();
 
   for (const tick of sorted) {
     const timeSec = Math.floor(new Date(tick.recorded_at).getTime() / 1000);
     const bucketStart = Math.floor(timeSec / intervalSeconds) * intervalSeconds;
     const price = Number(tick.price);
+    const volume = "volume" in tick && tick.volume != null ? Number(tick.volume) : null;
 
     const existing = buckets.get(bucketStart);
     if (!existing) {
@@ -95,11 +96,15 @@ function buildRawBuckets(
         high: price,
         low: price,
         close: price,
+        volume: volume ?? undefined,
       });
     } else {
       existing.high = Math.max(existing.high, price);
       existing.low = Math.min(existing.low, price);
       existing.close = price; // poslední tick v bucketu = close
+      if (volume != null) {
+        existing.volume = (existing.volume ?? 0) + volume;
+      }
     }
   }
 

@@ -153,6 +153,14 @@ export default async function MarketItemPage({
     displayVolume = aggregateVolumePoints(volume, opt.key);
   }
 
+  // Intraday: reálné obchodované objemy z ticků (poller je ukládá od
+  // migrace 004 z market/followed – fiveMinutesCandlestick.volume)
+  const intradayVolume = candles.some((c) => c.volume != null)
+    ? candles
+        .filter((c) => c.volume != null)
+        .map((c) => ({ time: c.time, value: c.volume! }))
+    : undefined;
+
   const lastTick =
     candles.length > 0 ? candles[candles.length - 1].close : null;
   const dayAgo = await getPricesAround24hAgo([id]);
@@ -343,9 +351,10 @@ export default async function MarketItemPage({
               candles={candles}
               mode={chartMode}
               extras={{
-                volume: opt.key === "1d" || opt.key === "1w" || opt.key === "1M"
-                  ? displayVolume
-                  : undefined,
+                volume:
+                  opt.key === "1d" || opt.key === "1w" || opt.key === "1M"
+                    ? displayVolume
+                    : intradayVolume,
                 vwap: opt.key === "1d" ? vwap : undefined,
                 high: periodHigh ?? undefined,
                 low: periodLow ?? undefined,

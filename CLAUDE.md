@@ -90,10 +90,11 @@ src/components/            # vizní komponenty (viz níže)
   přes `applyContinuity()` v market page (Simco Tools data jsou „surová").
 - **Fixed Range Volume Profile** (`lib/volume-profile.ts` + overlay v
   `price-chart.tsx`): tažením myši se vybere rozsah → biny, POC (zlatý),
-  Value Area 70 %. Reálný objem jen u denních svíček (Simco Tools);
-  intraday proxy = počet ticků (`volume ?? 1`) — záměr, `price_history`
-  nemá obchodované objemy. V5 API: cena→pixel je
-  `series.priceToCoordinate()`, NE na `priceScale`.
+  Value Area 70 %. Reálný objem: denní svíčky (Simco Tools) i intraday
+  ticky od migrace 004 — poller ukládá `fiveMinutesCandlestick.volume`
+  z `market/followed?resources=1q0,2q0,…` (1 request pro všechny
+  položky) do `price_history.volume`; `toCandles()` objemy sčítá.
+  V5 API: cena→pixel je `series.priceToCoordinate()`, NE na `priceScale`.
 - **Ticker tape**: JEDNA řada marquee se všemi komoditami (CSS keyframes
   v globals.css; rychlost `--ticker-speed` se škáluje s počtem dlaždic,
   default 360s). Dlaždice = cena + 24h % + divergence vs. denní VWAP
