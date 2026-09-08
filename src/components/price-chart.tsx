@@ -17,7 +17,13 @@ import {
   type LogicalRange,
   type UTCTimestamp,
 } from "lightweight-charts";
-import { ChartBarDecreasing, RulerDimensionLine, X } from "lucide-react";
+import {
+  ChartBarDecreasing,
+  Maximize2,
+  Minimize2,
+  RulerDimensionLine,
+  X,
+} from "lucide-react";
 import type { Candle, LinePoint } from "@/lib/candles";
 import type { IntervalKey } from "@/lib/candles";
 import { CandleCountdown } from "@/components/candle-countdown";
@@ -28,8 +34,17 @@ import {
 } from "@/lib/volume-profile";
 import { formatCompact, formatPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { ChartContextMenu } from "@/components/chart-context-menu";
 
 export type VolumePoint = { time: number; value: number };
+
+/** Výsledek pravého kliknutí do grafu (pro vytvoření alertu). */
+export type ChartContextMenuPayload = {
+  /** Cena v místě kliknutí (snap na OHLC, jako u pravítka). */
+  price: number | null;
+  /** Unix sekundy – čas svíčky pod kurzorem. */
+  time: number | null;
+};
 
 export type ChartExtras = {
   /** Objemový histogram (jen denní data ze Simco Tools) */
@@ -131,6 +146,8 @@ export function PriceChart({
   extras,
   volumeProfile,
   intervalKey,
+  itemId,
+  itemName,
 }: PriceChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -578,6 +595,76 @@ export function PriceChart({
     });
   }, [vpEnabled, rulerEnabled]);
 
+  // ── Kontextová nabídka (pravé tlačítko) → Nastavit alert ─────────
+  const [ctxMenu, setCtxMenu] = useState<{
+    x: number;
+    y: number;
+    price: number | null;
+    time: number | null;
+  } | null>(null);
+  const closeCtxMenu = useCallback(() => setCtxMenu(null), []);
+
+  // ── Fullscreen režim grafu ───────────────────────────────────────
+  // Overlay přes celé okno – graf se NESMÍ rekonstruovat (rozbilo by to
+  // zoom i nástroje), takže se container jen přemístí do overlaye přes
+  // appendChild a po zavření vrátí zpět. Esc ruší nejdřív aktivní
+  // měření/rozsah, pak zavře fullscreen.
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const chartHostRef = useRef<HTMLDivElement | null>(null);
+  const originalParentRef = useRef<HTMLDivElement | null>(null);
+  const fullscreenRef = useRef<HTMLDivElement | null>(null);
+
+  const onChartContextMenu = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      const price = priceAtEvent(e.clientY);
+      const rawTime = timeAtEvent(e.clientX);
+      const time = rawTime == null ? null : snapTime(rawTime);
+      const rect = containerRef.current?.getBoundingClientRect();
+      setCtxMenu({
+        // pozice v rámci wrapperu (menu je absolutní uvnitř relativního divu)
+        x: e.clientX - (rect?.left ?? 0),
+        y: e.clientY - (rect?.top ?? 0),
+        price,
+        time,
+      });
+    },
+    [priceAtEvent, snapTime, timeAtEvent]
+  );
+  // right-click = drag begin pro VP/pravítko? Ne – onMouseDown nerozlišuje
+  // tlačítka; tažení za pravé tlačítko nechceme, takže drag jen když button===0
+  const onChartMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      if (e.button !== 0) {
+        e.preventDefault();
+        return;
+      }
+      onDragStart(e);
+    },
+    [onDragStart]
+  );
+
+  // Přemístění chart wrapperu do fullscreen overlaye a zpět – zachová
+  // živou instanci grafu (zoom, nástroje, overlaye). Graf se nikdy
+  // neRe-mountuje, jen mění DOM rodiče.
+  useEffect(() => {
+    const host = chartHostRef.current;
+    const original = originalParentRef.current;
+    if (!host) return;
+    if (isFullscreen && host.parentElement !== fullscreenRef.current) {
+      fullscreenRef.current?.appendChild(host);
+      document.body.style.overflow = "hidden";
+    } else if (!isFullscreen && original && host.parentElement !== original) {
+      original.appendChild(host);
+      document.body.style.overflow = "";
+    }
+    // přepočítat pixelovou geometrii overlayů po změně velikosti
+    requestAnimationFrame(() => setVpEpoch((e) => e + 1));
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isFullscreen]);
+
   // Overlay SVG pro volume profile – pozice binů se váže na pixelové
   // souřadnice cenové osy (přepočet i při pan/zoom přes vpEpoch)
   const [vpGeom, setVpGeom] = useState<{
@@ -681,20 +768,23 @@ export function PriceChart({
     setRulerGeom({ ax, ay, bx, by, width: rect.width });
   }, [rulerActive, candles, visible, vpEpoch, vpEnabled]);
 
-  // Esc ruší aktivní měření pravítkem i výběr rozsahu VP
+  // Esc ruší aktivní měření pravítkem i výběr rozsahu VP;
+  // ve fullscreen pak Esc minimalizuje graf
   useEffect(() => {
-    if (!rulerEnabled && !vpEnabled) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
+      if (e.key !== "Escape") return;
+      if (rulerEnabled || vpEnabled) {
         rulerAnchor.current = null;
         setRulerPreview(null);
         setRulerRange(null);
         setVpRange(null);
+        return;
       }
+      if (isFullscreen) setIsFullscreen(false);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [rulerEnabled, vpEnabled]);
+  }, [rulerEnabled, vpEnabled, isFullscreen]);
 
   return (
     <div className="space-y-2">
@@ -783,7 +873,25 @@ export function PriceChart({
         </div>
       )}
 
-      <div className="relative">
+      {/* Stabilní rodič wrapperu – při fullscreen se wrapper přemístí
+          do overlaye a tady zůstane díra, kam se vrátí. Nesmí obsahovat
+          žádné podmíněné sourozence (React by mohl zamíchat DOM). */}
+      <div ref={originalParentRef}>
+        <div
+          ref={chartHostRef}
+          className={cn("relative", isFullscreen && "h-full")}
+        >
+        {ctxMenu && (
+          <ChartContextMenu
+            x={ctxMenu.x}
+            y={ctxMenu.y}
+            price={ctxMenu.price}
+            time={ctxMenu.time}
+            itemId={itemId}
+            itemName={itemName}
+            onClose={closeCtxMenu}
+          />
+        )}
         {/* Nástrojová lišta à la TradingView – svislá, u levého okraje grafu.
             Je sourozencem chart containeru, takže kliky na ni nespouštějí
             drag/měření v grafu. */}
@@ -854,6 +962,21 @@ export function PriceChart({
               </button>
             </>
           )}
+          <div className="my-0.5 h-px w-6 bg-border" />
+          <button
+            type="button"
+            onClick={() => setIsFullscreen((v) => !v)}
+            title={isFullscreen ? "Zmenšit (Esc)" : "Celá obrazovka"}
+            aria-label="Celá obrazovka"
+            aria-pressed={isFullscreen}
+            className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          >
+            {isFullscreen ? (
+              <Minimize2 className="size-[18px]" />
+            ) : (
+              <Maximize2 className="size-[18px]" />
+            )}
+          </button>
         </div>
         <div
           ref={containerRef}
@@ -861,10 +984,11 @@ export function PriceChart({
             "w-full rounded-lg",
             (vpEnabled || rulerEnabled) && "cursor-crosshair select-none"
           )}
-          style={{ height }}
-          onMouseDown={onDragStart}
+          style={{ height: isFullscreen ? "100%" : height }}
+          onMouseDown={onChartMouseDown}
           onMouseMove={onDragMove}
           onMouseUp={onDragEnd}
+          onContextMenu={onChartContextMenu}
           onMouseLeave={() => {
             dragState.current.anchor = null;
             setDragPreview(null);
@@ -1053,7 +1177,34 @@ export function PriceChart({
             })()}
           </>
         )}
+        </div>
       </div>
+
+      {/* Fullscreen overlay – wrapper grafu se sem přemístí přes appendChild */}
+      {isFullscreen && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-background p-3">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <div className="flex items-baseline gap-2">
+              {itemName && (
+                <span className="text-sm font-semibold">{itemName}</span>
+              )}
+              <span className="font-mono text-[11px] text-muted-foreground">
+                fullscreen · Esc zavře
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsFullscreen(false)}
+              title="Zmenšit (Esc)"
+              aria-label="Ukončit celou obrazovku"
+              className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            >
+              <Minimize2 className="size-[18px]" />
+            </button>
+          </div>
+          <div ref={fullscreenRef} className="relative min-h-0 flex-1" />
+        </div>
+      )}
     </div>
   );
 }
@@ -1068,4 +1219,8 @@ type PriceChartProps = {
   volumeProfile?: Candle[];
   /** TF pro odpočet do zavření svíčky (nepovinný – bez něj se countdown nezobrazí). */
   intervalKey?: IntervalKey;
+  /** Položka grafu – pro kontextovou nabídku (Nastavit alert). */
+  itemId?: number;
+  /** Název položky pro zobrazení v nabídce. */
+  itemName?: string;
 };

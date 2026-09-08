@@ -598,6 +598,43 @@ export async function getAlertsWithItems(): Promise<AlertWithItem[]> {
   }));
 }
 
+/** Alerty jedné komodity (tabulka pod grafem na market page). */
+export async function getAlertsForItem(
+  itemId: number,
+  quality = 0
+): Promise<AlertWithItem[]> {
+  const db = getDb();
+  const rows = (await db`
+    select a.*,
+           i.name as item_name,
+           i.image_url,
+           latest.price as current_price
+    from alerts a
+    join items i on i.id = a.item_id
+    left join lateral (
+      select price
+      from price_history ph
+      where ph.item_id = a.item_id and ph.quality = a.quality
+      order by ph.recorded_at desc
+      limit 1
+    ) latest on true
+    where a.item_id = ${itemId} and a.quality = ${quality}
+    order by a.created_at desc
+    limit 50
+  `) as unknown as (RawAlert & {
+    item_name: string;
+    image_url: string | null;
+    current_price: string | null;
+  })[];
+
+  return rows.map((r) => ({
+    ...mapAlert(r),
+    item_name: r.item_name,
+    image_url: r.image_url,
+    current_price: r.current_price === null ? null : Number(r.current_price),
+  }));
+}
+
 /** Aktivní alerty pro evaluaci (jen aktivní, bez joinů – rychlé). */
 export async function getActiveAlerts(): Promise<AlertRow[]> {
   const db = getDb();

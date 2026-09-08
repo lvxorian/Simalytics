@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Bell, Info } from "lucide-react";
+import { ArrowLeft, Info } from "lucide-react";
 
 import { PriceChart } from "@/components/price-chart";
-import { AlertForm } from "@/components/alert-form";
+import { ItemAlertsTable } from "@/components/item-alerts-table";
 import { getLatestVwaps } from "@/lib/data";
 import { StarButton } from "@/components/star-button";
 import { AutoRefresh } from "@/components/auto-refresh";
@@ -24,6 +24,7 @@ import {
 } from "@/lib/candles";
 import {
   getActiveContests,
+  getAlertsForItem,
   getDailyCandles,
   getItem,
   getPriceHistory,
@@ -80,6 +81,7 @@ export default async function MarketItemPage({
   const opt = resolveIntervalOption(interval);
   const watchedIds = await getWatchedIds();
   const tracked = await isTracked(id);
+  const itemAlerts = await getAlertsForItem(id);
 
   // ── Data pro graf ─────────────────────────────────────────────────
   let candles: Candle[] = [];
@@ -387,6 +389,8 @@ export default async function MarketItemPage({
               candles={candles}
               mode={chartMode}
               intervalKey={opt.key}
+              itemId={id}
+              itemName={item.name}
               extras={{
                 volume:
                   opt.key === "1d" || opt.key === "1w" || opt.key === "1M"
@@ -467,14 +471,8 @@ export default async function MarketItemPage({
         <MiniStat label="Zdroj dat" value={dataSource} small />
       </div>
 
-      {/* ── Alert na této komoditě ─────────────────────────── */}
-      <div className="max-w-sm rounded-xl border border-border/80 bg-card p-4">
-        <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
-          <Bell className="size-4 text-primary" />
-          Nastavit alert
-        </div>
-        <AlertForm itemId={id} currentPrice={lastTick} />
-      </div>
+      {/* ── Alerty na této komoditě (přidávají se pravým klikem do grafu) ── */}
+      <ItemAlertsTable itemId={id} alerts={itemAlerts} />
     </div>
   );
 }

@@ -131,6 +131,20 @@ src/components/            # vizní komponenty (viz níže)
   Vzájemně se vylučuje s výběrem rozsahu VP; oba nástroje zamykají
   pan/zoom, Esc/Vymazat ruší měření. Při změně typu grafu (mode/
   candles vs area) počítat s tím, že snap čte `candles` prop.
+- **Alerty z grafu**: pravé tlačítko do grafu (`onContextMenu` v
+  `price-chart.tsx`) → kontextové menu (`chart-context-menu.tsx`) s
+  „Nastavit alert“ – cena předvyplněná z místa kliknutí (snap na OHLC).
+  Alerty jedné komodity pak leží v tabulce pod grafem
+  (`item-alerts-table.tsx`, data `getAlertsForItem`) – přepínač
+  aktivní/vypnutý + mazání; celkový přehled zůstává na /alerts.
+  Pravé tlačítko nesmí spustit drag nástrojů (onMouseDown filtruje
+  `e.button !== 0`).
+- **Fullscreen grafu** (`price-chart.tsx`): tlačítko Maximize2 v nástrojové
+  liště → fixed overlay; wrapper grafu se přemístí přes appendChild
+  do overlaye (chart se NERE-MOUNTUJE – zoom/nástroje přežijí) a po
+  zavření se vrátí do `originalParentRef`. Esc = nejdřív zruš měření,
+  pak zavři fullscreen. `containerRef` musí zůstat uvnitř `chartHostRef`
+  (autoSize přepočítá sám; geometrii overlayů bumpne vpEpoch).
 - **Fáze ekonomiky**: dle hry `recession` = „Recese 📉", `normal` =
   „Stabilní 😐", `boom` = „Růst 📈" (PHASE_LABELS v statistiky/page.tsx).
 - **„Živý pravý okraj“ grafu**: `datetime` ticků ze Simco Tools je čas
