@@ -40,11 +40,24 @@ import { formatCompact, formatPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { ChartContextMenu } from "@/components/chart-context-menu";
 import { ItemIcon } from "@/components/item-icon";
+import { ChartAlertLines } from "@/components/chart-alert-lines";
+import {
+  deleteAlertAction,
+  updateAlertThresholdAction,
+} from "@/app/actions";
 
 export type IntervalSwitch = {
   key: IntervalKey;
   label: string;
   href: string;
+};
+
+export type AlertLineAlert = {
+  id: string;
+  kind: "price" | "score";
+  direction: "above" | "below";
+  threshold: number;
+  active: boolean;
 };
 
 export type VolumePoint = { time: number; value: number };
@@ -163,6 +176,7 @@ export function PriceChart({
   currentPrice,
   change24h,
   itemTicker,
+  alerts,
   intervalSwitches,
   modeSwitches,
 }: PriceChartProps) {
@@ -976,11 +990,13 @@ export function PriceChart({
   // Esc – nejdřív deaktivuj nástroj / zruš měření, pak odvyber objekt,
   //       ve fullscreen pak minimalizuje graf. Připnutý VP objekt Esc
   //       nemaže (jen odvybere) – mazání je na koši.
-  // F   – přepne fullscreen (jen když fokus není ve vstupním poli, ať
-  //       ruší psaní poznámek/alertů)
+  // F   – zapne fullscreen; ve fullscreen se F ignoruje (minimalizovat
+  //       jde jen Esc nebo tlačítkem), ať náhodou nevyskočíš z grafu
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "f" || e.key === "F") {
+        // Ve fullscreen F ignorujeme – minimalizace jen Esc/tlačítkem
+        if (isFullscreen) return;
         const target = e.target as HTMLElement | null;
         const typing =
           target &&
@@ -990,7 +1006,7 @@ export function PriceChart({
             target.isContentEditable);
         if (!typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
           e.preventDefault();
-          setIsFullscreen((v) => !v);
+          setIsFullscreen(true);
         }
         return;
       }
@@ -1271,6 +1287,28 @@ export function PriceChart({
           className="pointer-events-none absolute inset-0 size-full"
         />
 
+        {/* Přetahovací čáry alertů (à la TradingView) – jen cenové alerty
+            komodity; drag mění práh, koš maže */}
+        {alerts && alerts.length > 0 && (
+          <ChartAlertLines
+            alerts={alerts}
+            epoch={vpEpoch}
+            priceToY={(p) => mainSeriesRef.current?.priceToCoordinate(p) ?? null}
+            yToPrice={(y) =>
+              mainSeriesRef.current?.coordinateToPrice(y) ?? null
+            }
+            onRedraw={() => setVpEpoch((e) => e + 1)}
+            onThresholdChange={(alertId, threshold) => {
+              void updateAlertThresholdAction(alertId, threshold);
+            }}
+            onDelete={(alertId) => {
+              void deleteAlertAction(alertId).then(() =>
+                router.refresh()
+              );
+            }}
+          />
+        )}
+
         {/* Overlay pravítka – pás, hladiny, úsečka se šipkou + badge s měřením */}
         {rulerGeom && rulerActive && rulerMeasure && (
           <>
@@ -1456,6 +1494,8 @@ type PriceChartProps = {
   change24h?: number | null;
   /** Herní zkratka komodity (např. „BXC"). */
   itemTicker?: string | null;
+  /** Cenové alerty komodity – kreslí se jako přetahovací linky. */
+  alerts?: AlertLineAlert[];
   candles: Candle[];
   /** "candles" = svíčky, "area" = plynulá linie s gradientem */
   mode?: "candles" | "area";

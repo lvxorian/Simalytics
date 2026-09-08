@@ -395,6 +395,13 @@ export default async function MarketItemPage({
               currentPrice={lastTick}
               change24h={change24h}
               itemTicker={item.db_letter}
+              alerts={itemAlerts.map((a) => ({
+                id: a.id,
+                kind: a.kind,
+                direction: a.direction,
+                threshold: a.threshold,
+                active: a.active,
+              }))}
               intervalSwitches={(
                 [
                   { key: "5m", label: "5m" },

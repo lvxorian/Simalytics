@@ -10,6 +10,7 @@ import {
   openPosition,
   toggleAlert,
   toggleWatchlist,
+  updateAlertThreshold,
 } from "@/lib/data";
 
 export type ActionState = { ok: boolean; error?: string };
@@ -159,6 +160,15 @@ export async function toggleAlertAction(id: string): Promise<boolean> {
 /** Smaže alert. */
 export async function deleteAlertAction(id: string): Promise<void> {
   await deleteAlert(id);
+  revalidatePath("/alerts");
+}
+
+/** Změní práh alertu (přetažení linky v grafu). */
+export async function updateAlertThresholdAction(
+  id: string,
+  threshold: number
+): Promise<void> {
+  await updateAlertThreshold(id, threshold);
   revalidatePath("/alerts");
 }
 

@@ -679,6 +679,18 @@ export async function deleteAlert(id: string): Promise<void> {
   await db`delete from alerts where id = ${id}`;
 }
 
+/** Změní práh existujícího alertu (přetažení linky v grafu). */
+export async function updateAlertThreshold(
+  id: string,
+  threshold: number
+): Promise<void> {
+  const db = getDb();
+  await db`
+    update alerts set threshold = ${threshold}
+    where id = ${id} and kind = 'price'
+  `;
+}
+
 /**
  * Označí alert jako spuštěný (cooldown proti spamu).
  * Vrací true, pokud SMÍ notifikovat – tj. uplynul cooldown.

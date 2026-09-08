@@ -145,11 +145,13 @@ src/components/            # vizní komponenty (viz níže)
 - **Alerty z grafu**: pravé tlačítko do grafu (`onContextMenu` v
   `price-chart.tsx`) → kontextové menu (`chart-context-menu.tsx`) s
   „Nastavit alert“ – cena předvyplněná z místa kliknutí (snap na OHLC).
-  Alerty jedné komodity pak leží v tabulce pod grafem
-  (`item-alerts-table.tsx`, data `getAlertsForItem`) – přepínač
-  aktivní/vypnutý + mazání; celkový přehled zůstává na /alerts.
-  Pravé tlačítko nesmí spustit drag nástrojů (onMouseDown filtruje
-  `e.button !== 0`).
+  Cenové alerty se navíc kreslí do grafu jako přetahovací linky
+  (`chart-alert-lines.tsx`, à la TV): drag mění práh přes
+  `updateAlertThresholdAction`, koš maže. Alerty jedné komodity pak
+  leží v tabulce pod grafem (`item-alerts-table.tsx`, data
+  `getAlertsForItem`) – přepínač aktivní/vypnutý + mazání; celkový
+  přehled zůstává na /alerts. Pravé tlačítko nesmí spustit drag
+  nástrojů (onMouseDown filtruje `e.button !== 0`).
 - **Fullscreen grafu** (`price-chart.tsx`): tlačítko Maximize2 jen vpravo
   nahoře, countdown svíčky sedí vedle něj zleva (ve fullscreen je
   countdown v hlavičce u Minimize2) →
@@ -159,8 +161,9 @@ src/components/            # vizní komponenty (viz níže)
   countdown v headeru; wrapper grafu se přemístí
   přes appendChild
   do overlaye (chart se NERE-MOUNTUJE – zoom/nástroje přežijí) a po
-  zavření se vrátí do `originalParentRef`. Klávesy: F = fullscreen
-  toggle (ignoruje fokus ve vstupních polích), Esc = nejdřív zruš
+  zavření se vrátí do `originalParentRef`. Klávesy: F = jen ZAPNE
+  fullscreen (ve fullscreen se ignoruje, minimalizovat jde jen Esc/
+  tlačítkem; ignoruje fokus ve vstupních polích), Esc = nejdřív zruš
   měření, pak zavři fullscreen. `containerRef` musí zůstat uvnitř
   `chartHostRef`
   (autoSize přepočítá sám; geometrii overlayů bumpne vpEpoch).
