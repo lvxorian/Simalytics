@@ -24,6 +24,7 @@ import {
   Maximize2,
   Minimize2,
   RulerDimensionLine,
+  Trash2,
   X,
 } from "lucide-react";
 import type { Candle, LinePoint } from "@/lib/candles";
@@ -179,7 +180,11 @@ export function PriceChart({
   const [vpRange, setVpRange] = useState<{ from: number; to: number } | null>(
     null
   );
-  const [vpEnabled, setVpEnabled] = useState(false);
+  // VP à la TradingView: ikona nástroje jen ODEMČE kreslení; po tažení se
+  // objekt PřIPNE (zůstává při pan/zoom) a nástroj se sám deaktivuje.
+  const [vpTool, setVpTool] = useState(false);
+  // Připnutý VP objekt je vybraný → u něj vyjede koš
+  const [vpSelected, setVpSelected] = useState(false);
   // Výběr tažením: 0 = neaktivní, 1 = tažení (from), 2 = tažení (do)
   const dragState = useRef<{ anchor: number | null }>({ anchor: null });
   const [dragPreview, setDragPreview] = useState<{
@@ -204,6 +209,10 @@ export function PriceChart({
   const rulerAnchor = useRef<RulerPoint | null>(null);
   // Aktivní měření: preview při tažení má přednost, pak potvrzený rozsah
   const rulerActive = rulerEnabled ? (rulerPreview ?? rulerRange) : null;
+  // Zrcadlo pro uzávěr onRangeChange (viz výše) – aktualizace při renderu,
+  // ať ref nikdy nezůstane zastaralý
+  const rulerActiveRef = useRef<{ a: RulerPoint; b: RulerPoint } | null>(null);
+  rulerActiveRef.current = rulerActive;
 
   // Zdroj dat profilu: volumeProfile prop (reálné objemy pro 1D/1W/1M),
   // jinak samotné svíčky (intraday → proxy objem = 1 tick)
@@ -217,13 +226,12 @@ export function PriceChart({
   );
 
   const profile = useMemo(() => {
-    if (!vpEnabled || profileSource.length === 0) return null;
-    const from = vpRange?.from ?? profileSource[0].time;
-    const to =
-      vpRange?.to ?? profileSource[profileSource.length - 1].time;
-    const slice = profileSource.filter((c) => c.time >= from && c.time <= to);
+    if (!vpRange || profileSource.length === 0) return null;
+    const slice = profileSource.filter(
+      (c) => c.time >= vpRange.from && c.time <= vpRange.to
+    );
     return computeVolumeProfile(slice, 48);
-  }, [vpEnabled, vpRange, profileSource]);
+  }, [vpRange, profileSource]);
 
   // Tažením označit rozsah: mouse down → anchor, mouse move → preview,
   // mouse up → potvrzení rozsahu
@@ -305,13 +313,14 @@ export function PriceChart({
         setRulerPreview({ a, b: a });
         return;
       }
-      if (!vpEnabled) return;
+      if (!vpTool) return;
+      setVpSelected(false); // nová kresba = zrušit výběr starého objektu
       const t = timeAtEvent(e.clientX);
       if (t == null) return;
       dragState.current.anchor = t;
       setDragPreview({ from: t, to: t });
     },
-    [rulerEnabled, vpEnabled, timeAtEvent, priceAtEvent, snapTime, snapPrice]
+    [rulerEnabled, vpTool, timeAtEvent, priceAtEvent, snapTime, snapPrice]
   );
 
   const onDragMove = useCallback(
@@ -347,8 +356,11 @@ export function PriceChart({
     }
     if (dragState.current.anchor == null) return;
     dragState.current.anchor = null;
-    if (dragPreview) {
+    if (dragPreview && dragPreview.from !== dragPreview.to) {
+      // Připnutí objektu + automatické deaktivování nástroje (jako ve TV)
       setVpRange(dragPreview);
+      setVpTool(false);
+      setVpSelected(true);
     }
     setDragPreview(null);
   }, [dragPreview, rulerPreview]);
@@ -599,13 +611,15 @@ export function PriceChart({
       chart.timeScale().fitContent();
     }
 
-    // Pan/zoom mění pixelové souřadnice → přepočítat overlay VP
-    // + uložit logický rozsah pro obnovu zoomu po rekonstrukci
+    // Pan/zoom: přemalovat VP canvas hned teď (plynulé fitování jako
+    // ve TradingView) + uložit logický rozsah pro obnovu zoomu
     const onRangeChange = (range: LogicalRange | null) => {
       if (range) {
         savedLogicalRange.current = { from: range.from, to: range.to };
       }
-      setVpEpoch((e) => e + 1);
+      vpDrawRef.current();
+      // SVG overlay pravítka potřebuje React re-render jen když běží měření
+      if (rulerActiveRef.current) setVpEpoch((e) => e + 1);
     };
     chart.timeScale().subscribeVisibleLogicalRangeChange(onRangeChange);
 
@@ -617,8 +631,10 @@ export function PriceChart({
     };
   }, [candles, mode, extras, visible, intervalKey]);
 
-  // Bump při pan/zoom – přepočítá pixelovou geometrii overlayů
+  // Bump při pan/zoom – přepočítá pixelovou geometrii SVG overlayů
+  // (pravítko); VP canvas se kreslí imperativně přes vpDrawRef
   const [vpEpoch, setVpEpoch] = useState(0);
+  const vpDrawRef = useRef<() => void>(() => {});
   // Plovoucí cenovka v režimu Linie – cena bodu pod crosshairem
   const [lineHover, setLineHover] = useState<{
     x: number;
@@ -629,14 +645,26 @@ export function PriceChart({
   const savedLogicalRange = useRef<{ from: number; to: number } | null>(null);
   const prevIntervalRef = useRef(intervalKey);
 
-  // Zámek pan/zoom při kreslení (výběr rozsahu VP / pravítko) – přes
-  // applyOptions, NE rekonstrukcí grafu (ta by zrušila přiblížení)
+  // Nástroje VP/pravítko: jen během AKTIVNÍHO kreslení se vypne pan tažením
+  // (kolečko/pinch zoomují vždy). Připnutý VP objekt pan/zoomu nebrání –
+  // profil se přemalovává synchronně, takže fituje plynule jako ve TV.
   useEffect(() => {
+    const drawing = vpTool || rulerEnabled;
     chartRef.current?.applyOptions({
-      handleScroll: !vpEnabled && !rulerEnabled,
-      handleScale: !vpEnabled && !rulerEnabled,
+      handleScroll: {
+        mouseWheel: true,
+        pressedMouseMove: !drawing,
+        horzTouchDrag: !drawing,
+        vertTouchDrag: !drawing,
+      },
+      handleScale: {
+        mouseWheel: true,
+        pinch: true,
+        axisPressedMouseMove: !drawing,
+        axisDoubleClickReset: true,
+      },
     });
-  }, [vpEnabled, rulerEnabled]);
+  }, [vpTool, rulerEnabled]);
 
   // ── Kontextová nabídka (pravé tlačítko) → Nastavit alert ─────────
   const [ctxMenu, setCtxMenu] = useState<{
@@ -682,9 +710,27 @@ export function PriceChart({
         e.preventDefault();
         return;
       }
-      onDragStart(e);
+      if (rulerEnabled || vpTool) {
+        onDragStart(e);
+        return;
+      }
+      // Nástroj neaktivní: klik na připnutý VP objekt ho vybere (vyjede
+      // koš), klik mimo ho odvybere. Pan/zoom běží normálně.
+      const chart = chartRef.current;
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (vpRange && chart && rect) {
+        const x = e.clientX - rect.left;
+        const x1 = chart.timeScale().timeToCoordinate(vpRange.from as UTCTimestamp);
+        const x2 = chart.timeScale().timeToCoordinate(vpRange.to as UTCTimestamp);
+        const hit =
+          x1 != null && x2 != null &&
+          x >= Math.min(x1, x2) && x <= Math.max(x1, x2);
+        setVpSelected(hit);
+      } else if (vpSelected) {
+        setVpSelected(false);
+      }
     },
-    [onDragStart]
+    [onDragStart, rulerEnabled, vpTool, vpRange, vpSelected]
   );
 
   // Přemístění chart wrapperu do fullscreen overlaye a zpět – zachová
@@ -708,79 +754,190 @@ export function PriceChart({
     };
   }, [isFullscreen]);
 
-  // Overlay SVG pro volume profile – pozice binů se váže na pixelové
-  // souřadnice cenové osy (přepočet i při pan/zoom přes vpEpoch)
-  const [vpGeom, setVpGeom] = useState<{
-    top: number;
-    bottom: number;
-    priceToY: (p: number) => number;
-  } | null>(null);
+  // ── VP overlay: imperativní canvas místo React/SVG ──────────────
+  // SVG overlay se přemalovával přes React state (vpEpoch) – během
+  // zoomu to sekalo. Canvas se přemalovává synchronně v onRangeChange
+  // i v efektech, takže profil fituje plynule jako ve TradingView.
+  const vpCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  // Plovoucí koš u vybraného VP objektu – pozice se nastavuje imperativně
+  // v drawVp (žádný React re-render během zoomu)
+  const vpTrashRef = useRef<HTMLButtonElement | null>(null);
+  const profileRef = useRef(profile);
+  const vpRangeRef = useRef(vpRange);
+  const dragPreviewRef = useRef(dragPreview);
+  const profileSourceRef = useRef(profileSource);
+  const vpSelectedRef = useRef(vpSelected);
 
-  useEffect(() => {
+  const drawVp = useCallback(() => {
+    const canvas = vpCanvasRef.current;
     const chart = chartRef.current;
     const series = mainSeriesRef.current;
     const container = containerRef.current;
-    if (!chart || !series || !container || !profile) {
-      setVpGeom(null);
-      return;
-    }
+    if (!canvas || !chart || !series || !container) return;
     const rect = container.getBoundingClientRect();
-    // priceToCoordinate je v v5 API na sérii (ne na cenové ose)
-    const top = series.priceToCoordinate(profile.maxPrice) ?? 0;
-    const bottom = series.priceToCoordinate(profile.minPrice) ?? rect.height;
-    setVpGeom({
-      top: Math.max(0, top),
-      bottom: Math.min(rect.height, bottom),
-      priceToY: (p: number) => series.priceToCoordinate(p) ?? rect.height,
-    });
-  }, [profile, candles, visible, vpEpoch]);
-
-  const maxBin = profile ? Math.max(...profile.bins) : 0;
-
-  // X-oblast, do níž se profil kreslí: označený rozsah (nebo celá šířka
-  // dat) – biny rostou z levého okraje pásu, jako ve TradingView
-  const [vpAreaX, setVpAreaX] = useState<{
-    x1: number;
-    x2: number;
-  } | null>(null);
-  useEffect(() => {
-    const chart = chartRef.current;
-    const container = containerRef.current;
-    if (!chart || !container || !profile) {
-      setVpAreaX(null);
-      return;
+    const dpr = window.devicePixelRatio || 1;
+    const w = Math.round(rect.width);
+    const h = Math.round(rect.height);
+    if (
+      canvas.width !== Math.round(w * dpr) ||
+      canvas.height !== Math.round(h * dpr)
+    ) {
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
     }
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    const prof = profileRef.current;
     const ts = chart.timeScale();
-    const from = vpRange?.from ?? profileSource[0]?.time;
-    const to = vpRange?.to ?? profileSource[profileSource.length - 1]?.time;
-    if (from == null || to == null) {
-      setVpAreaX(null);
-      return;
+
+    // Pás rozsahu (preview tažení / připnutý objekt) + vizuál výběru.
+    // Musí běžet i když prof == null (po smazání), ať se koš schová.
+    const band = dragPreviewRef.current ?? vpRangeRef.current;
+    const selected = vpSelectedRef.current && !dragPreviewRef.current;
+    let bandL: number | null = null;
+    let bandR: number | null = null;
+    if (band) {
+      const bx1 = ts.timeToCoordinate(band.from as UTCTimestamp);
+      const bx2 = ts.timeToCoordinate(band.to as UTCTimestamp);
+      if (bx1 != null && bx2 != null) {
+        bandL = Math.min(bx1, bx2);
+        bandR = Math.max(bx1, bx2);
+        ctx.fillStyle = dragPreviewRef.current
+          ? "rgba(91,141,239,0.12)"
+          : selected
+            ? "rgba(91,141,239,0.10)"
+            : "rgba(91,141,239,0.05)";
+        ctx.fillRect(bandL, 0, Math.max(2, bandR - bandL), h);
+        // Rámec objektu: vybraný = plná primary linka + úchopy (jako ve TV)
+        ctx.strokeStyle = selected
+          ? "rgba(91,141,239,0.95)"
+          : "rgba(91,141,239,0.5)";
+        ctx.lineWidth = selected ? 1.5 : 1;
+        if (!selected) ctx.setLineDash([3, 3]);
+        ctx.strokeRect(
+          bandL + 0.5,
+          4.5,
+          Math.max(2, bandR - bandL) - 1,
+          h - 9
+        );
+        ctx.setLineDash([]);
+        if (selected) {
+          ctx.fillStyle = "#5b8def";
+          ctx.fillRect(bandL - 3, 1, 7, 7);
+          ctx.fillRect(bandR - 4, 1, 7, 7);
+        }
+      }
     }
-    const rect = container.getBoundingClientRect();
+    // Koš u vybraného objektu – pozice imperativně, sedí i během zoomu
+    const trash = vpTrashRef.current;
+    if (trash) {
+      if (selected && bandL != null && bandR != null) {
+        trash.style.display = "flex";
+        trash.style.left = `${Math.round((bandL + bandR) / 2)}px`;
+      } else {
+        trash.style.display = "none";
+      }
+    }
+    if (!prof) return;
+
+    // X-oblast profilu: vybraný rozsah (nebo celá šířka dat)
+    const src = profileSourceRef.current;
+    const from = vpRangeRef.current?.from ?? src[0]?.time;
+    const to = vpRangeRef.current?.to ?? src[src.length - 1]?.time;
+    if (from == null || to == null) return;
     const x1 = ts.timeToCoordinate(from as UTCTimestamp) ?? 0;
-    const x2 = ts.timeToCoordinate(to as UTCTimestamp) ?? rect.width;
-    setVpAreaX({ x1: Math.min(x1, x2), x2: Math.max(x1, x2) });
-  }, [profile, vpRange, profileSource, candles, visible, vpEpoch]);
+    const x2 = ts.timeToCoordinate(to as UTCTimestamp) ?? w;
+    const areaL = Math.min(x1, x2);
+    const areaR = Math.max(x1, x2);
 
-  // X-souřadnice pásu výběru (preview při tažení / potvrzený rozsah)
-  const [bandX, setBandX] = useState<{ x1: number; x2: number } | null>(null);
-  const bandRange = dragPreview ?? vpRange;
+    // Value Area (70 %) – jemný podklad
+    const yVaTop = series.priceToCoordinate(
+      prof.minPrice + (prof.vaHighIndex + 1) * prof.binSize
+    );
+    const yVaBottom = series.priceToCoordinate(
+      prof.minPrice + prof.vaLowIndex * prof.binSize
+    );
+    if (yVaTop != null && yVaBottom != null) {
+      ctx.fillStyle = "rgba(91,141,239,0.05)";
+      ctx.fillRect(
+        areaL,
+        yVaTop,
+        Math.max(2, areaR - areaL),
+        Math.max(1, yVaBottom - yVaTop)
+      );
+    }
+
+    // Biny – horizontální bary od levého okraje pásu (jako ve TV)
+    const maxBin = Math.max(...prof.bins);
+    if (maxBin <= 0) return;
+    const areaW = Math.max(2, areaR - areaL);
+    for (let i = 0; i < prof.bins.length; i++) {
+      const v = prof.bins[i];
+      if (v <= 0) continue;
+      const yTop = series.priceToCoordinate(
+        prof.minPrice + (i + 1) * prof.binSize
+      );
+      const yBottom = series.priceToCoordinate(
+        prof.minPrice + i * prof.binSize
+      );
+      if (yTop == null || yBottom == null) continue;
+      ctx.fillStyle =
+        i === prof.pocIndex
+          ? "rgba(212,167,44,0.85)"
+          : i >= prof.vaLowIndex && i <= prof.vaHighIndex
+            ? "rgba(91,141,239,0.55)"
+            : "rgba(138,147,166,0.35)";
+      ctx.fillRect(areaL, yTop, (v / maxBin) * areaW, Math.max(1, yBottom - yTop - 1));
+    }
+
+    // POC hladina – zlatá
+    const yPoc = series.priceToCoordinate(prof.pocPrice);
+    if (yPoc != null) {
+      ctx.strokeStyle = "rgba(212,167,44,0.8)";
+      ctx.setLineDash([4, 3]);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(areaL, yPoc + 0.5);
+      ctx.lineTo(areaR, yPoc + 0.5);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }, []);
+
+  // Synchronizace refů + překreslení při změně dat/stavu; zároveň
+  // zaregistruje aktuální draw pro uzávěr onRangeChange
   useEffect(() => {
-    const chart = chartRef.current;
-    if (!chart || !bandRange) {
-      setBandX(null);
-      return;
-    }
-    const ts = chart.timeScale();
-    const x1 = ts.timeToCoordinate(bandRange.from as UTCTimestamp);
-    const x2 = ts.timeToCoordinate(bandRange.to as UTCTimestamp);
-    if (x1 == null || x2 == null) {
-      setBandX(null);
-      return;
-    }
-    setBandX({ x1: Math.min(x1, x2), x2: Math.max(x1, x2) });
-  }, [bandRange, profile, candles, visible, vpEpoch]);
+    vpDrawRef.current = drawVp;
+    profileRef.current = profile;
+    vpRangeRef.current = vpRange;
+    dragPreviewRef.current = dragPreview;
+    profileSourceRef.current = profileSource;
+    vpSelectedRef.current = vpSelected;
+    drawVp();
+  }, [
+    profile,
+    vpRange,
+    dragPreview,
+    profileSource,
+    vpSelected,
+    candles,
+    visible,
+    mode,
+    vpEpoch,
+    drawVp,
+  ]);
+
+  // Změna velikosti containeru (fullscreen, okno) – překreslit canvas
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => drawVp());
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, [drawVp]);
 
   // Pixelová geometrie pravítka (čáry + badge) – přepočet i při pan/zoom
   const [rulerGeom, setRulerGeom] = useState<{
@@ -809,25 +966,30 @@ export function PriceChart({
       return;
     }
     setRulerGeom({ ax, ay, bx, by, width: rect.width });
-  }, [rulerActive, candles, visible, vpEpoch, vpEnabled]);
+  }, [rulerActive, candles, visible, vpEpoch]);
 
-  // Esc ruší aktivní měření pravítkem i výběr rozsahu VP;
-  // ve fullscreen pak Esc minimalizuje graf
+  // Esc: nejdřív deaktivuj nástroj / zruš měření, pak odvyber objekt,
+  // ve fullscreen pak Esc minimalizuje graf. Připnutý VP objekt Esc
+  // nemaže (jen odvybere) – mazání je na koši.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      if (rulerEnabled || vpEnabled) {
+      if (vpTool || rulerEnabled) {
         rulerAnchor.current = null;
         setRulerPreview(null);
         setRulerRange(null);
-        setVpRange(null);
+        setVpTool(false);
+        return;
+      }
+      if (vpSelected) {
+        setVpSelected(false);
         return;
       }
       if (isFullscreen) setIsFullscreen(false);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [rulerEnabled, vpEnabled, isFullscreen]);
+  }, [rulerEnabled, vpTool, vpSelected, isFullscreen]);
 
   return (
     <div className="space-y-2">
@@ -892,7 +1054,7 @@ export function PriceChart({
       )}
 
       {/* Nápověda + statistiky profilu */}
-      {vpEnabled && (
+      {(vpTool || profile) && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-2 text-[11px] text-muted-foreground">
           <span>
             {dragPreview
@@ -954,17 +1116,20 @@ export function PriceChart({
           <button
             type="button"
             onClick={() => {
-              const next = !vpEnabled;
-              setVpEnabled(next);
-              if (next) setRulerEnabled(false); // vzájemná výlučka s pravítkem
-              setVpRange(null);
+              const next = !vpTool;
+              setVpTool(next);
+              if (next) {
+                setRulerEnabled(false); // vzájemná výlučka s pravítkem
+                setVpSelected(false);
+              }
+              // Pozor: přepnutí nástroje NEMAŽE připnutý objekt (jako ve TV)
             }}
-            title="Fixed Range Volume Profile – tažením vyber rozsah"
+            title="Fixed Range Volume Profile – tažením vyber rozsah, objekt zůstane připnutý"
             aria-label="Fixed Range Volume Profile"
-            aria-pressed={vpEnabled}
+            aria-pressed={vpTool}
             className={cn(
               "flex size-8 items-center justify-center rounded-md transition-colors",
-              vpEnabled
+              vpTool
                 ? "bg-primary text-primary-foreground"
                 : "text-muted-foreground hover:bg-secondary hover:text-foreground"
             )}
@@ -977,9 +1142,8 @@ export function PriceChart({
               const next = !rulerEnabled;
               setRulerEnabled(next);
               if (next) {
-                // vzájemná výlučka: pravítko vypne výběr rozsahu VP
-                setVpEnabled(false);
-                setVpRange(null);
+                // vzájemná výlučka nástrojů – připnutý VP objekt zůstává
+                setVpTool(false);
                 setRulerRange(null);
                 setRulerPreview(null);
               }
@@ -996,8 +1160,7 @@ export function PriceChart({
           >
             <RulerDimensionLine className="size-[18px]" />
           </button>
-          {((vpEnabled && vpRange != null) ||
-            (rulerEnabled && rulerRange != null)) && (
+          {rulerEnabled && rulerRange != null && (
             <>
               <div className="h-px w-6 bg-border" />
               <button
@@ -1007,7 +1170,6 @@ export function PriceChart({
                     setRulerRange(null);
                     setRulerPreview(null);
                   }
-                  if (vpEnabled) setVpRange(null);
                 }}
                 title="Vymazat měření (nebo Esc)"
                 aria-label="Vymazat měření"
@@ -1025,11 +1187,29 @@ export function PriceChart({
             <CandleCountdown intervalKey={intervalKey} />
           </div>
         )}
+        {/* Plovoucí koš u vybraného VP objektu (jako floating toolbar ve TV).
+            Pozici nastavuje drawVp imperativně – sedí přesně nad objektem
+            i během zoomu bez React re-renderu. */}
+        <button
+          ref={vpTrashRef}
+          type="button"
+          onClick={() => {
+            setVpRange(null);
+            setVpSelected(false);
+            setVpTool(false);
+          }}
+          title="Odstranit Volume Profile"
+          aria-label="Odstranit Volume Profile"
+          className="absolute z-30 flex size-7 -translate-x-1/2 items-center justify-center rounded-md border border-border/80 bg-popover/95 text-muted-foreground shadow-lg backdrop-blur transition-colors hover:bg-secondary hover:text-foreground"
+          style={{ top: 10, display: "none" }}
+        >
+          <Trash2 className="size-4" />
+        </button>
         <div
           ref={containerRef}
           className={cn(
             "w-full rounded-lg",
-            (vpEnabled || rulerEnabled) && "cursor-crosshair select-none"
+            (vpTool || rulerEnabled) && "cursor-crosshair select-none"
           )}
           style={{ height: isFullscreen ? "100%" : height }}
           onMouseDown={onChartMouseDown}
@@ -1058,101 +1238,13 @@ export function PriceChart({
           </div>
         )}
 
-        {/* SVG overlay – biny profilu, POC linka, Value Area, výběr tažením */}
-        {profile && vpGeom && vpAreaX && (
-          <svg className="pointer-events-none absolute inset-0 size-full">
-            {/* Pás vybraného rozsahu (preview tažení / potvrzený rozsah) */}
-            {bandX && (
-              <g>
-                <rect
-                  x={bandX.x1}
-                  y={0}
-                  width={Math.max(2, bandX.x2 - bandX.x1)}
-                  height="100%"
-                  fill={dragPreview ? "rgba(91,141,239,0.12)" : "rgba(91,141,239,0.05)"}
-                />
-                <line
-                  x1={bandX.x1}
-                  x2={bandX.x1}
-                  y1={0}
-                  y2="100%"
-                  stroke="rgba(91,141,239,0.5)"
-                  strokeWidth={1}
-                  strokeDasharray="3 3"
-                />
-                <line
-                  x1={bandX.x2}
-                  x2={bandX.x2}
-                  y1={0}
-                  y2="100%"
-                  stroke="rgba(91,141,239,0.5)"
-                  strokeWidth={1}
-                  strokeDasharray="3 3"
-                />
-              </g>
-            )}
-
-            {/* Value Area (70 %) – jemný podklad uvnitř vybraného rozsahu */}
-            <rect
-              x={vpAreaX.x1}
-              y={vpGeom.priceToY(
-                profile.minPrice + (profile.vaHighIndex + 1) * profile.binSize
-              )}
-              width={Math.max(2, vpAreaX.x2 - vpAreaX.x1)}
-              height={Math.max(
-                1,
-                vpGeom.priceToY(profile.minPrice + profile.vaLowIndex * profile.binSize) -
-                  vpGeom.priceToY(
-                    profile.minPrice + (profile.vaHighIndex + 1) * profile.binSize
-                  )
-              )}
-              fill="rgba(91,141,239,0.05)"
-            />
-
-            {/* Biny – horizontal bars anchored to right edge */}
-            {profile.bins.map((v, i) => {
-              if (v <= 0) return null;
-              const yTop = vpGeom.priceToY(
-                profile.minPrice + (i + 1) * profile.binSize
-              );
-              const yBottom = vpGeom.priceToY(
-                profile.minPrice + i * profile.binSize
-              );
-              const barH = Math.max(1, yBottom - yTop - 1);
-              const w = (v / maxBin) * (vpAreaX.x2 - vpAreaX.x1);
-              const inVA = i >= profile.vaLowIndex && i <= profile.vaHighIndex;
-              const isPoc = i === profile.pocIndex;
-              return (
-                <rect
-                  key={i}
-                  x={vpAreaX.x1}
-                  y={yTop}
-                  width={w}
-                  height={barH}
-                  rx={1.5}
-                  fill={
-                    isPoc
-                      ? "rgba(212,167,44,0.85)"
-                      : inVA
-                        ? "rgba(91,141,239,0.55)"
-                        : "rgba(138,147,166,0.35)"
-                  }
-                />
-              );
-            })}
-
-            {/* POC hladina – zlatá */}
-            <line
-              x1={vpAreaX.x1}
-              x2={vpAreaX.x2}
-              y1={vpGeom.priceToY(profile.pocPrice)}
-              y2={vpGeom.priceToY(profile.pocPrice)}
-              stroke="rgba(212,167,44,0.8)"
-              strokeWidth={1}
-              strokeDasharray="4 3"
-            />
-          </svg>
-        )}
+        {/* VP canvas – imperativně kreslený overlay; přemalovává se
+            synchronně při zoom/pan (onRangeChange), takže profil fituje
+            plynule jako ve TradingView */}
+        <canvas
+          ref={vpCanvasRef}
+          className="pointer-events-none absolute inset-0 size-full"
+        />
 
         {/* Overlay pravítka – pás, hladiny, úsečka se šipkou + badge s měřením */}
         {rulerGeom && rulerActive && rulerMeasure && (

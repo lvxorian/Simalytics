@@ -92,9 +92,16 @@ src/components/            # vizní komponenty (viz níže)
   jinak graf vypadá roztříštěně. Kontinuita denních svíček se aplikuje
   přes `applyContinuity()` v market page (Simco Tools data jsou „surová").
 - **Fixed Range Volume Profile** (`lib/volume-profile.ts` + overlay v
-  `price-chart.tsx`): tažením myši se vybere rozsah → biny, POC (zlatý),
-  Value Area 70 %. Biny se kreslí UVNITŘ vybraného rozsahu (od levého
-  okraje pásu, jako ve TV), NE na levém okraji grafu. Reálný objem: denní svíčky (Simco Tools) i intraday
+  `price-chart.tsx`): model à la TradingView – klik na ikonu aktivuje
+  kreslení (`vpTool`), tažení vytvoří objekt (`vpRange`), který ZŮSTANE
+  PŘIPNUTÝ a nástroj se sám deaktivuje; pan/zoom objekt neovlivní
+  (profil se přemalovává synchronně v onRangeChange). Klik do objektu ho
+  vybere (`vpSelected` → rámec + úchopy) a u něj vyjede plovoucí koš
+  (pozice imperativně z drawVp přes `vpTrashRef`, sedí i během zoomu);
+  koš maže, Esc jen odvybere. Overlay je imperativní CANVAS
+  (`vpCanvasRef` + `drawVp()`), přemalování přes React state během
+  zoomu sekalo. Nástroje VP/pravítko zakazují jen `pressedMouseMove`
+  pan (kreslení), kolečko/pinch zoomují dál. Reálný objem: denní svíčky (Simco Tools) i intraday
   ticky od migrace 004 — poller ukládá `fiveMinutesCandlestick.volume`
   z `market/followed?resources=1q0,2q0,…` (1 request pro všechny
   položky) do `price_history.volume`; `toCandles()` objemy sčítá.
@@ -153,6 +160,13 @@ src/components/            # vizní komponenty (viz níže)
   zavření se vrátí do `originalParentRef`. Esc = nejdřív zruš měření,
   pak zavři fullscreen. `containerRef` musí zůstat uvnitř `chartHostRef`
   (autoSize přepočítá sám; geometrii overlayů bumpne vpEpoch).
+- **Auto-refresh dat**: `AutoRefresh` (router.refresh()) na market page
+  každých 20 s + okamžitý refresh při návratu na kartu (visibilitychange –
+  intervaly na pozadí throttluje prohlížeč, bez toho po přepnutí zpět
+  zůstanou staré ceny až do F5). `CandleCountdown` po zavření svíčky
+  refreshuje hned + retry v +15/30/45/60 s – poller zapisuje ticky se
+  svou fází (cron 5 min), takže hned po zavření tick ještě nemusí být
+  v DB.
 - **Fáze ekonomiky**: dle hry `recession` = „Recese 📉", `normal` =
   „Stabilní 😐", `boom` = „Růst 📈" (PHASE_LABELS v statistiky/page.tsx).
 - **„Živý pravý okraj“ grafu**: `datetime` ticků ze Simco Tools je čas

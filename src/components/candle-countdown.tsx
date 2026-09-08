@@ -104,6 +104,10 @@ export function CandleCountdown({
     return { start: bucketStart(intervalKey, nowSec), end: bucketEnd(intervalKey, nowSec) };
   }, [intervalKey, nowSec]);
 
+  // Po zavření svíčky obnovit server data (cena, poslední svíčka grafu).
+  // Poller zapisuje ticky se svou fází (cron každých 5 min), takže hned
+  // po zavření tick ještě nemusí být v DB → obnovíme hned a pak s odstupem,
+  // ať nová svíčka vyzvedneme, jakmile se objeví.
   const lastEndRef = useRef<number | null>(null);
   useEffect(() => {
     if (!bucket) return;
@@ -115,9 +119,16 @@ export function CandleCountdown({
       lastEndRef.current = bucket.end;
       setRefreshed(true);
       router.refresh();
+      // Následné dotazy – tick od polleru může dorazit o chvíli později
+      const retries = [15_000, 30_000, 45_000, 60_000].map((delay) =>
+        setTimeout(() => router.refresh(), delay)
+      );
       // signál „obnoveno“ zmizí po chvíli
       const t = setTimeout(() => setRefreshed(false), 4000);
-      return () => clearTimeout(t);
+      return () => {
+        retries.forEach(clearTimeout);
+        clearTimeout(t);
+      };
     }
   }, [bucket, router]);
 

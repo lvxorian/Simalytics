@@ -244,7 +244,7 @@ export default async function MarketItemPage({
 
   return (
     <div className="space-y-6">
-      <AutoRefresh intervalMs={60_000} />
+      <AutoRefresh intervalMs={20_000} />
 
       <Link
         href="/"
