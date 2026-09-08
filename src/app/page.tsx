@@ -87,7 +87,7 @@ export default async function DashboardPage() {
             Přehled trhu
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Nejnovější ceny komodit (kvalita 0) ze simulátoru SimCompanies.
+            Nejnovější ceny komodit (Q0) ze simulátoru SimCompanies.
           </p>
         </div>
         <Button asChild size="sm" className="gap-2 rounded-full">
@@ -103,7 +103,7 @@ export default async function DashboardPage() {
         <PulseCard
           label="Sledované položky"
           value={String(rows.length)}
-          hint="kvalita 0 · celý trh"
+          hint="Q0 · celý trh"
         />
         <PulseCard
           label="Průměrná 24h změna"

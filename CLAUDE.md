@@ -168,7 +168,8 @@ src/components/            # vizní komponenty (viz níže)
   svou fází (cron 5 min), takže hned po zavření tick ještě nemusí být
   v DB.
 - **Fáze ekonomiky**: dle hry `recession` = „Recese 📉", `normal` =
-  „Stabilní 😐", `boom` = „Růst 📈" (PHASE_LABELS v statistiky/page.tsx).
+  „Stabilní ⚖️", `boom` = „Růst 📈" (PHASE_LABELS v statistiky/page.tsx).
+  Kvalita komodit se v UI zkracuje na „Q0" (ne „kvalita 0").
 - **„Živý pravý okraj“ grafu**: `datetime` ticků ze Simco Tools je čas
   POSLEDNÍHO OBCHODU (ne dotazu) – klidný trh znamená ticky staré i hodiny
   (medián ~100 min). Intraday graf proto protahuje plochou rozpracovanou

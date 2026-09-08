@@ -27,7 +27,7 @@ export const metadata: Metadata = {
 
 /** Fáze ekonomiky dle hry: Recese / Stabilní / Růst (každá s emote). */
 const PHASE_LABELS: Record<string, string> = {
-  normal: "Stabilní 😐",
+  normal: "Stabilní ⚖️",
   boom: "Růst 📈",
   recession: "Recese 📉",
 };
