@@ -36,7 +36,7 @@ db/schema.sql              # items, price_history, positions, condition_log, wat
 # upgrades: 001_terminal (candles, watchlist), 002_signal_engine (vwap_daily, contests, cert_kinds),
 #           003_alerts (alerts s cooldownem)
 src/lib/
-  signals.ts               # Signal Engine scoring (event/contest/VWAP/momentum → −100…+100)
+  metrics.ts               # likvidita (obchody/24h + obrat) a volatilita (annualizovaná σ log-výnosů) – karty na market page
   alerts.ts                # evaluace alertů (cena + skóre, cooldown)
   notifier.ts              # webhook (Discord/Slack) + e-mail přes Resend REST API
 src/lib/
@@ -174,6 +174,13 @@ src/components/            # vizní komponenty (viz níže)
   refreshuje hned + retry v +15/30/45/60 s – poller zapisuje ticky se
   svou fází (cron 5 min), takže hned po zavření tick ještě nemusí být
   v DB.
+- **Metriky likvidity a volatility** (`lib/metrics.ts`, karty na market
+  page pod staty období): Likvidita = obchody/24 h (distinct časy z
+  ticků) + obrat/den (denní objem × cena), klasifikace 0–4 s popisem.
+  Volatilita = σ log-výnosů close-to-close, annualizace √(svíček/rok)
+  pro srovnatelnost mezi TF + hodnota per bar. Body ●●●○○ dle grade.
+  Denní svíčky pro obrat se u intraday TF dotahují zvlášť
+  (`getDailyCandles`).
 - **Fáze ekonomiky**: dle hry `recession` = „Recese 📉", `normal` =
   „Stabilní ⚖️", `boom` = „Růst 📈" (PHASE_LABELS v statistiky/page.tsx).
   Kvalita komodit se v UI zkracuje na „Q0" (ne „kvalita 0").

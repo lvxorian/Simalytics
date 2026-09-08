@@ -34,6 +34,11 @@ import {
 } from "@/lib/data";
 import { getEvents, getMarketSummary } from "@/lib/simcotools";
 import { computeSignal } from "@/lib/signals";
+import {
+  computeLiquidity,
+  gradeDots,
+  volatilityProfile,
+} from "@/lib/metrics";
 import { formatCompact, formatPrice, formatRelativeAge } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -236,6 +241,24 @@ export default async function MarketItemPage({
   const periodAvg = candles.length
     ? candles.reduce((sum, c) => sum + c.close, 0) / candles.length
     : null;
+
+  // ── Metriky likvidity a volatility ──────────────────────────
+  // Likvidita: frekvence obchodů z ticků + obrat z denních svíček
+  // Volatilita: annualizovaná σ log-výnosů z grafu (aktuální TF)
+  // Denní svíčky pro obrat: vezmou se z denní větve, jinak se dotáhnou
+  const dailyCandlesForMetrics =
+    opt.key === "1d" || opt.key === "1w" || opt.key === "1M"
+      ? candles.filter((c) => c.volume != null)
+      : (await getDailyCandles(id)).map((c) => ({
+          time: dayToUnix(c.day),
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
+          volume: c.volume ?? undefined,
+        }));
+  const liquidity = computeLiquidity(ticks, dailyCandlesForMetrics);
+  const volatility = volatilityProfile(candles, opt.seconds);
 
   const img = item.image_url;
   const up = (change24h ?? 0) > 0;
@@ -508,6 +531,59 @@ export default async function MarketItemPage({
         <MiniStat label="Zdroj dat" value={dataSource} small />
       </div>
 
+      {/* ── Metriky likvidity a volatility ───────────────────── */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <MetricCard
+          title="Likvidita"
+          grade={liquidity.grade}
+          gradeLabel={liquidity.label}
+          dots={gradeDots(liquidity.grade)}
+          tone={liquidity.grade >= 3 ? "up" : liquidity.grade <= 1 ? "down" : "neutral"}
+          description={liquidity.description}
+          rows={[
+            {
+              label: "Obchody (24 h)",
+              value:
+                liquidity.tradesPerDay === null
+                  ? "–"
+                  : `${liquidity.tradesPerDay}`,            },
+            {
+              label: "Obrat / den",
+              value:
+                liquidity.turnover === null
+                  ? "–"
+                  : formatPrice(liquidity.turnover),
+            },
+          ]}
+          info="Likvidita = jak moc se aktivum obchoduje. Vyšší = snazší vstup/výstup za férovou cenu. Počítá se z počtu obchodů za 24 h (naše ticky) a průměrného denního obratu (denní svíčky ze Simco Tools)."
+        />
+        <MetricCard
+          title="Volatilita"
+          grade={volatility.grade}
+          gradeLabel={volatility.label}
+          dots={gradeDots(volatility.grade)}
+          tone={volatility.grade >= 3 ? "down" : "neutral"}
+          description={volatility.description}
+          rows={[
+            {
+              label: "Roční (annualizovaná)",
+              value:
+                volatility.annualizedPct === null
+                  ? "–"
+                  : `${volatility.annualizedPct.toFixed(1)} %`,
+            },
+            {
+              label: `Za svíčku (${opt.label})`,
+              value:
+                volatility.perBarPct === null
+                  ? "–"
+                  : `${volatility.perBarPct.toFixed(2)} %`,
+            },
+          ]}
+          info="Volatilita = jak moc cena kolísá. Počítá se jako směrodatná odchylka výnosů mezi svíčkami; roční hodnota normalizuje na 365 dní, takže se dá porovnávat mezi timeframy. Vyšší = divočejší výkyvy (víc rizika i příležitostí)."
+        />
+      </div>
+
       {/* ── Alerty na této komoditě (přidávají se pravým klikem do grafu) ── */}
       <ItemAlertsTable itemId={id} alerts={itemAlerts} />
     </div>
@@ -539,6 +615,70 @@ function MiniStat({
         )}
       >
         {value}
+      </div>
+    </div>
+  );
+}
+
+/** Karta metriky (likvidita/volatilita) s hodnocením, detaily a tooltipem. */
+function MetricCard({
+  title,
+  gradeLabel,
+  dots,
+  tone,
+  description,
+  rows,
+  info,
+}: {
+  title: string;
+  grade: 0 | 1 | 2 | 3 | 4;
+  gradeLabel: string;
+  dots: string;
+  tone: "up" | "down" | "neutral";
+  description: string;
+  rows: { label: string; value: string }[];
+  info: string;
+}) {
+  return (
+    <div className="rounded-xl border border-border/80 bg-card px-4 py-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+            {title}
+          </span>
+          <Info
+            className="size-3 text-muted-foreground/70"
+            aria-hidden
+          />
+        </div>
+        <span
+          className="font-mono text-[11px] tracking-widest text-muted-foreground/80"
+          aria-hidden
+        >
+          {dots}
+        </span>
+      </div>
+      <div
+        className={cn(
+          "mt-1 text-lg font-semibold",
+          tone === "up" && "text-up",
+          tone === "down" && "text-down"
+        )}
+        title={info}
+      >
+        {gradeLabel}
+      </div>
+      <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
+      <div className="mt-2 space-y-0.5 border-t border-border/60 pt-2">
+        {rows.map((r) => (
+          <div
+            key={r.label}
+            className="flex items-center justify-between gap-2 font-mono text-xs"
+          >
+            <span className="text-muted-foreground">{r.label}</span>
+            <span className="tabular-nums text-foreground">{r.value}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
