@@ -143,8 +143,9 @@ src/components/            # vizní komponenty (viz níže)
   aktivní/vypnutý + mazání; celkový přehled zůstává na /alerts.
   Pravé tlačítko nesmí spustit drag nástrojů (onMouseDown filtruje
   `e.button !== 0`).
-- **Fullscreen grafu** (`price-chart.tsx`): tlačítko Maximize2 v hlavičce
-  vpravo (prohozeno s countdownem, který plave dole vpravo v grafu) →
+- **Fullscreen grafu** (`price-chart.tsx`): tlačítko Maximize2 jen vpravo
+  nahoře (countdown plave dole vpravo v grafu, žádné další fullscreen
+  tlačítko) →
   fixed overlay s kompletním ovládáním: header s ikonou + názvem, TF
   přepínač, Svíčky/Linie, countdown v headeru; wrapper grafu se přemístí
   přes appendChild

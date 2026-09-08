@@ -1019,26 +1019,12 @@ export function PriceChart({
           )}
         </div>
         {/* Countdown svíčky – plovoucí v pravém dolním rohu grafu
-            (prohozeno s fullscreen tlačítkem, které je teď nahoře vpravo) */}
+            (fullscreen tlačítko je nahoře vpravo) */}
         {intervalKey && (
           <div className="absolute bottom-2 right-2 z-20 rounded-md border border-border/80 bg-card/90 px-2.5 py-1.5 shadow-lg backdrop-blur">
             <CandleCountdown intervalKey={intervalKey} />
           </div>
         )}
-        <button
-          type="button"
-          onClick={() => setIsFullscreen((v) => !v)}
-          title={isFullscreen ? "Zmenšit (Esc)" : "Celá obrazovka"}
-          aria-label="Celá obrazovka"
-          aria-pressed={isFullscreen}
-          className="absolute bottom-2 right-2 z-20 flex size-8 items-center justify-center rounded-md border border-border/80 bg-card/90 text-muted-foreground shadow-lg backdrop-blur transition-colors hover:bg-secondary hover:text-foreground"
-        >
-          {isFullscreen ? (
-            <Minimize2 className="size-[18px]" />
-          ) : (
-            <Maximize2 className="size-[18px]" />
-          )}
-        </button>
         <div
           ref={containerRef}
           className={cn(
