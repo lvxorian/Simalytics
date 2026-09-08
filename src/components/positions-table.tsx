@@ -190,9 +190,9 @@ export function PositionsTable({
                     id="sell_price"
                     name="sell_price"
                     type="number"
-                    min={0.01}
-                    step={0.01}
-                    defaultValue={selected.current_price?.toFixed(2) ?? ""}
+                    min={0.001}
+                    step={0.001}
+                    defaultValue={selected.current_price?.toFixed(3) ?? ""}
                     required
                   />
                 </div>

@@ -490,6 +490,7 @@ export function PriceChart({
         borderVisible: false,
         wickUpColor: upColor,
         wickDownColor: downColor,
+        priceFormat: { type: "price", precision: 3, minMove: 0.001 },
       });
       series.setData(
         candles.map((c) => ({
@@ -508,6 +509,7 @@ export function PriceChart({
         lineWidth: 2,
         topColor: "rgba(91, 141, 239, 0.25)",
         bottomColor: "rgba(91, 141, 239, 0.02)",
+        priceFormat: { type: "price", precision: 3, minMove: 0.001 },
       });
       series.setData(
         candles.map((c) => ({

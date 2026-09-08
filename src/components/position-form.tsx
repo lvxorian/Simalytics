@@ -44,9 +44,10 @@ export function NewPositionForm({ items }: { items: ItemOption[] }) {
   const [buyPrice, setBuyPrice] = useState<string>("");
 
   // Předvyplň nákupní cenu aktuální tržní cenou vybrané položky
+  // (plná přesnost burzy – až 3 desetinná místa, 0.755)
   useEffect(() => {
     const item = items.find((i) => String(i.id) === itemId);
-    if (item) setBuyPrice(item.price.toFixed(2));
+    if (item) setBuyPrice(item.price.toFixed(3));
   }, [itemId, items]);
 
   // Po úspěchu přesměruj na přehled pozic
@@ -128,8 +129,8 @@ export function NewPositionForm({ items }: { items: ItemOption[] }) {
               id="buy_price"
               name="buy_price"
               type="number"
-              min={0.01}
-              step={0.01}
+              min={0.001}
+              step={0.001}
               value={buyPrice}
               onChange={(e) => setBuyPrice(e.target.value)}
               placeholder="12.50"

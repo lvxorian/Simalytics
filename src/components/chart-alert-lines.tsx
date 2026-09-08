@@ -368,5 +368,9 @@ function drawBell(
 }
 
 function formatThreshold(v: number): string {
-  return v.toLocaleString("cs-CZ", { maximumFractionDigits: 2 });
+  // stejná přesnost jako burza ve hře: až 3 desetinná místa (0,755)
+  return v.toLocaleString("cs-CZ", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 3,
+  });
 }

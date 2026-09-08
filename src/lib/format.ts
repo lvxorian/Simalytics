@@ -1,13 +1,18 @@
 import type { Quality } from "@/lib/types";
 
-/** Formátování ceny: 1 234,56 $ (narrowSymbol = jen $, ne "US$") */
+/**
+ * Formátování ceny: 1 234,56 $ (narrowSymbol = jen $, ne "US$").
+ * Přesnost jako na burze ve hře: až 3 desetinná místa (0,755 $),
+ * nejméně 2 (2,30 $) – levné komodity se nezakulackají na 2 desetiny.
+ */
 export function formatPrice(value: number | null | undefined): string {
   if (value === null || value === undefined) return "–";
   return new Intl.NumberFormat("cs-CZ", {
     style: "currency",
     currency: "USD",
     currencyDisplay: "narrowSymbol",
-    maximumFractionDigits: 2,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 3,
   }).format(value);
 }
 

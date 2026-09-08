@@ -87,12 +87,12 @@ export function AlertForm({
           id="alert-threshold"
           name="threshold"
           type="number"
-          step={kind === "price" ? "0.01" : "1"}
+          step={kind === "price" ? "0.001" : "1"}
           min={kind === "score" ? -100 : undefined}
           max={kind === "score" ? 100 : undefined}
           value={threshold}
           onChange={(e) => setThreshold(e.target.value)}
-          placeholder={kind === "price" ? "např. 2,50" : "např. 25"}
+          placeholder={kind === "price" ? "např. 2,505" : "např. 25"}
           required
           className="h-9"
         />
