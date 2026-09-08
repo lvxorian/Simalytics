@@ -1,5 +1,6 @@
 import { getDb } from "@/lib/db";
 import { getMarketPrices } from "@/lib/simcotools";
+import { evaluateAlerts } from "@/lib/alerts";
 
 export const dynamic = "force-dynamic";
 
@@ -55,11 +56,23 @@ export async function GET(req: Request) {
       inserted = result.count;
     }
 
+    // ── Evaluace alertů (fáze 4) – po uložení čerstvých ticků ──
+    let alerts: Awaited<ReturnType<typeof evaluateAlerts>> | null = null;
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? null;
+    if (appUrl) {
+      try {
+        alerts = await evaluateAlerts(appUrl);
+      } catch {
+        // evaluace nesmí rozbít poller
+      }
+    }
+
     return Response.json({
       ok: true,
       received: ticks.length,
       inserted,
       tracked: trackedIds.size,
+      alerts,
       at: new Date().toISOString(),
     });
   } catch (err) {

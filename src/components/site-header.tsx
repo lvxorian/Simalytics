@@ -2,14 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity } from "lucide-react";
+import { Activity, Bell, Radar } from "lucide-react";
 
 import { HeaderSearch } from "@/components/header-search";
 import { cn } from "@/lib/utils";
 
 const NAV = [
   { href: "/", label: "Trh" },
+  { href: "/skener", label: "Skener" },
   { href: "/watchlist", label: "Watchlist" },
+  { href: "/alerts", label: "Alerty" },
   { href: "/positions", label: "Pozice" },
   { href: "/statistiky", label: "Statistiky" },
 ] as const;
@@ -29,6 +31,7 @@ export function SiteHeader() {
                 strokeWidth={2.5}
               />
             </span>
+            {/* Skener – pulsující indikátor, když jsou aktivní signály */}
             <span className="font-mono text-sm font-bold tracking-[0.22em]">
               SIM<span className="text-primary">ALYTICS</span>
             </span>

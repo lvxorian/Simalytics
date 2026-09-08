@@ -24,6 +24,7 @@ npm run db:names     # seed názvů/kategorií/ikon (db/seed-names.sql)
 npm run icons:download  # stáhne ikony z CDN do public/icons + image_url do DB
 npm run fetch:market # lokální test cron skriptu (ceny → Neon)
 npm run backfill:candles  # denní svíčky ze Simco Tools → DB
+npm run sync:daily   # denní sync VWAP/contests/cert kinds (Signal Engine fáze 1)
 ```
 
 Testy nejsou — ověření = `npm run typecheck` + `npm run build`.
@@ -32,6 +33,12 @@ Testy nejsou — ověření = `npm run typecheck` + `npm run build`.
 
 ```
 db/schema.sql              # items, price_history, positions, condition_log, watchlist
+# upgrades: 001_terminal (candles, watchlist), 002_signal_engine (vwap_daily, contests, cert_kinds),
+#           003_alerts (alerts s cooldownem)
+src/lib/
+  signals.ts               # Signal Engine scoring (event/contest/VWAP/momentum → −100…+100)
+  alerts.ts                # evaluace alertů (cena + skóre, cooldown)
+  notifier.ts              # webhook (Discord/Slack) + e-mail přes Resend REST API
 src/lib/
   db.ts                    # postgres.js klient (Neon pooled, prepare: false pro PgBouncer)
   data.ts                  # VŠECHNY SQL dotazy (server-only, nikdy do client komponent)
@@ -43,8 +50,12 @@ src/app/
   market/[resourceId]/     # graf: 5m/15m/1H/4H/1D/1W/1M, overlaye, live summary
   positions/               # pozice + P/L + condition logging
   watchlist/               # karty se sparklinami
+  skener/                  # Signal Engine skener příležitostí (BUY/SELL skóre)
+  alerts/                  # přehled alertů + stav notifikačních kanálů
   statistiky/              # fáze ekonomiky, eventy, vládní zakázky, makro, budovy
   api/cron/ticks/          # poller ticků (cron-job.org, 5 min, Bearer CRON_SECRET)
+  api/cron/daily/          # denní sync VWAP/contests/cert kinds (Bearer CRON_SECRET)
+  # poller ticků navíc evaluuje alerty (lib/alerts) – jen když je NEXT_PUBLIC_APP_URL
   api/search/              # hledání instrumentů pro header
   actions.ts               # server actions (open/close position, notes, watchlist)
 src/components/            # vizní komponenty (viz níže)

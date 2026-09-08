@@ -1,15 +1,19 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AlertTriangle, Building2, CalendarClock, Factory, Landmark, TrendingDown, TrendingUp } from "lucide-react";
+import { AlertTriangle, Award, Building2, CalendarClock, Factory, Flag, Landmark, TrendingDown, TrendingUp } from "lucide-react";
 
 import { AutoRefresh } from "@/components/auto-refresh";
+import { ItemIcon } from "@/components/item-icon";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { getCertDemand } from "@/lib/cert-demand";
 import {
   getBuildingCounts,
+  getCountryStats,
   getEvents,
   getGovernmentOrders,
   getPhaseRanges,
+  getRanking,
   getRealmSummaries,
 } from "@/lib/simcotools";
 import { formatCompact } from "@/lib/format";
@@ -37,12 +41,15 @@ function formatDate(iso: string): string {
 }
 
 export default async function StatistikyPage() {
-  const [phaseRanges, events, orders, summaries, buildings] = await Promise.all([
+  const [phaseRanges, events, orders, summaries, buildings, ranking, countries, certDemand] = await Promise.all([
     getPhaseRanges().catch(() => []),
     getEvents().catch(() => []),
     getGovernmentOrders(12).catch(() => []),
     getRealmSummaries(8).catch(() => []),
     getBuildingCounts("all").catch(() => ({ buildings: [], total: 0 })),
+    getRanking(20).catch(() => []),
+    getCountryStats().catch(() => []),
+    getCertDemand().catch(() => new Map()),
   ]);
 
   const now = new Date();
@@ -254,6 +261,172 @@ export default async function StatistikyPage() {
           </div>
         )}
       </section>
+
+      {/* Žebříček firem */}
+      {ranking.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            <Flag className="size-4" />
+            Žebříček firem (top {ranking.length})
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Největší firmy realmu dle denní valuace. rankDiff ukazuje pohyb
+            oproti včerejšku – rostoucí firmy expandují a zvyšují poptávku
+            po vstupech.
+          </p>
+          <div className="overflow-hidden rounded-xl border border-border/80 bg-card">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border/60 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
+                  <th className="px-4 py-2.5 font-medium">#</th>
+                  <th className="px-4 py-2.5 font-medium">Firma</th>
+                  <th className="hidden px-4 py-2.5 text-right font-medium sm:table-cell">Hodnota</th>
+                  <th className="hidden px-4 py-2.5 text-right font-medium md:table-cell">Patenty</th>
+                  <th className="hidden px-4 py-2.5 text-right font-medium lg:table-cell">Pracovníci</th>
+                  <th className="px-4 py-2.5 text-right font-medium">24h</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ranking.map((company) => (
+                  <tr
+                    key={company.companyId}
+                    className="border-b border-border/40 last:border-0"
+                  >
+                    <td className="px-4 py-2.5 font-mono text-muted-foreground">
+                      {company.rank}
+                    </td>
+                    <td className="px-4 py-2.5 font-medium">{company.companyName}</td>
+                    <td className="hidden px-4 py-2.5 text-right font-mono sm:table-cell">
+                      {formatCompact(company.companyValue)}
+                    </td>
+                    <td className="hidden px-4 py-2.5 text-right font-mono text-muted-foreground md:table-cell">
+                      {formatCompact(company.patentsValue)}
+                    </td>
+                    <td className="hidden px-4 py-2.5 text-right font-mono text-muted-foreground lg:table-cell">
+                      {formatCompact(company.workers)}
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      <span
+                        className={cn(
+                          "font-mono text-xs",
+                          company.rankDiff > 0 && "text-up",
+                          company.rankDiff < 0 && "text-down",
+                          company.rankDiff === 0 && "text-muted-foreground"
+                        )}
+                      >
+                        {company.rankDiff > 0
+                          ? `▲ +${company.rankDiff}`
+                          : company.rankDiff < 0
+                            ? `▼ ${company.rankDiff}`
+                            : "–"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* Mapa zemí */}
+      {countries.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            <Landmark className="size-4" />
+            Největší země (dle hodnoty firem)
+          </h2>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {[...countries]
+              .sort((a, b) => b.totalCompaniesValue - a.totalCompaniesValue)
+              .slice(0, 9)
+              .map((country) => {
+                const max = countries[0]?.totalCompaniesValue ?? 1;
+                const top = country.rank[0];
+                return (
+                  <div
+                    key={country.countryCode}
+                    className="rounded-xl border border-border/80 bg-card px-4 py-3"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-mono text-sm font-semibold">
+                        {country.countryCode}
+                      </span>
+                      <span className="font-mono text-sm">
+                        {formatCompact(country.totalCompaniesValue)}
+                      </span>
+                    </div>
+                    <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full bg-primary/70"
+                        style={{
+                          width: `${Math.max(2, Math.min(100, (country.totalCompaniesValue / max) * 100))}%`,
+                        }}
+                      />
+                    </div>
+                    <div className="mt-1.5 truncate text-xs text-muted-foreground">
+                      {country.totalCompanies} firem
+                      {top ? ` · #1 ${top.name}` : ""}
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </section>
+      )}
+
+      {/* Cert demand – strukturální poptávka */}
+      {certDemand.size > 0 && (
+        <section className="space-y-3">
+          <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            <Award className="size-4" />
+            Cert demand (strukturální poptávka)
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Kolik firem drží certifikát „quality leadera" pro komoditu. Držitelé
+            certu komoditu prodávají, ostatní ji musí kupovat – vysoký počet
+            certů = strukturální poptávka po komoditě.
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {[...certDemand.values()]
+              .sort((a, b) => b.holderCount - a.holderCount)
+              .slice(0, 9)
+              .map((row) => (
+                <div
+                  key={row.itemId}
+                  className="rounded-xl border border-border/80 bg-card px-4 py-3"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <Link
+                      href={`/market/${row.itemId}`}
+                      className="flex min-w-0 items-center gap-2.5 text-sm font-medium hover:text-primary hover:underline underline-offset-4"
+                    >
+                      <ItemIcon url={row.imageUrl} name={row.name ?? `#${row.itemId}`} size={28} />
+                      <span className="truncate">
+                        {row.name ?? `Komodita #${row.itemId}`}
+                      </span>
+                    </Link>
+                    <Badge variant="outline" className="shrink-0 font-mono text-[10px]">
+                      {row.holderCount} certů
+                    </Badge>
+                  </div>
+                  <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full bg-primary/70"
+                      style={{
+                        width: `${Math.min(100, (row.holderCount / 20) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                  <div className="mt-1.5 truncate text-xs text-muted-foreground">
+                    Objem {formatCompact(row.totalAmount)}
+                    {row.topHolder ? ` · #1 ${row.topHolder.name}` : ""}
+                  </div>
+                </div>
+              ))}
+          </div>
+        </section>
+      )}
 
       {/* Vládní zakázky */}
       <section className="space-y-3">

@@ -1,0 +1,36 @@
+name: Simalytics – daily signal sync
+
+on:
+  schedule:
+    # Každý den 00:20 UTC (po půlnoci, až Simco Tools spočítá denní VWAP)
+    - cron: "20 0 * * *"
+  workflow_dispatch: # ruční spuštění z GitHub UI (testování)
+
+concurrency:
+  group: daily-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Sync VWAP + contests + cert kinds
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SIMCOTOOLS_REALM: ${{ vars.SIMCOTOOLS_REALM || '0' }}
+          SIMCOTOOLS_LANGUAGE: ${{ vars.SIMCOTOOLS_LANGUAGE || 'cs' }}
+        run: npm run sync:daily

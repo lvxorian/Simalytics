@@ -1,4 +1,5 @@
 import { getDb } from "@/lib/db";
+import type { SimcoCertificateKind, SimcoContest, SimcoVwap } from "@/lib/simcotools";
 import type {
   ConditionLogEntry,
   Item,
@@ -338,6 +339,328 @@ export async function addConditionNote(input: {
       (${input.positionId}, 'NOTE', ${input.market_price_at_log ?? null},
        ${input.condition_text})
   `;
+}
+
+// ── SIGNAL ENGINE: SYNC (fáze 1) ────────────────────────────────
+
+/**
+ * Upsertne denní VWAP pro všechny resource+kvality, které známe
+ * (1 request do Simco Tools = celý trh). Řádky s neznámým resource
+ * nebo kvalitou > 7 se přeskočí (FK na items).
+ */
+export async function syncVwapDaily(vwaps: SimcoVwap[]): Promise<number> {
+  if (vwaps.length === 0) return 0;
+
+  const db = getDb();
+  const known = new Set(
+    (await db`select id from items`).map((r) => r.id as number)
+  );
+
+  const rows = vwaps
+    .filter(
+      (v) =>
+        known.has(v.resourceId) &&
+        v.quality >= 0 &&
+        v.quality <= 7 &&
+        v.vwap > 0
+    )
+    .map((v) => ({
+      resource_id: v.resourceId,
+      quality: v.quality,
+      day: v.datetime.slice(0, 10),
+      vwap: v.vwap,
+    }));
+
+  if (rows.length === 0) return 0;
+
+  const result = await db`
+    insert into market_vwap_daily ${db(rows, "resource_id", "quality", "day", "vwap")}
+    on conflict (resource_id, quality, day) do update set
+      vwap = excluded.vwap
+  `;
+  return result.count;
+}
+
+/**
+ * Synchronizuje soutěže (contests). Idempotentní upsert dle contest id,
+ * is_active se přepočítá podle dne. Vrací počet uložených soutěží.
+ */
+export async function syncContests(contests: SimcoContest[]): Promise<number> {
+  if (contests.length === 0) return 0;
+
+  const db = getDb();
+  const known = new Set(
+    (await db`select id from items`).map((r) => r.id as number)
+  );
+  const today = new Date().toISOString().slice(0, 10);
+
+  const rows = contests.map((c) => ({
+    id: c.id,
+    name: c.name,
+    resource_id:
+      c.resourceId !== undefined && known.has(c.resourceId)
+        ? c.resourceId
+        : null,
+    building_id: c.buildingId ?? null,
+    start_date: c.startDate.slice(0, 10),
+    end_date: c.endDate.slice(0, 10),
+    is_active: c.startDate.slice(0, 10) <= today && today <= c.endDate.slice(0, 10),
+  }));
+
+  const result = await db`
+    insert into contests ${db(
+      rows,
+      "id",
+      "name",
+      "resource_id",
+      "building_id",
+      "start_date",
+      "end_date",
+      "is_active"
+    )}
+    on conflict (id) do update set
+      name = excluded.name,
+      resource_id = excluded.resource_id,
+      building_id = excluded.building_id,
+      start_date = excluded.start_date,
+      end_date = excluded.end_date,
+      is_active = excluded.is_active,
+      synced_at = now()
+  `;
+  return result.count;
+}
+
+/** Synchronizuje druhy certifikátů (referenční data). */
+export async function syncCertKinds(
+  kinds: SimcoCertificateKind[]
+): Promise<number> {
+  if (kinds.length === 0) return 0;
+
+  const db = getDb();
+  const result = await db`
+    insert into cert_kinds ${db(
+      kinds.map((k) => ({
+        kind: k.kind,
+        relevant: k.relevant,
+        resource_ids: k.resources ?? [],
+      })),
+      "kind",
+      "relevant",
+      "resource_ids"
+    )}
+    on conflict (kind) do update set
+      relevant = excluded.relevant,
+      resource_ids = excluded.resource_ids,
+      synced_at = now()
+  `;
+  return result.count;
+}
+
+// ── SIGNAL ENGINE: ČTENÍ (fáze 2) ────────────────────────────────
+
+/** Poslední VWAP pro sadu položek (kvalita 0). Klíč = item_id. */
+export async function getLatestVwaps(
+  itemIds: number[],
+  quality = 0
+): Promise<Map<number, number>> {
+  if (itemIds.length === 0) return new Map();
+
+  const db = getDb();
+  const rows = (await db`
+    select distinct on (resource_id) resource_id, vwap
+    from market_vwap_daily
+    where quality = ${quality} and resource_id in ${db(itemIds)}
+    order by resource_id, day desc
+  `) as unknown as { resource_id: number; vwap: string }[];
+
+  const map = new Map<number, number>();
+  for (const r of rows) map.set(r.resource_id, Number(r.vwap));
+  return map;
+}
+
+/** Aktivní soutěž pro komoditu (z DB). */
+export type ActiveContest = {
+  contestId: number;
+  name: string;
+  resourceId: number;
+  endDate: string; // YYYY-MM-DD
+};
+
+/** Mapa resource_id → aktivní soutěž (is_active z denního syncu). */
+export async function getActiveContests(): Promise<Map<number, ActiveContest>> {
+  const db = getDb();
+  const rows = (await db`
+    select id, name, resource_id, end_date::text as end_date
+    from contests
+    where is_active = true and resource_id is not null
+  `) as unknown as {
+    id: number;
+    name: string;
+    resource_id: number;
+    end_date: string;
+  }[];
+
+  const map = new Map<number, ActiveContest>();
+  for (const r of rows) {
+    map.set(r.resource_id, {
+      contestId: r.id,
+      name: r.name,
+      resourceId: r.resource_id,
+      endDate: r.end_date,
+    });
+  }
+  return map;
+}
+
+// ── ALERTY (fáze 4) ────────────────────────────────────────────
+
+export type AlertRow = {
+  id: string;
+  item_id: number;
+  quality: number;
+  kind: "price" | "score";
+  direction: "above" | "below";
+  threshold: number;
+  note: string | null;
+  active: boolean;
+  last_triggered_at: string | null;
+  trigger_count: number;
+  created_at: string;
+};
+
+export type AlertWithItem = AlertRow & {
+  item_name: string;
+  image_url: string | null;
+  current_price: number | null;
+};
+
+type RawAlert = {
+  id: string;
+  item_id: number;
+  quality: number;
+  kind: AlertRow["kind"];
+  direction: AlertRow["direction"];
+  threshold: string;
+  note: string | null;
+  active: boolean;
+  last_triggered_at: Date | null;
+  trigger_count: number;
+  created_at: Date;
+};
+
+function mapAlert(r: RawAlert): AlertRow {
+  return {
+    id: r.id,
+    item_id: r.item_id,
+    quality: r.quality,
+    kind: r.kind,
+    direction: r.direction,
+    threshold: Number(r.threshold),
+    note: r.note,
+    active: r.active,
+    last_triggered_at: r.last_triggered_at === null ? null : iso(r.last_triggered_at),
+    trigger_count: r.trigger_count,
+    created_at: iso(r.created_at),
+  };
+}
+
+/** Všechny alerty včetně názvu položky a aktuální ceny (pro /alerts). */
+export async function getAlertsWithItems(): Promise<AlertWithItem[]> {
+  const db = getDb();
+  const rows = (await db`
+    select a.*,
+           i.name as item_name,
+           i.image_url,
+           latest.price as current_price
+    from alerts a
+    join items i on i.id = a.item_id
+    left join lateral (
+      select price
+      from price_history ph
+      where ph.item_id = a.item_id and ph.quality = a.quality
+      order by ph.recorded_at desc
+      limit 1
+    ) latest on true
+    order by a.created_at desc
+    limit 200
+  `) as unknown as (RawAlert & {
+    item_name: string;
+    image_url: string | null;
+    current_price: string | null;
+  })[];
+
+  return rows.map((r) => ({
+    ...mapAlert(r),
+    item_name: r.item_name,
+    image_url: r.image_url,
+    current_price: r.current_price === null ? null : Number(r.current_price),
+  }));
+}
+
+/** Aktivní alerty pro evaluaci (jen aktivní, bez joinů – rychlé). */
+export async function getActiveAlerts(): Promise<AlertRow[]> {
+  const db = getDb();
+  const rows = (await db`
+    select * from alerts where active = true order by created_at asc
+  `) as unknown as RawAlert[];
+  return rows.map(mapAlert);
+}
+
+/** Vytvoří alert. */
+export async function createAlert(input: {
+  item_id: number;
+  quality: number;
+  kind: "price" | "score";
+  direction: "above" | "below";
+  threshold: number;
+  note?: string | null;
+}): Promise<void> {
+  const db = getDb();
+  await db`
+    insert into alerts (item_id, quality, kind, direction, threshold, note)
+    values (${input.item_id}, ${input.quality}, ${input.kind},
+            ${input.direction}, ${input.threshold}, ${input.note ?? null})
+  `;
+  // sledovaná položka má smysl jen s ticky – zapni sběr (jako watchlist)
+  await db`update items set track_ticks = true where id = ${input.item_id}`;
+}
+
+/** Zapne/vypne alert, vrací nový stav. */
+export async function toggleAlert(id: string): Promise<boolean> {
+  const db = getDb();
+  const rows = (await db`
+    update alerts set active = not active where id = ${id}
+    returning active
+  `) as unknown as { active: boolean }[];
+  return rows[0]?.active ?? false;
+}
+
+/** Smaže alert. */
+export async function deleteAlert(id: string): Promise<void> {
+  const db = getDb();
+  await db`delete from alerts where id = ${id}`;
+}
+
+/**
+ * Označí alert jako spuštěný (cooldown proti spamu).
+ * Vrací true, pokud SMÍ notifikovat – tj. uplynul cooldown.
+ */
+export async function markAlertTriggered(
+  id: string,
+  cooldownMinutes = 60
+): Promise<boolean> {
+  const db = getDb();
+  const rows = (await db`
+    update alerts
+    set last_triggered_at = now(),
+        trigger_count = trigger_count + 1
+    where id = ${id}
+      and (last_triggered_at is null
+           or last_triggered_at < now() - ${cooldownMinutes} * interval '1 minute')
+    returning id
+  `) as unknown as { id: string }[];
+
+  return rows.length > 0;
 }
 
 // ── KATALOG / POMOCNÉ DOTAZY ────────────────────────────────────────

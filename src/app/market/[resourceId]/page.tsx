@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Info } from "lucide-react";
+import { ArrowLeft, Bell, Info } from "lucide-react";
 
 import { PriceChart } from "@/components/price-chart";
+import { AlertForm } from "@/components/alert-form";
+import { getLatestVwaps } from "@/lib/data";
 import { StarButton } from "@/components/star-button";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { ChangeBadge } from "@/components/change-badge";
@@ -19,6 +21,7 @@ import {
   type Candle,
 } from "@/lib/candles";
 import {
+  getActiveContests,
   getDailyCandles,
   getItem,
   getPriceHistory,
@@ -26,7 +29,8 @@ import {
   getWatchedIds,
   isTracked,
 } from "@/lib/data";
-import { getMarketSummary } from "@/lib/simcotools";
+import { getEvents, getMarketSummary } from "@/lib/simcotools";
+import { computeSignal } from "@/lib/signals";
 import { formatCompact, formatPrice } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -152,6 +156,34 @@ export default async function MarketItemPage({
   // ── Market summary ze Simco Tools (objem, 5m svíčka, denní VWAP) ──
   const summary = await getMarketSummary(id, 0);
 
+  // ── Signal Engine badge (eventy / soutěž / VWAP divergence) ──────
+  const [contests, events, latestVwap] = await Promise.all([
+    getActiveContests(),
+    getEvents().catch(() => []),
+    getLatestVwaps([id]),
+  ]);
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const signal = computeSignal({
+    itemId: id,
+    price: lastTick,
+    vwap: latestVwap.get(id) ?? null,
+    events: events
+      .filter((e) => e.resource === id && e.until.slice(0, 10) >= todayStr)
+      .map((e) => ({
+        resourceId: e.resource,
+        speedModifier: e.speedModifier,
+        until: e.until,
+      })),
+    contest: contests.get(id)
+      ? {
+          resourceId: id,
+          name: contests.get(id)!.name,
+          endDate: contests.get(id)!.endDate,
+        }
+      : null,
+    change24h,
+  });
+
   const periodHigh = candles.length ? Math.max(...candles.map((c) => c.high)) : null;
   const periodLow = candles.length ? Math.min(...candles.map((c) => c.low)) : null;
   const periodAvg = candles.length
@@ -196,6 +228,20 @@ export default async function MarketItemPage({
               Q0
             </Badge>
             <StarButton itemId={id} watched={watchedIds.has(id)} />
+            {signal.direction !== "NEUTRAL" && (
+              <Badge
+                className={cn(
+                  "gap-1 font-mono",
+                  signal.direction === "BUY"
+                    ? "border-up/30 bg-up/10 text-up"
+                    : "border-down/30 bg-down/10 text-down"
+                )}
+                title={signal.reasons.map((r) => r.label).join(" · ")}
+              >
+                {signal.direction === "BUY" ? "BUY" : "SELL"} {signal.score > 0 ? "+" : ""}
+                {signal.score}
+              </Badge>
+            )}
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-3">
             <span className="font-mono text-3xl font-semibold tabular-nums text-foreground">
@@ -359,6 +405,15 @@ export default async function MarketItemPage({
           }
         />
         <MiniStat label="Zdroj dat" value={dataSource} small />
+      </div>
+
+      {/* ── Alert na této komoditě ─────────────────────────── */}
+      <div className="max-w-sm rounded-xl border border-border/80 bg-card p-4">
+        <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+          <Bell className="size-4 text-primary" />
+          Nastavit alert
+        </div>
+        <AlertForm itemId={id} currentPrice={lastTick} />
       </div>
     </div>
   );

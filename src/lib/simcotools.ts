@@ -130,6 +130,80 @@ export type SimcoMarketSummary = {
   latestClosePrices: { datetime: string; closePrice: number }[];
 };
 
+/** Denní VWAP pro všechny resource+kvality (1 request!). */
+export type SimcoVwap = {
+  resourceId: number;
+  quality: number;
+  datetime: string;
+  vwap: number;
+};
+
+/** Soutěž (contest) – boost poptávky po jedné komoditě/budově. */
+export type SimcoContest = {
+  id: number;
+  name: string;
+  resourceId?: number;
+  resourceName?: string;
+  buildingId?: string;
+  buildingName?: string;
+  startDate: string;
+  endDate: string;
+};
+
+/** Druh certifikátu + mapování na resources. */
+export type SimcoCertificateKind = {
+  kind: number;
+  relevant: boolean;
+  resources?: number[];
+};
+
+/** Řádek žebříčku firem realmu (denní valuace). */
+export type SimcoRankingEntry = {
+  companyId: number;
+  companyName: string;
+  rank: number;
+  rankDiff: number; // pohyb oproti včerejšku (+ = posun nahoru)
+  evaRank: number;
+  evaRankDiff: number;
+  companyValue: number;
+  companyValueDiff: number;
+  companyValuePctChange: number; // podíl (0.002 = 0,2 %)
+  buildingsValue: number;
+  patentsValue: number;
+  workers: number;
+  bondsSold: number;
+  isDeleted: boolean;
+};
+
+/** Statistika jedné země (firmy + top-3 firmy v zemi). */
+export type SimcoCountryStat = {
+  countryCode: string;
+  totalCompanies: number;
+  totalCompaniesValue: number;
+  rank: {
+    id: number;
+    name: string;
+    value: number;
+  }[];
+};
+
+/** Certifikát konkrétního druhu (držitel + objem). */
+export type SimcoCertificate = {
+  id: number;
+  companyId: number;
+  companyName: string;
+  resourceKind: number; // resource id, ke kterému se cert váže
+  certInfo: {
+    amount: number;
+    datetime: string;
+  };
+  date: {
+    week?: number;
+    month: number;
+    year: number;
+  };
+};
+
 /** Počty budov v realmu (aktualizováno denně). */
 export type SimcoBuildingCount = {
   id: string;
@@ -227,6 +301,68 @@ export async function getRealmSummaries(
     summaries: SimcoRealmSummary[];
   }>(`/v1/realms/${REALM_ID}/summaries?page_size=${pageSize}`);
   return data.summaries ?? [];
+}
+
+/** Denní VWAP pro VŠECHNY resource+kvality – jeden request za den. */
+export async function getVwaps(): Promise<SimcoVwap[]> {
+  const data = await simcoFetch<{ vwaps: SimcoVwap[] }>(
+    `/v1/realms/${REALM_ID}/market/vwaps`
+  );
+  return data.vwaps ?? [];
+}
+
+/** Soutěže realmu (historie od 2019). */
+export async function getContests(): Promise<SimcoContest[]> {
+  const data = await simcoFetch<{ contests: SimcoContest[] }>(
+    `/v1/realms/${REALM_ID}/contests?disable_pagination=true`
+  );
+  return data.contests ?? [];
+}
+
+/** Druhy certifikátů v realmu (relevant flag + resource mapping). */
+export async function getCertificateKinds(): Promise<SimcoCertificateKind[]> {
+  const data = await simcoFetch<{ certificates_kinds: SimcoCertificateKind[] }>(
+    `/v1/realms/${REALM_ID}/certificates`
+  );
+  return data.certificates_kinds ?? [];
+}
+
+/**
+ * Žebříček firem realmu (25 905 firem, stránkované).
+ * Denní valuace – hodnota, patenty, pracovníci, bondy, pohyby v žebříčku.
+ */
+export async function getRanking(pageSize = 50): Promise<SimcoRankingEntry[]> {
+  const data = await simcoFetch<{
+    ranking: SimcoRankingEntry[];
+  }>(`/v1/realms/${REALM_ID}/ranking?page_size=${pageSize}`);
+  return data.ranking ?? [];
+}
+
+/**
+ * Statistiky zemí – počty firem, hodnota a top-3 firmy v každé zemi.
+ * Odpověď je mapa { CC: stat } → převedeme na pole.
+ */
+export async function getCountryStats(): Promise<SimcoCountryStat[]> {
+  const data = await simcoFetch<{
+    countries: Record<string, Omit<SimcoCountryStat, "countryCode">>;
+  }>(`/v1/realms/${REALM_ID}/stats/countries`);
+
+  return Object.entries(data.countries ?? {}).map(([code, stat]) => ({
+    countryCode: code,
+    totalCompanies: stat.totalCompanies ?? 0,
+    totalCompaniesValue: stat.totalCompaniesValue ?? 0,
+    rank: stat.rank ?? [],
+  }));
+}
+
+/** Certifikáty jednoho druhu (držitelé + objemy). */
+export async function getCertificatesByKind(
+  kind: number
+): Promise<SimcoCertificate[]> {
+  const data = await simcoFetch<{ certificates: SimcoCertificate[] }>(
+    `/v1/realms/${REALM_ID}/certificates/${kind}`
+  );
+  return data.certificates ?? [];
 }
 
 /** Počty budov v realmu dle typu (production/sales/recreation/research). */

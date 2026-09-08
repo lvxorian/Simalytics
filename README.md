@@ -18,7 +18,8 @@ Next.js (server components)
 ├─ /watchlist       Sledované komodity (karty se sparklinami)
 ├─ /market/[id]     Grafy 5m–1M, overlaye (objem/VWAP/průměr/max-min), live summary
 ├─ /positions       Pozice + P/L + condition logging
-├─ /statistiky      Fáze ekonomiky, eventy, zakázky, makro realmu, budovy
+├─ /alerts          Cenové a signálové alerty (webhook/e-mail)
+├─ /statistiky      Fáze ekonomiky, eventy, zakázky, makro, budovy, žebříček firem
 └─ /positions/new   Otevřít pozici + podmínky
 ```
 
@@ -32,9 +33,11 @@ scripts/
   fetch-market.mjs        # stahovač cen → Neon (postgres.js, přímé SQL)
   download-icons.mjs      # ikony komodit z CDN → public/icons + items.image_url
   backfill-candles.mjs    # denní svíčky ze Simco Tools → market_candles_daily
+  sync-daily.mjs          # denní sync: VWAP, contests, cert kinds (Signal Engine)
   import-catalog.mjs      # katalog komodit ze Simco Tools
 .github/workflows/
   fetch-market.yml        # cron */15 * * * *
+  sync-daily.yml          # cron 20 0 * * * (denní sync VWAP/contests/certs)
 src/
   app/                    # stránky (server components) + api/ + actions.ts
   components/             # UI komponenty (client kde interaktivní)
@@ -97,6 +100,12 @@ Dokumentace: <https://api.simcotools.com/docs/simcotools.yaml> (limit 2 req/s).
 - **Stats/buildings** – počty budov realmu dle typu (statistiky).
 - **Eventy / vládní zakázky / fáze** – stránka /statistiky.
 - **Katalog** (`/resources`) – české názvy komodit (`npm run import:catalog`).
+- **VWAP** (`/market/vwaps`) – denní VWAP VŠECH resource+kvalit v 1 requestu
+  (`market_vwap_daily`, sync `npm run sync:daily` nebo `/api/cron/daily`).
+- **Contests** (`/contests`) – soutěže = poptávkové spike-y; historie od 2019
+  pro backtest cenového efektu.
+- **Certifikáty** (`/certificates`) – relevantní druhy certů + mapování na
+  resources (poptávkový signál pro Signal Engine).
 
 ### Timeframy grafů
 
@@ -126,9 +135,21 @@ Dokumentace: <https://api.simcotools.com/docs/simcotools.yaml> (limit 2 req/s).
 - Free tier: compute se po ~5 min neaktivity vypíná (cold start).
 - Přístup k DB má výhradně server – credentials nikdy nejsou v prohlížeči.
 
+## Alerty (fáze 4)
+
+Cenové alerty (target/stop) i signálové alerty (Signal Engine skóre −100…+100).
+Evaluace běží v polleru `/api/cron/ticks` po uložení ticků (5 min), cooldown
+60 min proti spamu. Notifikace (volitelné, obě najednou):
+
+- **Webhook** – `ALERT_WEBHOOK_URL` (Discord i Slack formát rozpoznán automaticky)
+- **E-mail** – `ALERT_RESEND_API_KEY` + `ALERT_EMAIL_FROM` + `ALERT_EMAIL_TO`
+  (Resend REST API, bez SDK)
+- `NEXT_PUBLIC_APP_URL` – základní URL pro odkazy v notifikacích
+
+Migrace: `npm run db:upgrade` (tabulka `alerts` v db/upgrades/003_alerts.sql).
+
 ## Rozšíření (roadmapa)
 
-- **Auth** (Auth.js/Clerk) pro multi-user přístup k pozicím
-- **Alerty** – e-mail/webhook při dosažení target/stop ceny
+- **Auth** (Auth.js/Clerk) pro multi-user přístup k pozicím a alertům
 - **Quality** 1–7 (env `SIMCOMPANIES_QUALITIES=0,1,2`)
 - **Neon branching** – testovací větev DB pro vývoj

@@ -5,7 +5,10 @@ import { revalidatePath } from "next/cache";
 import {
   addConditionNote,
   closePosition,
+  createAlert,
+  deleteAlert,
   openPosition,
+  toggleAlert,
   toggleWatchlist,
 } from "@/lib/data";
 
@@ -107,6 +110,56 @@ export async function toggleWatchlistAction(itemId: number): Promise<boolean> {
   revalidatePath("/");
   revalidatePath(`/market/${itemId}`);
   return watched;
+}
+
+/** Vytvoří alert (cenový nebo signálový). */
+export async function createAlertAction(
+  _prev: ActionState,
+  formData: FormData
+): Promise<ActionState> {
+  try {
+    const item_id = Number(formData.get("item_id"));
+    const quality = Number(formData.get("quality") ?? 0);
+    const kind = String(formData.get("kind") ?? "price");
+    const direction = String(formData.get("direction") ?? "above");
+    const threshold = Number(formData.get("threshold"));
+    const note = String(formData.get("note") ?? "").trim() || null;
+
+    if (!Number.isInteger(item_id) || item_id <= 0)
+      return { ok: false, error: "Chybí položka alertu." };
+    if (kind !== "price" && kind !== "score")
+      return { ok: false, error: "Neznámý typ alertu." };
+    if (direction !== "above" && direction !== "below")
+      return { ok: false, error: "Neznámý směr alertu." };
+    if (!Number.isFinite(threshold))
+      return { ok: false, error: "Práh musí být číslo." };
+    if (kind === "score" && (threshold < -100 || threshold > 100))
+      return { ok: false, error: "Skóre musí být v rozsahu −100 až +100." };
+
+    await createAlert({ item_id, quality, kind, direction, threshold, note });
+
+    revalidatePath("/alerts");
+    revalidatePath(`/market/${item_id}`);
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Neznámá chyba.",
+    };
+  }
+}
+
+/** Zapne/vypne alert (přepínač v tabulce). */
+export async function toggleAlertAction(id: string): Promise<boolean> {
+  const active = await toggleAlert(id);
+  revalidatePath("/alerts");
+  return active;
+}
+
+/** Smaže alert. */
+export async function deleteAlertAction(id: string): Promise<void> {
+  await deleteAlert(id);
+  revalidatePath("/alerts");
 }
 
 /** Přidá poznámku do condition logu existující pozice. */

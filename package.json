@@ -11,6 +11,7 @@
     "db:schema": "node scripts/apply-schema.mjs",
     "db:names": "node scripts/apply-seed-names.mjs",
     "db:upgrade": "node scripts/apply-upgrades.mjs",
+    "sync:daily": "node scripts/sync-daily.mjs",
     "import:catalog": "node scripts/import-catalog.mjs",
     "icons:download": "node scripts/download-icons.mjs",
     "backfill:candles": "node scripts/backfill-candles.mjs",
