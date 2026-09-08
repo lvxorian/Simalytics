@@ -392,6 +392,9 @@ export default async function MarketItemPage({
               itemId={id}
               itemName={item.name}
               itemImageUrl={img}
+              currentPrice={lastTick}
+              change24h={change24h}
+              itemTicker={item.db_letter}
               intervalSwitches={(
                 [
                   { key: "5m", label: "5m" },

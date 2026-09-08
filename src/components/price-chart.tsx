@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import type { Candle, LinePoint } from "@/lib/candles";
 import type { IntervalKey } from "@/lib/candles";
+import { ChangeBadge } from "@/components/change-badge";
 import { CandleCountdown } from "@/components/candle-countdown";
 import {
   computeVolumeProfile,
@@ -159,6 +160,9 @@ export function PriceChart({
   itemId,
   itemName,
   itemImageUrl,
+  currentPrice,
+  change24h,
+  itemTicker,
   intervalSwitches,
   modeSwitches,
 }: PriceChartProps) {
@@ -1024,9 +1028,12 @@ export function PriceChart({
           );
         })}
 
-        {/* Fullscreen přepínač – vpravo nahoře (v prohozených pozicích
-            s countdownem, který teď plave dole vpravo) */}
-        <div className="ml-auto flex items-center gap-1.5">
+        {/* Fullscreen přepínač vpravo nahoře – countdown svíčky sedí
+            vedle něj zleva (jeden pás ovládání vpravo nahoře) */}
+        <div className="ml-auto flex items-center gap-2">
+          {intervalKey && !isFullscreen && (
+            <CandleCountdown intervalKey={intervalKey} />
+          )}
           {!isFullscreen && (
             <button
               type="button"
@@ -1180,9 +1187,9 @@ export function PriceChart({
             </>
           )}
         </div>
-        {/* Countdown svíčky – plovoucí v pravém dolním rohu grafu
-            (fullscreen tlačítko je nahoře vpravo) */}
-        {intervalKey && (
+        {/* Countdown svíčky – ve fullscreen plave uvnitř grafu dole
+            vpravo (mimo fullscreen je v hlavičce vedle fullscreen ikony) */}
+        {intervalKey && isFullscreen && (
           <div className="absolute bottom-2 right-2 z-20 rounded-md border border-border/80 bg-card/90 px-2.5 py-1.5 shadow-lg backdrop-blur">
             <CandleCountdown intervalKey={intervalKey} />
           </div>
@@ -1338,20 +1345,35 @@ export function PriceChart({
           countdown i nástroje (žijí ve wrapperu grafu). */}
       {isFullscreen && (
         <div className="fixed inset-0 z-50 flex flex-col bg-background">
-          {/* Header: ikona + název + countdown vpravo */}
+          {/* Header: ikona + název + cena/24h (jako v normálním režimu)
+              + countdown a Zmenšit vpravo */}
           <div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
             <div className="flex min-w-0 items-center gap-3">
               <ItemIcon url={itemImageUrl} name={itemName ?? ""} size={40} />
-              <div className="min-w-0">
+              <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
                 <h2 className="truncate text-lg font-semibold tracking-tight">
                   {itemName}
                 </h2>
-                <span className="font-mono text-[11px] text-muted-foreground">
-                  fullscreen · Esc zavře
+                {itemTicker && (
+                  <span className="rounded-md border border-border px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                    {itemTicker}
+                  </span>
+                )}
+                <span className="rounded-md border border-border px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                  Q0
                 </span>
+                {currentPrice != null && (
+                  <span className="font-mono text-lg font-semibold tabular-nums text-foreground">
+                    {formatPrice(currentPrice)}
+                  </span>
+                )}
+                <ChangeBadge value={change24h} size="sm" />
               </div>
             </div>
             <div className="flex items-center gap-3">
+              {intervalKey && (
+                <CandleCountdown intervalKey={intervalKey} />
+              )}
               <button
                 type="button"
                 onClick={() => setIsFullscreen(false)}
@@ -1410,6 +1432,12 @@ export function PriceChart({
 }
 
 type PriceChartProps = {
+  /** Hlavní cena (last tick) – pro fullscreen hlavičku. */
+  currentPrice?: number | null;
+  /** 24h změna v % – pro fullscreen hlavičku. */
+  change24h?: number | null;
+  /** Herní zkratka komodity (např. „BXC"). */
+  itemTicker?: string | null;
   candles: Candle[];
   /** "candles" = svíčky, "area" = plynulá linie s gradientem */
   mode?: "candles" | "area";

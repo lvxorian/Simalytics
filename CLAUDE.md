@@ -151,10 +151,12 @@ src/components/            # vizní komponenty (viz níže)
   Pravé tlačítko nesmí spustit drag nástrojů (onMouseDown filtruje
   `e.button !== 0`).
 - **Fullscreen grafu** (`price-chart.tsx`): tlačítko Maximize2 jen vpravo
-  nahoře (countdown plave dole vpravo v grafu, žádné další fullscreen
-  tlačítko) →
-  fixed overlay s kompletním ovládáním: header s ikonou + názvem, TF
-  přepínač, Svíčky/Linie, countdown v headeru; wrapper grafu se přemístí
+  nahoře, countdown svíčky sedí vedle něj zleva (ve fullscreen je
+  countdown v hlavičce u Minimize2) →
+  fixed overlay s kompletním ovládáním: header s ikonou + názvem,
+  tickerem, Q0 badge, cenou a ChangeBadge (props currentPrice/
+  change24h/itemTicker z market page), TF přepínač, Svíčky/Linie,
+  countdown v headeru; wrapper grafu se přemístí
   přes appendChild
   do overlaye (chart se NERE-MOUNTUJE – zoom/nástroje přežijí) a po
   zavření se vrátí do `originalParentRef`. Esc = nejdřív zruš měření,
