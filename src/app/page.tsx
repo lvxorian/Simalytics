@@ -12,6 +12,8 @@ import {
   getActiveContests,
   getLatestPrices,
   getLatestVwaps,
+  getMarketLiquidity,
+  getMarketVolatility,
   getPositionsWithPnl,
   getPricesAround24hAgo,
   getSparklines,
@@ -78,18 +80,27 @@ export default async function DashboardPage() {
     .sort((a, b) => (b.quantity ?? 0) - (a.quantity ?? 0))
     .slice(0, 5);
 
-  // ── Denní report (rule-based, bez AI) ─────────────────────────
+  // ── Denní report (rule-based, bez AI) + metriky trhu ─────────
   // Data se dotahují paralelně; když některý zdroj selže (eventy ze
   // Simco Tools), report se stejně sestaví ze zbytku – stejný vzor
   // jako skener. Selže-li DB, page spadne do SetupNotice výše.
   let report = null;
+  let volatility = new Map<number, number>();
+  let liquidity = new Map<
+    number,
+    { tradesPerDay: number | null; turnover: number | null }
+  >();
   try {
-    const [vwaps, contests, positions, events] = await Promise.all([
+    const [vwaps, contests, positions, events, vol, liq] = await Promise.all([
       getLatestVwaps(rows.map((r) => r.item_id)),
       getActiveContests(),
       getPositionsWithPnl({ open: true }),
       getEvents().catch(() => []),
+      getMarketVolatility().catch(() => volatility),
+      getMarketLiquidity().catch(() => liquidity),
     ]);
+    volatility = vol;
+    liquidity = liq;
     const todayStr = new Date().toISOString().slice(0, 10);
     const activeEvents: ReportEvent[] = events
       .filter((e) => e.until.slice(0, 10) >= todayStr)
@@ -208,7 +219,13 @@ export default async function DashboardPage() {
       />
 
       {/* ── Celý trh ─────────────────────────────────────────── */}
-      <MarketTable rows={rows} watchedIds={watchedIds} sparklines={sparklines} />
+      <MarketTable
+        rows={rows}
+        watchedIds={watchedIds}
+        sparklines={sparklines}
+        volatility={volatility}
+        liquidity={liquidity}
+      />
     </div>
   );
 }

@@ -810,6 +810,92 @@ export async function getSparklines(
   return result;
 }
 
+// ── MARKET METRIKY (batch pro dashboard, vše Q0) ────────────────────
+
+export type MarketMetricRow = {
+  /** Annualizovaná volatilita v % (σ log-výnosů denních close), null když málo dat. */
+  annualizedPct: number | null;
+  /** Obchody za 24 h (distinct recorded_at z ticků), null bez ticků. */
+  tradesPerDay: number | null;
+  /** Průměrný denní obrat v $ (objem × close denních svíček), null bez objemů. */
+  turnover: number | null;
+};
+
+/**
+ * Volatilita pro celý trh v JEDNOM dotazu: σ log-výnosů close-to-close
+ * denních svíček (Simco Tools backfill), annualizace √365 – stejná
+ * matematika jako `computeVolatility` v lib/metrics.ts. LATERAL agreguje
+ * výnosy per item, takže dashboard netahuje 151 svíčkových historií.
+ */
+export async function getMarketVolatility(): Promise<Map<number, number>> {
+  const db = getDb();
+  const rows = (await db`
+    select c.resource_id as item_id,
+           stddev_samp(ln(c.close / c.prev_close)) * sqrt(365) as ann
+    from (
+      select resource_id, close,
+             lag(close) over (partition by resource_id order by day) as prev_close
+      from market_candles_daily
+      where quality = 0 and close > 0
+    ) c
+    where c.prev_close > 0
+    group by c.resource_id
+    having count(*) >= 3
+  `) as unknown as { item_id: number; ann: string | null }[];
+
+  const map = new Map<number, number>();
+  for (const r of rows) {
+    if (r.ann !== null) map.set(r.item_id, Number(r.ann) * 100);
+  }
+  return map;
+}
+
+/**
+ * Likvidita pro celý trh v JEDNOM dotazu: distinct obchody za 24 h z
+ * ticků (stejná definice jako tradeFrequencyPerDay) + průměrný denní
+ * obrat (objem × close) z denních svíček – dva agregáty spojené full outer.
+ */
+export async function getMarketLiquidity(): Promise<
+  Map<number, { tradesPerDay: number | null; turnover: number | null }>
+> {
+  const db = getDb();
+  const rows = (await db`
+    select
+      coalesce(t.item_id, c.resource_id) as item_id,
+      t.trades,
+      c.turnover
+    from (
+      select item_id, count(distinct recorded_at) as trades
+      from price_history
+      where quality = 0 and recorded_at >= now() - interval '24 hours'
+      group by item_id
+    ) t
+    full outer join (
+      select resource_id,
+             sum(volume * close) / nullif(count(*), 0) as turnover
+      from market_candles_daily
+      where quality = 0 and volume is not null and volume > 0
+      group by resource_id
+    ) c on c.resource_id = t.item_id
+  `) as unknown as {
+    item_id: number;
+    trades: string | number | null;
+    turnover: string | null;
+  }[];
+
+  const map = new Map<
+    number,
+    { tradesPerDay: number | null; turnover: number | null }
+  >();
+  for (const r of rows) {
+    map.set(r.item_id, {
+      tradesPerDay: r.trades === null ? null : Number(r.trades),
+      turnover: r.turnover === null ? null : Number(r.turnover),
+    });
+  }
+  return map;
+}
+
 // ── DENNÍ SVÍČKY (backfill ze Simco Tools) ──────────────────────────
 
 export type DailyCandle = {

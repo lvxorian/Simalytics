@@ -77,37 +77,58 @@ export function computeLiquidity(
   const tradesPerDay = tradeFrequencyPerDay(ticks);
   const turnover = averageDailyTurnover(dailyCandles);
 
-  let grade: 0 | 1 | 2 | 3 | 4;
-  let label: string;
-  let description: string;
+  const { grade, label, description } = gradeLiquidity(tradesPerDay);
+  const desc =
+    turnover != null ? `${description} Obrat ${formatPrice(turnover)} / den.` : description;
 
+  return { tradesPerDay, turnover, grade, label, description: desc };
+}
+
+/**
+ * Klasifikace (0–4) podle počtu obchodů za den – pure, bez I/O, aby ji
+ * šlo použít i v batch průměrech (dashboard) a ne jen na market page.
+ */
+export function gradeLiquidity(tradesPerDay: number | null): {
+  grade: 0 | 1 | 2 | 3 | 4;
+  label: string;
+  description: string;
+} {
   if (tradesPerDay === null || tradesPerDay === 0) {
-    grade = 0;
-    label = "Mrtvá";
-    description = "Za 24 h žádné obchody – cena nereaguje na trh.";
-  } else if (tradesPerDay <= 12) {
-    grade = 1;
-    label = "Velmi nízká";
-    description = "Obchoduje se jen ojediněle – ceny se mění zřídka, těžko se odhaduje správný okamžik vstupu.";
-  } else if (tradesPerDay <= 48) {
-    grade = 2;
-    label = "Nízká";
-    description = "Nízká aktivita – delší rozpětí mezi obchody, pozor na klouzání ceny.";
-  } else if (tradesPerDay <= 144) {
-    grade = 3;
-    label = "Střední";
-    description = "Pravidelný obchodní ruch – vstup/výstup bez problémů.";
-  } else {
-    grade = 4;
-    label = "Vysoká";
-    description = "Aktivní trh – cena reaguje okamžitě, spread zanedbatelný.";
+    return {
+      grade: 0,
+      label: "Mrtvá",
+      description: "Za 24 h žádné obchody – cena nereaguje na trh.",
+    };
   }
-
-  if (turnover != null) {
-    description += ` Obrat ${formatPrice(turnover)} / den.`;
+  if (tradesPerDay <= 12) {
+    return {
+      grade: 1,
+      label: "Velmi nízká",
+      description:
+        "Obchoduje se jen ojediněle – ceny se mění zřídka, těžko se odhaduje správný okamžik vstupu.",
+    };
   }
-
-  return { tradesPerDay, turnover, grade, label, description };
+  if (tradesPerDay <= 48) {
+    return {
+      grade: 2,
+      label: "Nízká",
+      description:
+        "Nízká aktivita – delší rozpětí mezi obchody, pozor na klouzání ceny.",
+    };
+  }
+  if (tradesPerDay <= 144) {
+    return {
+      grade: 3,
+      label: "Střední",
+      description: "Pravidelný obchodní ruch – vstup/výstup bez problémů.",
+    };
+  }
+  return {
+    grade: 4,
+    label: "Vysoká",
+    description:
+      "Aktivní trh – cena reaguje okamžitě, spread zanedbatelný.",
+  };
 }
 
 // ── Volatilita ─────────────────────────────────────────────────────
@@ -166,6 +187,63 @@ export type VolatilityResult = {
 };
 
 /**
+ * Klasifikace volatility (0–4) z annualizované hodnoty – pure, bez I/O,
+ * sdílená market page i batch variantou pro dashboard.
+ *
+ *  0 = mrtvá (< 5 %)  – cena se skoro nehne
+ *  1 = nízká (5–15 %)
+ *  2 = střední (15–40 %)
+ *  3 = vysoká (40–80 %)
+ *  4 = extrémní (80 %+) – divoké výkyvy
+ */
+export function gradeVolatility(annualizedPct: number | null): {
+  grade: 0 | 1 | 2 | 3 | 4;
+  label: string;
+  description: string;
+} {
+  if (annualizedPct === null) {
+    return {
+      grade: 0,
+      label: "–",
+      description: "Málo dat pro výpočet.",
+    };
+  }
+  if (annualizedPct < 5) {
+    return {
+      grade: 0,
+      label: "Mrtvá",
+      description: "Cena skoro stagnuje – pohyby zanedbatelné.",
+    };
+  }
+  if (annualizedPct < 15) {
+    return {
+      grade: 1,
+      label: "Nízká",
+      description: "Cena drží klid, pohyby jsou malé.",
+    };
+  }
+  if (annualizedPct < 40) {
+    return {
+      grade: 2,
+      label: "Střední",
+      description: "Normální kolísání – pohyby po jednotkách procent.",
+    };
+  }
+  if (annualizedPct < 80) {
+    return {
+      grade: 3,
+      label: "Vysoká",
+      description: "Výrazné výkyvy – pozor na timing vstupu/výstupu.",
+    };
+  }
+  return {
+    grade: 4,
+    label: "Extrémní",
+    description: "Divoké výkyvy – vysoké riziko i vysoká příležitost.",
+  };
+}
+
+/**
  * Klasifikace podle annualizované volatility (čísla kalibrovaná na
  * SimCompanies – tyto komodity jsou volatilnější než reálné trhy):
  *  0 = mrtvá (< 5 %)  – cena se skoro nehne
@@ -181,45 +259,12 @@ export function volatilityProfile(
   const annualized = computeVolatility(candles, intervalSeconds, true);
   const perBar = computeVolatility(candles, intervalSeconds, false);
 
-  let grade: 0 | 1 | 2 | 3 | 4;
-  let label: string;
-  let description: string;
-
-  if (annualized === null) {
-    return {
-      annualizedPct: null,
-      perBarPct: perBar === null ? null : perBar * 100,
-      grade: 0,
-      label: "–",
-      description: "Málo dat pro výpočet.",
-    };
-  }
-
-  const pct = annualized * 100;
-  if (pct < 5) {
-    grade = 0;
-    label = "Mrtvá";
-    description = "Cena skoro stagnuje – pohyby zanedbatelné.";
-  } else if (pct < 15) {
-    grade = 1;
-    label = "Nízká";
-    description = "Cena drží klid, pohyby jsou malé.";
-  } else if (pct < 40) {
-    grade = 2;
-    label = "Střední";
-    description = "Normální kolísání – pohyby po jednotkách procent.";
-  } else if (pct < 80) {
-    grade = 3;
-    label = "Vysoká";
-    description = "Výrazné výkyvy – pozor na timing vstupu/výstupu.";
-  } else {
-    grade = 4;
-    label = "Extrémní";
-    description = "Divoké výkyvy – vysoké riziko i vysoká příležitost.";
-  }
+  const { grade, label, description } = gradeVolatility(
+    annualized === null ? null : annualized * 100
+  );
 
   return {
-    annualizedPct: pct,
+    annualizedPct: annualized === null ? null : annualized * 100,
     perBarPct: perBar === null ? null : perBar * 100,
     grade,
     label,

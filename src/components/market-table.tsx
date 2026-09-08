@@ -31,11 +31,24 @@ import {
   formatDateTime,
   formatPrice,
 } from "@/lib/format";
+import {
+  gradeLiquidity,
+  gradeVolatility,
+  gradeColorClass,
+  gradeDots,
+} from "@/lib/metrics";
 import type { LatestPriceRow } from "@/lib/types";
 
 export type MarketRow = LatestPriceRow & { change24h: number | null };
 
-type SortKey = "name" | "price" | "change24h" | "quantity" | "recorded_at";
+type SortKey =
+  | "name"
+  | "price"
+  | "change24h"
+  | "quantity"
+  | "recorded_at"
+  | "volatility"
+  | "liquidity";
 type SortDir = "asc" | "desc";
 
 /** Odstraní diakritiku a lowercase – hledání „jablka“ najde i „Jablka“. */
@@ -50,10 +63,19 @@ export function MarketTable({
   rows,
   watchedIds,
   sparklines,
+  volatility,
+  liquidity,
 }: {
   rows: MarketRow[];
   watchedIds?: Set<number>;
   sparklines?: Map<number, number[]>;
+  /** item_id → annualizovaná volatilita v % (batch z denních svíček). */
+  volatility?: Map<number, number>;
+  /** item_id → obchody/24h + obrat/den (batch z ticků a denních svíček). */
+  liquidity?: Map<
+    number,
+    { tradesPerDay: number | null; turnover: number | null }
+  >;
 }) {
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("name");
@@ -85,9 +107,13 @@ export function MarketTable({
           return dir * ((a.quantity ?? -Infinity) - (b.quantity ?? -Infinity));
         case "recorded_at":
           return dir * a.recorded_at.localeCompare(b.recorded_at);
+        case "volatility":
+          return dir * ((volatility?.get(a.item_id) ?? -1) - (volatility?.get(b.item_id) ?? -1));
+        case "liquidity":
+          return dir * ((liquidity?.get(a.item_id)?.tradesPerDay ?? -1) - (liquidity?.get(b.item_id)?.tradesPerDay ?? -1));
       }
     });
-  }, [rows, query, sortKey, sortDir]);
+  }, [rows, query, sortKey, sortDir, volatility, liquidity]);
 
   function toggleSort(key: SortKey) {
     if (key === sortKey) {
@@ -174,6 +200,22 @@ export function MarketTable({
                 className="hidden text-right md:table-cell"
               />
               <ThSort
+                label="Volatilita"
+                sortKey="volatility"
+                current={sortKey}
+                dir={sortDir}
+                onSort={toggleSort}
+                className="hidden text-right xl:table-cell"
+              />
+              <ThSort
+                label="Likvidita"
+                sortKey="liquidity"
+                current={sortKey}
+                dir={sortDir}
+                onSort={toggleSort}
+                className="hidden text-right xl:table-cell"
+              />
+              <ThSort
                 label="Aktualizováno"
                 sortKey="recorded_at"
                 current={sortKey}
@@ -188,7 +230,7 @@ export function MarketTable({
             {filtered.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={7}
+                  colSpan={9}
                   className="py-12 text-center text-sm text-muted-foreground"
                 >
                   Nic nenalezeno
@@ -256,6 +298,13 @@ export function MarketTable({
                     {formatCompact(row.quantity)}
                   </TableCell>
 
+                  <VolatilityCell
+                    pct={volatility?.get(row.item_id) ?? null}
+                  />
+                  <LiquidityCell
+                    data={liquidity?.get(row.item_id) ?? null}
+                  />
+
                   <TableCell className="hidden text-right font-mono text-xs text-muted-foreground lg:table-cell">
                     {formatDateTime(row.recorded_at)}
                   </TableCell>
@@ -282,6 +331,76 @@ export function MarketTable({
         </Table>
       </div>
     </section>
+  );
+}
+
+/**
+ * Buňka Volatilita: tečky ●●●○○ dle grade (annualizovaná σ denních
+ * výnosů) + hodnota v %, tooltip vysvětlí kontext – stejné klasifikace
+ * jako karty na market page.
+ */
+function VolatilityCell({ pct }: { pct: number | null }) {
+  const profile = gradeVolatility(pct);
+  return (
+    <TableCell
+      className="hidden text-right xl:table-cell"
+      title={
+        pct === null
+          ? "Volatilita: málo dat pro výpočet (chybí denní svíčky)."
+          : `Volatilita ${profile.label.toLowerCase()} – ${profile.description} Annualizovaná σ denních výnosů: ${pct.toFixed(0)} %.`
+      }
+    >
+      <div className="flex items-center justify-end gap-1.5">
+        <span
+          className={cn(
+            "text-[10px] tracking-tight",
+            gradeColorClass(profile.grade)
+          )}
+        >
+          {gradeDots(profile.grade)}
+        </span>
+        <span className="text-xs text-muted-foreground">
+          {pct === null ? "–" : `${pct.toFixed(0)} %`}
+        </span>
+      </div>
+    </TableCell>
+  );
+}
+
+/**
+ * Buňka Likvidita: tečky dle grade (obchody/24h primárně) + počet
+ * obchodů, tooltip doplní obrat – stejné klasifikace jako market page.
+ */
+function LiquidityCell({
+  data,
+}: {
+  data: { tradesPerDay: number | null; turnover: number | null } | null;
+}) {
+  const trades = data?.tradesPerDay ?? null;
+  const profile = gradeLiquidity(trades);
+  return (
+    <TableCell
+      className="hidden text-right xl:table-cell"
+      title={
+        trades === null
+          ? "Likvidita: bez ticků (poler tuto položku nesbírá)."
+          : `Likvidita ${profile.label.toLowerCase()} – ${profile.description}${data?.turnover != null ? ` Obrat ${formatPrice(data.turnover)} / den.` : ""}`
+      }
+    >
+      <div className="flex items-center justify-end gap-1.5">
+        <span
+          className={cn(
+            "text-[10px] tracking-tight",
+            gradeColorClass(profile.grade)
+          )}
+        >
+          {gradeDots(profile.grade)}
+        </span>
+        <span className="text-xs text-muted-foreground">
+          {trades === null ? "–" : `${trades}/24h`}
+        </span>
+      </div>
+    </TableCell>
   );
 }
 
