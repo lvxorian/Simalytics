@@ -3,10 +3,13 @@
 /**
  * Interaktivní čáry alertů v grafu (à la TradingView).
  *
- * Renderuje se do VP canvasu? Ne – má vlastní transparentní canvas přes
- * graf (pointer-events auto jen na čárách samotných, zbytek průchozí).
- * Každý aktivní cenový alert = vodorovná čárkovaná linka s popiskem.
- * Tažením linky se změní práh alertu (server action), výběr ukáže koš.
+ * Model je stejný jako u VP overlaye – imperativní CANVAS, pozice se
+ * přepočítává při každém zoom/panu (rodič volá registrovaný draw v
+ * onRangeChange), takže linka VŽDY sedí na své ceně, ne na pixelu.
+ *
+ * Editovatelnost: přes linku leží tenký interaktivní pás (±7 px) jako
+ * sourozenec chart containeru – tažením mění práh (pointer capture drží
+ * tah i mimo pás), koš maže. Pás nekoliduje s pan/kreslením v grafu.
  */
 
 import { useCallback, useEffect, useRef } from "react";
@@ -25,13 +28,13 @@ type Props = {
   priceToY: (price: number) => number | null;
   /** Převod Y pixelu → cena. */
   yToPrice: (y: number) => number | null;
-  /** Říká rodiči, že se má překreslit (drag běží / skončil). */
-  onRedraw: () => void;
+  /** Registrace imperativního draw pro onRangeChange rodiče (zoom/pan). */
+  registerDraw: (fn: (() => void) | null) => void;
   /** Uložení nového prahu (server action wrapper). */
   onThresholdChange: (alertId: string, threshold: number) => void;
   /** Smaže alert (koš). */
   onDelete: (alertId: string) => void;
-  /** bump pro překreslení při zoom/pan. */
+  /** bump pro překreslení při re-renderu rodiče. */
   epoch: number;
 };
 
@@ -41,14 +44,14 @@ type DragState = {
   y: number;
 } | null;
 
-const LABEL_W = 74;
+const LABEL_W = 84;
 const LABEL_H = 20;
 
 export function ChartAlertLines({
   alerts,
   priceToY,
   yToPrice,
-  onRedraw,
+  registerDraw,
   onThresholdChange,
   onDelete,
   epoch,
@@ -56,13 +59,13 @@ export function ChartAlertLines({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<DragState>(null);
-  const alertsRef = useRef(alerts);
   const trashRef = useRef<HTMLButtonElement | null>(null);
   const trashForRef = useRef<string | null>(null);
+  // Interaktivní pásy přes linky (drag) – pozice nastavuje draw imperativně
+  const stripsRef = useRef<Map<string, HTMLDivElement>>(new Map());
   // lokální preview prahu při dragu (optimisticky přes DB)
   const previewRef = useRef<Map<string, number>>(new Map());
 
-  alertsRef.current = alerts;
   const priceAlerts = alerts.filter((a) => a.kind === "price");
 
   const getThreshold = useCallback(
@@ -88,12 +91,25 @@ export function ChartAlertLines({
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, rect.width, rect.height);
 
-    // pozice koše – jen u vybrané (tažené) linky
+    // pozice koše – jen u tažené linky
     let trashXY: { x: number; y: number } | null = null;
 
     for (const a of priceAlerts) {
       const y = priceToY(getThreshold(a));
-      if (y == null) continue;
+
+      // interaktivní pás přes linku (drag) – vždy přemístíme na aktuální y
+      const strip = stripsRef.current.get(a.id);
+      if (strip) {
+        if (y == null) {
+          strip.style.display = "none";
+        } else {
+          strip.style.display = "block";
+          strip.style.top = `${y - 7}px`;
+        }
+      }
+
+      if (y == null) continue; // cena mimo viditelný rozsah
+
       const dragging = dragRef.current?.alertId === a.id;
       const color = a.direction === "above" ? "#22ab94" : "#ec5063";
       const alpha = a.active ? 1 : 0.45;
@@ -106,23 +122,25 @@ export function ChartAlertLines({
       ctx.setLineDash(dragging ? [] : [6, 4]);
       ctx.beginPath();
       ctx.moveTo(0, y + 0.5);
-      ctx.lineTo(rect.width - 76, y + 0.5);
+      ctx.lineTo(rect.width - LABEL_W - 4, y + 0.5);
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // popisek vpravo (přes cenovou osu)
-      const lx = rect.width - 76;
+      // popisek vpravo (přes cenovou osu): zvoneček + cena
+      const lx = rect.width - LABEL_W - 4;
       ctx.fillStyle = color;
       ctx.fillRect(lx, y - LABEL_H / 2, LABEL_W, LABEL_H);
-      ctx.fillStyle = "#0b1220";
-      // kontrastní text
       ctx.fillStyle = "rgba(11,18,32,0.9)";
       ctx.fillRect(lx + 1, y - LABEL_H / 2 + 1, LABEL_W - 2, LABEL_H - 2);
-      const label = `${a.direction === "above" ? "▲" : "▼"} ${formatThreshold(getThreshold(a))}`;
+      drawBell(ctx, lx + 5, y - 5, color);
       ctx.fillStyle = color;
       ctx.font = "600 11px 'IBM Plex Mono', ui-monospace, monospace";
       ctx.textBaseline = "middle";
-      ctx.fillText(label, lx + 6, y + 0.5);
+      ctx.fillText(
+        `${formatThreshold(getThreshold(a))} $`,
+        lx + 20,
+        y + 0.5
+      );
       ctx.restore();
 
       if (dragging) {
@@ -143,98 +161,150 @@ export function ChartAlertLines({
     }
   }, [priceAlerts, priceToY, getThreshold]);
 
-  // pointer hit-test: je kurzor na nějaké lince? (±6 px)
-  const hitTest = useCallback(
-    (clientY: number): { alert: AlertLineAlert; offsetY: number } | null => {
-      const container = containerRef.current;
-      if (!container) return null;
-      const rect = container.getBoundingClientRect();
-      const y = clientY - rect.top;
-      for (const a of priceAlerts) {
-        const ay = priceToY(getThreshold(a));
-        if (ay == null) continue;
-        if (Math.abs(y - ay) <= 6) {
-          return { alert: a, offsetY: y - ay };
-        }
-      }
-      return null;
-    },
-    [priceAlerts, priceToY, getThreshold]
-  );
+  // aktuální draw pro registraci (zoom/pan rodiče) i lokální volání
+  const drawRef = useRef(draw);
+  drawRef.current = draw;
 
-  const onPointerDown = useCallback(
-    (e: React.PointerEvent) => {
+  // registrace imperativního draw – rodič volá při každém zoom/pan
+  // (linka tak drží cenu, ne pixel) i po rekonstrukci grafu (přepnutí TF)
+  useEffect(() => {
+    registerDraw(() => drawRef.current());
+    return () => registerDraw(null);
+  }, [registerDraw]);
+
+  // Čerstvá data z DB (router.refresh po uložení/mazání) – zruš lokální
+  // preview prahů, ať linka přejde na skutečnou uloženou hodnotu.
+  useEffect(() => {
+    previewRef.current.clear();
+  }, [alerts]);
+
+  // Kreslení při epoch bump (re-render rodiče) a změně alertů – rAF, ať
+  // běží až PO parent efektech (child efekty běží dřív: po přepnutí
+  // timeframu je graf/mainSeries teprve ve vytváření a starý series už
+  // je odstraněný). Řeší i první kreslení po mountu a fullscreen re-parent.
+  useEffect(() => {
+    const id = requestAnimationFrame(() => drawRef.current());
+    return () => cancelAnimationFrame(id);
+  }, [draw, epoch, alerts]);
+
+  // překreslení při změně velikosti
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => drawRef.current());
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, []);
+
+  // ── Drag prahu: tah pásu přes linku (pointer capture drží i mimo pás) ──
+
+  const onStripPointerDown = useCallback(
+    (a: AlertLineAlert) => (e: React.PointerEvent<HTMLDivElement>) => {
       if (e.button !== 0) return;
-      const hit = hitTest(e.clientY);
-      if (!hit) return;
-      e.stopPropagation();
+      const container = containerRef.current;
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const ay = priceToY(getThreshold(a));
+      if (ay == null) return;
       dragRef.current = {
-        alertId: hit.alert.id,
-        offsetY: hit.offsetY,
-        y: e.clientY - (containerRef.current?.getBoundingClientRect().top ?? 0),
+        alertId: a.id,
+        offsetY: e.clientY - rect.top - ay,
+        y: e.clientY - rect.top,
       };
-      (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+      trashForRef.current = a.id;
+      e.currentTarget.setPointerCapture(e.pointerId);
+      e.preventDefault();
     },
-    [hitTest]
+    [getThreshold, priceToY]
   );
 
-  const onPointerMove = useCallback(
-    (e: React.PointerEvent) => {
+  const onStripPointerMove = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
       const drag = dragRef.current;
-      if (!drag) return;
-      e.stopPropagation();
-      drag.y =
-        e.clientY - (containerRef.current?.getBoundingClientRect().top ?? 0);
+      const container = containerRef.current;
+      if (!drag || !container) return;
+      const rect = container.getBoundingClientRect();
+      drag.y = e.clientY - rect.top;
       const price = yToPrice(drag.y - drag.offsetY);
       if (price != null) {
         previewRef.current.set(drag.alertId, price);
       }
-      draw();
+      drawRef.current();
     },
-    [draw, yToPrice]
+    [yToPrice]
   );
 
-  const onPointerUp = useCallback(
-    (e: React.PointerEvent) => {
+  /** Puštěno na koš? (geometrický test – pointer capture drží strip) */
+  const isOverTrash = useCallback((e: React.PointerEvent) => {
+    const trash = trashRef.current;
+    if (!trash || trash.style.display === "none") return false;
+    const r = trash.getBoundingClientRect();
+    return (
+      e.clientX >= r.left &&
+      e.clientX <= r.right &&
+      e.clientY >= r.top &&
+      e.clientY <= r.bottom
+    );
+  }, []);
+
+  const endDrag = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>, save: boolean) => {
       const drag = dragRef.current;
       if (!drag) return;
-      e.stopPropagation();
       dragRef.current = null;
+      trashForRef.current = null;
       const price = yToPrice(drag.y - drag.offsetY);
-      previewRef.current.delete(drag.alertId);
-      if (price != null) {
-        onThresholdChange(drag.alertId, price);
+      // Puštěno na koš → smazat alert (à la TradingView)
+      if (save && isOverTrash(e)) {
+        previewRef.current.delete(drag.alertId);
+        onDelete(drag.alertId);
+        drawRef.current();
+        return;
       }
-      draw();
-      onRedraw();
+      if (save && price != null) {
+        // Preview ponecháme – linka zůstane, kde pustíš, dokud nepřijdou
+        // čerstvá data z DB (router.refresh → nové alerts → clear výše).
+        onThresholdChange(drag.alertId, price);
+      } else {
+        previewRef.current.delete(drag.alertId);
+      }
+      drawRef.current();
     },
-    [draw, onThresholdChange, onRedraw, yToPrice]
+    [isOverTrash, onDelete, onThresholdChange, yToPrice]
   );
 
-  // kreslení při zoom/pan (epoch) i při změně alertů
-  useEffect(() => {
-    draw();
-  }, [draw, epoch, alerts]);
-
-  // redeuce velikosti
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(() => draw());
-    ro.observe(container);
-    return () => ro.disconnect();
-  }, [draw]);
-
   return (
-    <div
-      ref={containerRef}
-      className="absolute inset-0"
-      style={{ touchAction: "none" }}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-    >
-      <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 size-full" />
+    <div ref={containerRef} className="pointer-events-none absolute inset-0">
+      <canvas
+        ref={canvasRef}
+        className="pointer-events-none absolute inset-0 size-full"
+      />
+
+      {/* Interaktivní pásy přes linky – jen ±7 px kolem čáry, zbytek
+          grafu zůstává průchozí (pan/zoom/nástroje) */}
+      {priceAlerts.map((a) => (
+        <div
+          key={a.id}
+          ref={(el) => {
+            if (el) stripsRef.current.set(a.id, el);
+            else stripsRef.current.delete(a.id);
+          }}
+          className="pointer-events-auto absolute left-0 z-20 block cursor-ns-resize"
+          style={{
+            right: 0,
+            height: 14,
+            top: -100,
+            touchAction: "none",
+          }}
+          title="Táhni pro změnu prahu alertu"
+          onPointerDown={onStripPointerDown(a)}
+          onPointerMove={onStripPointerMove}
+          onPointerUp={(e) => endDrag(e, true)}
+          onPointerCancel={(e) => endDrag(e, false)}
+        />
+      ))}
+
+      {/* Koš – objeví se u tažené linky (pozici řídí draw imperativně) */}
       <button
         ref={trashRef}
         type="button"
@@ -242,7 +312,7 @@ export function ChartAlertLines({
           e.stopPropagation();
           if (trashForRef.current) onDelete(trashForRef.current);
         }}
-        className="absolute z-30 hidden size-7 cursor-pointer items-center justify-center rounded-md border border-border/80 bg-popover/95 text-muted-foreground shadow-lg backdrop-blur transition-colors hover:bg-secondary hover:text-foreground"
+        className="pointer-events-auto absolute z-30 hidden size-7 cursor-pointer items-center justify-center rounded-md border border-border/80 bg-popover/95 text-muted-foreground shadow-lg backdrop-blur transition-colors hover:bg-secondary hover:text-foreground"
         title="Odstranit alert"
         aria-label="Odstranit alert"
       >
@@ -263,6 +333,38 @@ export function ChartAlertLines({
       </button>
     </div>
   );
+}
+
+/** Zvoneček (ikonka alertu) kreslený na canvas – 10 px, barva linky. */
+function drawBell(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  color: string
+) {
+  ctx.save();
+  ctx.translate(x, y);
+  const s = 10 / 24; // ikona v 24-jednotkovém prostoru → 10 px
+  ctx.scale(s, s);
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(12, 2.5);
+  ctx.bezierCurveTo(8.7, 2.5, 6.5, 5.1, 6.5, 8.5);
+  ctx.lineTo(6.5, 12.5);
+  ctx.lineTo(4.6, 15.6);
+  ctx.quadraticCurveTo(4.2, 16.4, 5.1, 16.4);
+  ctx.lineTo(18.9, 16.4);
+  ctx.quadraticCurveTo(19.8, 16.4, 19.4, 15.6);
+  ctx.lineTo(17.5, 12.5);
+  ctx.lineTo(17.5, 8.5);
+  ctx.bezierCurveTo(17.5, 5.1, 15.3, 2.5, 12, 2.5);
+  ctx.closePath();
+  ctx.fill();
+  // klapka
+  ctx.beginPath();
+  ctx.arc(12, 19.2, 2.1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
 
 function formatThreshold(v: number): string {

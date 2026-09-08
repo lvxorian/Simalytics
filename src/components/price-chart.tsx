@@ -630,12 +630,14 @@ export function PriceChart({
     }
 
     // Pan/zoom: přemalovat VP canvas hned teď (plynulé fitování jako
-    // ve TradingView) + uložit logický rozsah pro obnovu zoomu
+    // ve TradingView) + uložit logický rozsah pro obnovu zoomu.
+    // Alert linky se přepočítají taky – drží cenu, ne pixel.
     const onRangeChange = (range: LogicalRange | null) => {
       if (range) {
         savedLogicalRange.current = { from: range.from, to: range.to };
       }
       vpDrawRef.current();
+      alertDrawRef.current();
       // SVG overlay pravítka potřebuje React re-render jen když běží měření
       if (rulerActiveRef.current) setVpEpoch((e) => e + 1);
     };
@@ -653,6 +655,9 @@ export function PriceChart({
   // (pravítko); VP canvas se kreslí imperativně přes vpDrawRef
   const [vpEpoch, setVpEpoch] = useState(0);
   const vpDrawRef = useRef<() => void>(() => {});
+  // Imperativní draw alert linek – registruje ChartAlertLines, volá
+  // onRangeChange při zoom/pan (linka drží cenu, ne pixel)
+  const alertDrawRef = useRef<() => void>(() => {});
   // Plovoucí cenovka v režimu Linie – cena bodu pod crosshairem
   const [lineHover, setLineHover] = useState<{
     x: number;
@@ -1288,7 +1293,9 @@ export function PriceChart({
         />
 
         {/* Přetahovací čáry alertů (à la TradingView) – jen cenové alerty
-            komodity; drag mění práh, koš maže */}
+            komodity; drag mění práh, koš maže. Draw se registruje do
+            alertDrawRef → přepočet pixelů při každém zoom/pan (linka drží
+            cenu) i po rekonstrukci grafu (přepnutí TF). */}
         {alerts && alerts.length > 0 && (
           <ChartAlertLines
             alerts={alerts}
@@ -1297,9 +1304,15 @@ export function PriceChart({
             yToPrice={(y) =>
               mainSeriesRef.current?.coordinateToPrice(y) ?? null
             }
-            onRedraw={() => setVpEpoch((e) => e + 1)}
+            registerDraw={(fn) => {
+              // null = unmount (nebo rekonstrukce grafu) – nahradit no-op,
+              // ať onRangeChange po odpojení nespadne na null.current()
+              alertDrawRef.current = fn ?? (() => {});
+            }}
             onThresholdChange={(alertId, threshold) => {
-              void updateAlertThresholdAction(alertId, threshold);
+              void updateAlertThresholdAction(alertId, threshold).then(() =>
+                router.refresh()
+              );
             }}
             onDelete={(alertId) => {
               void deleteAlertAction(alertId).then(() =>
