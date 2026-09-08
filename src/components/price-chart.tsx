@@ -14,6 +14,7 @@ import {
   type Time,
   type IChartApi,
   type ISeriesApi,
+  type LogicalRange,
   type UTCTimestamp,
 } from "lightweight-charts";
 import { ChartBarDecreasing, RulerDimensionLine, X } from "lucide-react";
@@ -398,10 +399,10 @@ export function PriceChart({
           tickMarkType: TickMarkType
         ) => pragueTickLabel(time as number, tickMarkType),
       },
-      // Když je aktivní nástroj (výběr rozsahu VP nebo pravítko), zamkneme
-      // pan/zoom grafu (jako ve TV při kreslení) – tažení myší pak měří
-      handleScroll: !vpEnabled && !rulerEnabled,
-      handleScale: !vpEnabled && !rulerEnabled,
+      // Zámek pan/zoom se řídí v applyOptions efektu níže – změna nástroje
+      // nesmí rekonstruovat graf (zrušilo by to přiblížení)
+      handleScroll: true,
+      handleScale: true,
       crosshair: { mode: CrosshairMode.Normal },
       localization: {
         locale: "cs-CZ",
@@ -532,21 +533,50 @@ export function PriceChart({
       });
     }
 
-    chart.timeScale().fitContent();
+    // Obnova přiblížení po rekonstrukci grafu (přepnutí overlaye/nástroje,
+    // auto-refresh dat) – jinak by se graf pokaždé roztáhl na celou šířku.
+    // Změna timeframu záměrně znovu fitne obsah.
+    if (prevIntervalRef.current !== intervalKey) {
+      savedLogicalRange.current = null;
+      prevIntervalRef.current = intervalKey;
+    }
+    if (savedLogicalRange.current) {
+      chart.timeScale().setVisibleLogicalRange(savedLogicalRange.current);
+    } else {
+      chart.timeScale().fitContent();
+    }
 
     // Pan/zoom mění pixelové souřadnice → přepočítat overlay VP
-    const onRangeChange = () => setVpEpoch((e) => e + 1);
-    chart.timeScale().subscribeVisibleTimeRangeChange(onRangeChange);
+    // + uložit logický rozsah pro obnovu zoomu po rekonstrukci
+    const onRangeChange = (range: LogicalRange | null) => {
+      if (range) {
+        savedLogicalRange.current = { from: range.from, to: range.to };
+      }
+      setVpEpoch((e) => e + 1);
+    };
+    chart.timeScale().subscribeVisibleLogicalRangeChange(onRangeChange);
 
     return () => {
-      chart.timeScale().unsubscribeVisibleTimeRangeChange(onRangeChange);
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRangeChange);
       chart.remove();
       chartRef.current = null;
     };
-  }, [candles, mode, extras, visible, vpEnabled, rulerEnabled, intervalKey]);
+  }, [candles, mode, extras, visible, intervalKey]);
 
   // Bump při pan/zoom – přepočítá pixelovou geometrii overlayů
   const [vpEpoch, setVpEpoch] = useState(0);
+  // Uložený logický rozsah (bar indexy) – zoom přežije rekonstrukci grafu
+  const savedLogicalRange = useRef<{ from: number; to: number } | null>(null);
+  const prevIntervalRef = useRef(intervalKey);
+
+  // Zámek pan/zoom při kreslení (výběr rozsahu VP / pravítko) – přes
+  // applyOptions, NE rekonstrukcí grafu (ta by zrušila přiblížení)
+  useEffect(() => {
+    chartRef.current?.applyOptions({
+      handleScroll: !vpEnabled && !rulerEnabled,
+      handleScale: !vpEnabled && !rulerEnabled,
+    });
+  }, [vpEnabled, rulerEnabled]);
 
   // Overlay SVG pro volume profile – pozice binů se váže na pixelové
   // souřadnice cenové osy (přepočet i při pan/zoom přes vpEpoch)
@@ -575,8 +605,33 @@ export function PriceChart({
     });
   }, [profile, candles, visible, vpEpoch]);
 
-  const vpWidth = 110; // šířka profilu v px (vpravo)
   const maxBin = profile ? Math.max(...profile.bins) : 0;
+
+  // X-oblast, do níž se profil kreslí: označený rozsah (nebo celá šířka
+  // dat) – biny rostou z levého okraje pásu, jako ve TradingView
+  const [vpAreaX, setVpAreaX] = useState<{
+    x1: number;
+    x2: number;
+  } | null>(null);
+  useEffect(() => {
+    const chart = chartRef.current;
+    const container = containerRef.current;
+    if (!chart || !container || !profile) {
+      setVpAreaX(null);
+      return;
+    }
+    const ts = chart.timeScale();
+    const from = vpRange?.from ?? profileSource[0]?.time;
+    const to = vpRange?.to ?? profileSource[profileSource.length - 1]?.time;
+    if (from == null || to == null) {
+      setVpAreaX(null);
+      return;
+    }
+    const rect = container.getBoundingClientRect();
+    const x1 = ts.timeToCoordinate(from as UTCTimestamp) ?? 0;
+    const x2 = ts.timeToCoordinate(to as UTCTimestamp) ?? rect.width;
+    setVpAreaX({ x1: Math.min(x1, x2), x2: Math.max(x1, x2) });
+  }, [profile, vpRange, profileSource, candles, visible, vpEpoch]);
 
   // X-souřadnice pásu výběru (preview při tažení / potvrzený rozsah)
   const [bandX, setBandX] = useState<{ x1: number; x2: number } | null>(null);
@@ -819,7 +874,7 @@ export function PriceChart({
         />
 
         {/* SVG overlay – biny profilu, POC linka, Value Area, výběr tažením */}
-        {profile && vpGeom && (
+        {profile && vpGeom && vpAreaX && (
           <svg className="pointer-events-none absolute inset-0 size-full">
             {/* Pás vybraného rozsahu (preview tažení / potvrzený rozsah) */}
             {bandX && (
@@ -852,13 +907,13 @@ export function PriceChart({
               </g>
             )}
 
-            {/* Value Area (70 %) – jemný podklad */}
+            {/* Value Area (70 %) – jemný podklad uvnitř vybraného rozsahu */}
             <rect
-              x={0}
+              x={vpAreaX.x1}
               y={vpGeom.priceToY(
                 profile.minPrice + (profile.vaHighIndex + 1) * profile.binSize
               )}
-              width="100%"
+              width={Math.max(2, vpAreaX.x2 - vpAreaX.x1)}
               height={Math.max(
                 1,
                 vpGeom.priceToY(profile.minPrice + profile.vaLowIndex * profile.binSize) -
@@ -879,13 +934,13 @@ export function PriceChart({
                 profile.minPrice + i * profile.binSize
               );
               const barH = Math.max(1, yBottom - yTop - 1);
-              const w = (v / maxBin) * vpWidth;
+              const w = (v / maxBin) * (vpAreaX.x2 - vpAreaX.x1);
               const inVA = i >= profile.vaLowIndex && i <= profile.vaHighIndex;
               const isPoc = i === profile.pocIndex;
               return (
                 <rect
                   key={i}
-                  x={0}
+                  x={vpAreaX.x1}
                   y={yTop}
                   width={w}
                   height={barH}
@@ -903,8 +958,8 @@ export function PriceChart({
 
             {/* POC hladina – zlatá */}
             <line
-              x1={0}
-              x2="100%"
+              x1={vpAreaX.x1}
+              x2={vpAreaX.x2}
               y1={vpGeom.priceToY(profile.pocPrice)}
               y2={vpGeom.priceToY(profile.pocPrice)}
               stroke="rgba(212,167,44,0.8)"
