@@ -391,6 +391,33 @@ export default async function MarketItemPage({
               intervalKey={opt.key}
               itemId={id}
               itemName={item.name}
+              itemImageUrl={img}
+              intervalSwitches={(
+                [
+                  { key: "5m", label: "5m" },
+                  { key: "15m", label: "15m" },
+                  { key: "1h", label: "1H" },
+                  { key: "4h", label: "4H" },
+                  { key: "1d", label: "1D" },
+                  { key: "1w", label: "1W" },
+                  { key: "1M", label: "1M" },
+                ] as const
+              ).map((o) => ({
+                key: o.key,
+                label: o.label,
+                href: `/market/${id}${buildQuery({ interval: o.key, mode })}`,
+              }))}
+              modeSwitches={([
+                { key: "candles", label: "Svíčky" },
+                { key: "area", label: "Linie" },
+              ] as const).map((o) => ({
+                key: o.key,
+                label: o.label,
+                href:
+                  o.key === "candles"
+                    ? `/market/${id}${buildQuery({ interval })}`
+                    : `/market/${id}${buildQuery({ interval, mode: "area" })}`,
+              }))}
               extras={{
                 volume:
                   opt.key === "1d" || opt.key === "1w" || opt.key === "1M"

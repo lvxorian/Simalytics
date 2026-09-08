@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   AreaSeries,
   CandlestickSeries,
@@ -35,6 +36,13 @@ import {
 import { formatCompact, formatPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { ChartContextMenu } from "@/components/chart-context-menu";
+import { ItemIcon } from "@/components/item-icon";
+
+export type IntervalSwitch = {
+  key: IntervalKey;
+  label: string;
+  href: string;
+};
 
 export type VolumePoint = { time: number; value: number };
 
@@ -148,7 +156,11 @@ export function PriceChart({
   intervalKey,
   itemId,
   itemName,
+  itemImageUrl,
+  intervalSwitches,
+  modeSwitches,
 }: PriceChartProps) {
+  const router = useRouter();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   // Ref na hlavní sérii – pro převod ceny → pixel (volume profile overlay)
@@ -819,9 +831,21 @@ export function PriceChart({
           );
         })}
 
-        {/* Nástroje grafu žijí ve svislé liště u levého okraje (viz níže) */}
+        {/* Fullscreen přepínač – vpravo nahoře (v prohozených pozicích
+            s countdownem, který teď plave dole vpravo) */}
         <div className="ml-auto flex items-center gap-1.5">
-          {intervalKey && <CandleCountdown intervalKey={intervalKey} />}
+          {!isFullscreen && (
+            <button
+              type="button"
+              onClick={() => setIsFullscreen(true)}
+              title="Celá obrazovka"
+              aria-label="Celá obrazovka"
+              aria-pressed={isFullscreen}
+              className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            >
+              <Maximize2 className="size-[18px]" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -876,7 +900,7 @@ export function PriceChart({
       {/* Stabilní rodič wrapperu – při fullscreen se wrapper přemístí
           do overlaye a tady zůstane díra, kam se vrátí. Nesmí obsahovat
           žádné podmíněné sourozence (React by mohl zamíchat DOM). */}
-      <div ref={originalParentRef}>
+      <div ref={originalParentRef} className={cn(isFullscreen && "hidden")}>
         <div
           ref={chartHostRef}
           className={cn("relative", isFullscreen && "h-full")}
@@ -962,22 +986,28 @@ export function PriceChart({
               </button>
             </>
           )}
-          <div className="my-0.5 h-px w-6 bg-border" />
-          <button
-            type="button"
-            onClick={() => setIsFullscreen((v) => !v)}
-            title={isFullscreen ? "Zmenšit (Esc)" : "Celá obrazovka"}
-            aria-label="Celá obrazovka"
-            aria-pressed={isFullscreen}
-            className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-          >
-            {isFullscreen ? (
-              <Minimize2 className="size-[18px]" />
-            ) : (
-              <Maximize2 className="size-[18px]" />
-            )}
-          </button>
         </div>
+        {/* Countdown svíčky – plovoucí v pravém dolním rohu grafu
+            (prohozeno s fullscreen tlačítkem, které je teď nahoře vpravo) */}
+        {intervalKey && (
+          <div className="absolute bottom-2 right-2 z-20 rounded-md border border-border/80 bg-card/90 px-2.5 py-1.5 shadow-lg backdrop-blur">
+            <CandleCountdown intervalKey={intervalKey} />
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={() => setIsFullscreen((v) => !v)}
+          title={isFullscreen ? "Zmenšit (Esc)" : "Celá obrazovka"}
+          aria-label="Celá obrazovka"
+          aria-pressed={isFullscreen}
+          className="absolute bottom-2 right-2 z-20 flex size-8 items-center justify-center rounded-md border border-border/80 bg-card/90 text-muted-foreground shadow-lg backdrop-blur transition-colors hover:bg-secondary hover:text-foreground"
+        >
+          {isFullscreen ? (
+            <Minimize2 className="size-[18px]" />
+          ) : (
+            <Maximize2 className="size-[18px]" />
+          )}
+        </button>
         <div
           ref={containerRef}
           className={cn(
@@ -1180,28 +1210,75 @@ export function PriceChart({
         </div>
       </div>
 
-      {/* Fullscreen overlay – wrapper grafu se sem přemístí přes appendChild */}
+      {/* Fullscreen overlay – wrapper grafu se sem přemístí přes appendChild.
+          Kompletní ovládání: header s ikonou, TF, Svíčky/Linie, overlaye,
+          countdown i nástroje (žijí ve wrapperu grafu). */}
       {isFullscreen && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-background p-3">
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <div className="flex items-baseline gap-2">
-              {itemName && (
-                <span className="text-sm font-semibold">{itemName}</span>
-              )}
-              <span className="font-mono text-[11px] text-muted-foreground">
-                fullscreen · Esc zavře
-              </span>
+        <div className="fixed inset-0 z-50 flex flex-col bg-background">
+          {/* Header: ikona + název + countdown vpravo */}
+          <div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <ItemIcon url={itemImageUrl} name={itemName ?? ""} size={40} />
+              <div className="min-w-0">
+                <h2 className="truncate text-lg font-semibold tracking-tight">
+                  {itemName}
+                </h2>
+                <span className="font-mono text-[11px] text-muted-foreground">
+                  fullscreen · Esc zavře
+                </span>
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setIsFullscreen(false)}
-              title="Zmenšit (Esc)"
-              aria-label="Ukončit celou obrazovku"
-              className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-            >
-              <Minimize2 className="size-[18px]" />
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setIsFullscreen(false)}
+                title="Zmenšit (Esc)"
+                aria-label="Ukončit celou obrazovku"
+                className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              >
+                <Minimize2 className="size-[18px]" />
+              </button>
+            </div>
           </div>
+
+          {/* Toolbar: timeframy + Svíčky/Linie */}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-2">
+            <div className="no-scrollbar flex items-center gap-1 overflow-x-auto rounded-full border border-border/80 bg-card p-1">
+              {(intervalSwitches ?? []).map((o) => (
+                <button
+                  key={o.key}
+                  type="button"
+                  onClick={() => router.push(o.href)}
+                  className={cn(
+                    "shrink-0 rounded-full px-3.5 py-1.5 font-mono text-xs transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
+                    o.key === intervalKey
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-1 rounded-full border border-border/80 bg-card p-1">
+              {(modeSwitches ?? []).map((o) => (
+                <button
+                  key={o.key}
+                  type="button"
+                  onClick={() => router.push(o.href)}
+                  className={cn(
+                    "rounded-full px-3.5 py-1.5 text-xs transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
+                    o.key === mode
+                      ? "bg-secondary text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div ref={fullscreenRef} className="relative min-h-0 flex-1" />
         </div>
       )}
@@ -1223,4 +1300,10 @@ type PriceChartProps = {
   itemId?: number;
   /** Název položky pro zobrazení v nabídce. */
   itemName?: string;
+  /** URL ikony komodity (fullscreen header). */
+  itemImageUrl?: string | null;
+  /** Přepínače timeframu pro fullscreen (href = router.push). */
+  intervalSwitches?: IntervalSwitch[];
+  /** Přepínač Svíčky/Linie pro fullscreen (href = router.push). */
+  modeSwitches?: { key: "candles" | "area"; label: string; href: string }[];
 };
