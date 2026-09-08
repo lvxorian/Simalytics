@@ -121,12 +121,19 @@
 }
 
 .animate-marquee {
-  /* 420 s na kopii ≈ 60 px/s – velmi pomalé, klidně čitelné tempo */
-  animation: marquee var(--ticker-speed, 420s) linear infinite;
+  /* 360 s na kopii ≈ 65 px/s – velmi pomalé, klidně čitelné tempo */
+  animation: marquee var(--ticker-speed, 360s) linear infinite;
   will-change: transform;
 }
 
-.ticker-hover-pause:hover .animate-marquee {
+/* Druhá řada jede opačným směrem (moderní burzovi tickery) */
+.animate-marquee-reverse {
+  animation: marquee var(--ticker-speed, 360s) linear infinite reverse;
+  will-change: transform;
+}
+
+.ticker-hover-pause:hover .animate-marquee,
+.ticker-hover-pause:hover .animate-marquee-reverse {
   animation-play-state: paused;
 }
 
