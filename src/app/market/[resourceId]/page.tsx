@@ -33,7 +33,7 @@ import {
 } from "@/lib/data";
 import { getEvents, getMarketSummary } from "@/lib/simcotools";
 import { computeSignal } from "@/lib/signals";
-import { formatCompact, formatPrice } from "@/lib/format";
+import { formatCompact, formatPrice, formatRelativeAge } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -86,6 +86,8 @@ export default async function MarketItemPage({
   let volume: { time: number; value: number }[] | undefined;
   let vwap: { time: number; value: number }[] | undefined;
   let dataSource = "";
+  // Raw ticky (intraday i dnešek u 1D) – čas posledního obchodu
+  let ticks: { recorded_at: string; price: number }[] = [];
   // Zdroj svíček pro Fixed Range Volume Profile (s objemy, kde existují)
   let vpCandles: Candle[] = [];
 
@@ -103,7 +105,7 @@ export default async function MarketItemPage({
 
     // Dnešní (rozpracovaná) svíčka z našich ticků – Simco Tools ji
     // publikuje až po skončení dne
-    const ticks = await getPriceHistory(id, 0, 2);
+    ticks = await getPriceHistory(id, 0, 2);
     const todayStart = Math.floor(
       new Date(new Date().toISOString().slice(0, 10) + "T00:00:00Z").getTime() /
         1000
@@ -141,11 +143,37 @@ export default async function MarketItemPage({
         opt.key === "1w" ? "týdenní svíčky · agregace z denních" : "měsíční svíčky · agregace z denních";
     }
   } else {
-    const ticks = await getPriceHistory(id, 0, opt.days);
+    ticks = await getPriceHistory(id, 0, opt.days);
     candles = toCandles(ticks, opt.seconds);
+    // „Živý pravý okraj“: pokud od posledního obchodu uběhlo víc, protáhneme
+    // graf plochou rozpracovanou svíčkou až do aktuálního bucketu (jako na
+    // burze – klidný trh = vodorovná linka, ne díra na konci grafu).
+    // Bez toho působí graf „zastarale“, i když je to jen klid na trhu.
+    if (candles.length > 0) {
+      const nowSec = Math.floor(Date.now() / 1000);
+      const curStart = Math.floor(nowSec / opt.seconds) * opt.seconds;
+      const last = candles[candles.length - 1];
+      for (let t = last.time + opt.seconds; t <= curStart; t += opt.seconds) {
+        candles.push({
+          time: t,
+          open: last.close,
+          high: last.close,
+          low: last.close,
+          close: last.close,
+        });
+      }
+    }
     vpCandles = candles; // intraday: proxy objem = 1 tick (spočítá klient)
     dataSource = `ticky · posledních ${opt.days} dní`;
   }
+
+  // Čas posledního obchodu (z raw ticků, rostoucí řazení) –
+  // ukazuje se v hero, aby byl jasný rozdíl mezi „klidným trhem“
+  // a „zastaralými daty“
+  const lastTradeMs =
+    ticks.length > 0
+      ? new Date(ticks[ticks.length - 1].recorded_at).getTime()
+      : null;
 
   // Objemy pro 1W/1M (agregace denních objemů)
   let displayVolume = volume;
@@ -266,6 +294,14 @@ export default async function MarketItemPage({
             </span>
             <ChangeBadge value={change24h} />
             <span className="text-xs text-muted-foreground">24h změna</span>
+            {lastTradeMs != null && (
+              <span
+                className="text-xs text-muted-foreground"
+                title="Čas posledního obchodu této komodity. Na klidném trhu cena dlouho nezmizí – není to zastaralá data."
+              >
+                · poslední obchod {formatRelativeAge(lastTradeMs)}
+              </span>
+            )}
           </div>
         </div>
       </div>

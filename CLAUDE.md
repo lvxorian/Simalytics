@@ -133,6 +133,11 @@ src/components/            # vizní komponenty (viz níže)
   candles vs area) počítat s tím, že snap čte `candles` prop.
 - **Fáze ekonomiky**: dle hry `recession` = „Recese 📉", `normal` =
   „Stabilní 😐", `boom` = „Růst 📈" (PHASE_LABELS v statistiky/page.tsx).
+- **„Živý pravý okraj“ grafu**: `datetime` ticků ze Simco Tools je čas
+  POSLEDNÍHO OBCHODU (ne dotazu) – klidný trh znamená ticky staré i hodiny
+  (medián ~100 min). Intraday graf proto protahuje plochou rozpracovanou
+  svíčku až do aktuálního bucketu (market page) a hero ukazuje „poslední
+  obchod před X min“ (`formatRelativeAge`). Není to zastaralá data.
 - **DB numeric**: postgres.js vrací numeric jako string — v `data.ts` se
   vždy konvertuje na Number na hranici. Timestamptz → ISO string.
 - **Simco Tools**: fetch vždy server-side s `next: { revalidate }` kvůli

@@ -41,6 +41,17 @@ export function formatDateTime(iso: string | null | undefined): string {
   }).format(new Date(iso));
 }
 
+/** Relativní stáří: „právě teď“, „před 8 min“, „před 1 h 12 min“. */
+export function formatRelativeAge(ms: number | null | undefined): string {
+  if (!ms) return "–";
+  const min = Math.max(0, Math.round((Date.now() - ms) / 60_000));
+  if (min < 1) return "právě teď";
+  if (min < 60) return `před ${min} min`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m > 0 ? `před ${h} h ${m} min` : `před ${h} h`;
+}
+
 export const QUALITY_LABELS: Record<Quality, string> = {
   0: "Q0 (normální)",
   1: "Q1",
