@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import {
   aggregateDaily,
   aggregateVolumePoints,
+  applyContinuity,
   resolveIntervalOption,
   toCandles,
   type Candle,
@@ -114,6 +115,9 @@ export default async function MarketItemPage({
     if (today && today.time > lastStored) {
       dailyCandles.push(today);
     }
+    // Kontinuita i pro denní svíčky (open = prev close) – jinak vypadají
+    // denní/TW grafy „odtržené“ oproti reálným burzovním grafům
+    candles = applyContinuity(dailyCandles);
     dataSource = "denní svíčky · Simco Tools";
 
     if (opt.key === "1d") {
@@ -126,7 +130,7 @@ export default async function MarketItemPage({
         .map((c) => ({ time: dayToUnix(c.day), value: c.vwap! }));
       if (today) dataSource = "denní svíčky + dnešní ticky";
     } else {
-      // weekly / monthly agregace
+      // weekly / monthly agregace (aggregateDaily už vrací svíčky s kontinuitou)
       candles = aggregateDaily(dailyCandles, opt.key);
       dataSource =
         opt.key === "1w" ? "týdenní svíčky · agregace z denních" : "měsíční svíčky · agregace z denních";

@@ -84,12 +84,15 @@ src/components/            # vizní komponenty (viz níže)
   (ink navy pozadí, modrá primár #5b8def, IBM Plex Sans/Mono).
 - **Grafy**: TradingView Lightweight Charts v5 API — `chart.addSeries(
   CandlestickSeries, …)`, NE staré `addCandlestickSeries()`. Čas = unix
-  sekundy UTC. Svíčky z `toCandles()` mají kontinuitu (open = předchozí
-  close, prázdné buckety = plochá svíčka) — neměnit zpět, jinak 5m graf
-  vypadá roztříštěně.
+  sekundy UTC. Svíčky z `toCandles()` i `aggregateDaily()` mají kontinuitu
+  (open = předchozí close, prázdné buckety = plochá svíčka) — neměnit zpět,
+  jinak graf vypadá roztříštěně. Kontinuita denních svíček se aplikuje
+  přes `applyContinuity()` v market page (Simco Tools data jsou „surová").
 - **Ticker tape**: dvě řady marquee proti sobě (CSS keyframes v globals.css,
   `--ticker-speed: 360s`). Hover pauza přes `.ticker-hover-pause`. Uživatel
-  chce POMALÉ tempo — nezrychlovat.
+  chce POMALÉ tempo — nezrychlovat. Skleněný gradient design: `.ticker-tape`
+  (gradientní pás + duhová top linka) a `.ticker-tile` / `-up` / `-down`
+  (tónované dlaždice) — barvy jen přes tyto třídy, ne ad-hoc bg.
 - **Fáze ekonomiky**: dle hry `recession` = „Recese 📉", `normal` =
   „Stabilní 😐", `boom` = „Růst 📈" (PHASE_LABELS v statistiky/page.tsx).
 - **DB numeric**: postgres.js vrací numeric jako string — v `data.ts` se

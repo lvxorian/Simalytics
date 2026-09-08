@@ -55,7 +55,8 @@ export async function TickerTape() {
           change24h: base && base > 0 ? ((r.price - base) / base) * 100 : null,
         };
       })
-      .filter((e) => e.change24h !== null)
+      // Seřadíme dle |změny|, ale NEZAHODÍME položky bez 24h změny –
+      // ty jdou na konec (lista má obsah i krátce po nasazení)
       .sort(
         (a, b) => Math.abs(b.change24h ?? 0) - Math.abs(a.change24h ?? 0)
       );
@@ -83,14 +84,14 @@ export async function TickerTape() {
 
   return (
     <div
-      className="ticker-hover-pause relative border-b border-border/70 bg-card/40 backdrop-blur-sm"
+      className="ticker-hover-pause ticker-tape relative border-b border-border/70 backdrop-blur-sm"
       role="marquee"
       aria-label="Běžící ceny komodit"
     >
       {/* Horní řada – pohyby (→) */}
       <TickerRow entries={interwoven} sparklines keyPrefix="mv" reverse={false} />
-      {/* Dolní řada – objemy (←), jen tmavší a decentnější */}
-      <div className="border-t border-border/40 bg-background/40">
+      {/* Dolní řada – objemy (←), decentnější */}
+      <div className="border-t border-border/40 bg-background/30">
         <TickerRow entries={volumes} keyPrefix="vol" reverse showVolume />
       </div>
     </div>
@@ -136,21 +137,21 @@ function TickerRow({
                     href={`/market/${entry.id}`}
                     tabIndex={copy === 1 ? -1 : undefined}
                     className={cn(
-                      "group relative m-1.5 flex items-center gap-2.5 rounded-xl border px-3 py-1.5 transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
-                      "hover:z-20 hover:-translate-y-0.5 hover:border-primary/40 hover:bg-accent/80 hover:shadow-lg hover:shadow-black/30",
+                      "ticker-tile group relative m-1.5 flex items-center gap-2.5 rounded-xl border px-3 py-1.5 transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
+                      "hover:z-20 hover:-translate-y-0.5",
                       up
-                        ? "border-up/15 bg-up/[0.04]"
+                        ? "ticker-tile-up border-up/20"
                         : down
-                          ? "border-down/15 bg-down/[0.04]"
-                          : "border-border/60 bg-card"
+                          ? "ticker-tile-down border-down/20"
+                          : "border-border/60"
                     )}
                   >
-                    {/* barevná levá signatura směru */}
+                    {/* barevná levá signatura směru – gradientní proužek */}
                     <span
                       className={cn(
                         "absolute inset-y-1 left-0 w-0.5 rounded-full",
-                        up && "bg-up/70",
-                        down && "bg-down/70",
+                        up && "bg-gradient-to-b from-up to-up/40",
+                        down && "bg-gradient-to-b from-down to-down/40",
                         !up && !down && "bg-border"
                       )}
                     />

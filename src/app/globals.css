@@ -110,7 +110,104 @@
     radial-gradient(46rem 28rem at 85% -8%, rgb(34 171 148 / 0.04), transparent 60%);
 }
 
-/* ── Ticker tape ─────────────────────────────────────────────── */
+/* ── Ticker tape – skleněný gradientní pás ───────────────────── */
+.ticker-tape {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--card) 92%, white 8%) 0%,
+      var(--card) 34%,
+      color-mix(in oklab, var(--card) 88%, black 12%) 100%
+    );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 8px 24px -12px rgb(0 0 0 / 0.6);
+}
+
+/* Jemný duhový přeliv nahoře – „burzovní“ linka oddělující hlavičku */
+.ticker-tape::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, var(--up) 55%, transparent) 18%,
+    color-mix(in oklab, var(--primary) 65%, transparent) 50%,
+    color-mix(in oklab, var(--down) 55%, transparent) 82%,
+    transparent 100%
+  );
+  opacity: 0.7;
+}
+
+/* Dlaždice – sklo s jemným gradientem místo ploché barvy */
+.ticker-tile {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.045) 0%,
+    rgba(255, 255, 255, 0.012) 100%
+  ),
+  var(--card);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 1px 2px rgb(0 0 0 / 0.35);
+}
+
+.ticker-tile:hover {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.07) 0%,
+      rgba(255, 255, 255, 0.02) 100%
+    ),
+    var(--accent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    0 6px 18px -6px rgb(0 0 0 / 0.55);
+}
+
+/* Barevné varianty dlaždic dle směru (tónované gradientní sklo) */
+.ticker-tile-up {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--up) 9%, transparent) 0%,
+      color-mix(in oklab, var(--up) 3%, transparent) 100%
+    ),
+    var(--card);
+}
+
+.ticker-tile-up:hover {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--up) 14%, transparent) 0%,
+      color-mix(in oklab, var(--up) 5%, transparent) 100%
+    ),
+    var(--accent);
+}
+
+.ticker-tile-down {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--down) 9%, transparent) 0%,
+      color-mix(in oklab, var(--down) 3%, transparent) 100%
+    ),
+    var(--card);
+}
+
+.ticker-tile-down:hover {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--down) 14%, transparent) 0%,
+      color-mix(in oklab, var(--down) 5%, transparent) 100%
+    ),
+    var(--accent);
+}
+
 @keyframes marquee {
   from {
     transform: translateX(0);

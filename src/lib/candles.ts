@@ -34,12 +34,52 @@ export function toCandles(
   ticks: PriceTick[],
   intervalSeconds: number
 ): Candle[] {
+  return applyContinuity(buildRawBuckets(ticks, intervalSeconds));
+}
+
+/**
+ * Posune open každé svíčky na close předchozí (kontinuita jako na reálné
+ * burze – následující svíčka začíná tam, kde předchozí končí). Wick zůstává
+ * na skutečných high/low, high/low zahrnuje i nové open.
+ * Exportováno – používá i market page pro denní svíčky ze Simco Tools.
+ */
+export function applyContinuity(raw: Candle[]): Candle[] {
+  const out: Candle[] = [];
+  let prevClose: number | null = null;
+
+  for (const c of raw) {
+    const open = prevClose ?? c.open;
+    out.push({
+      time: c.time,
+      open,
+      high: Math.max(c.high, open),
+      low: Math.min(c.low, open),
+      close: c.close,
+    });
+    prevClose = c.close;
+  }
+
+  return out;
+}
+
+/**
+ * Sesbírá ticky do bucketů – bez kontinuity, čisté OHLC per bucket.
+ * Open bucketu = PRVNÍ tick v bucketu (ne poslední), aby se barva svíčky
+ * počítala ze skutečného pohybu uvnitř bucketu.
+ */
+function buildRawBuckets(
+  ticks: PriceTick[],
+  intervalSeconds: number
+): Candle[] {
   const sorted = [...ticks].sort(
     (a, b) =>
       new Date(a.recorded_at).getTime() - new Date(b.recorded_at).getTime()
   );
 
-  const buckets = new Map<number, { high: number; low: number; close: number }>();
+  const buckets = new Map<
+    number,
+    { open: number; high: number; low: number; close: number }
+  >();
 
   for (const tick of sorted) {
     const timeSec = Math.floor(new Date(tick.recorded_at).getTime() / 1000);
@@ -48,7 +88,12 @@ export function toCandles(
 
     const existing = buckets.get(bucketStart);
     if (!existing) {
-      buckets.set(bucketStart, { high: price, low: price, close: price });
+      buckets.set(bucketStart, {
+        open: price, // open = PRVNÍ tick v bucketu (skutečný pohyb uvnitř)
+        high: price,
+        low: price,
+        close: price,
+      });
     } else {
       existing.high = Math.max(existing.high, price);
       existing.low = Math.min(existing.low, price);
@@ -63,7 +108,6 @@ export function toCandles(
   const last = starts[starts.length - 1];
 
   const out: Candle[] = [];
-  let prevClose: number | null = null;
 
   for (
     let t = first;
@@ -71,19 +115,12 @@ export function toCandles(
     t += intervalSeconds
   ) {
     const bucket = buckets.get(t);
-    const open = prevClose ?? bucket?.close ?? 0;
 
     if (bucket) {
-      out.push({
-        time: t,
-        open,
-        high: Math.max(bucket.high, open),
-        low: Math.min(bucket.low, open),
-        close: bucket.close,
-      });
-      prevClose = bucket.close;
-    } else if (prevClose !== null) {
+      out.push({ time: t, ...bucket });
+    } else if (out.length > 0) {
       // bucket bez obchodů – plochá svíčka na předchozím close
+      const prevClose = out[out.length - 1].close;
       out.push({
         time: t,
         open: prevClose,
@@ -134,6 +171,14 @@ export function aggregateVolumePoints(
  * měsíční (1. den měsíce). `mode` určuje velikost bucketu.
  */
 export function aggregateDaily(
+  daily: Candle[],
+  mode: "1w" | "1M"
+): Candle[] {
+  return applyContinuity(aggregateDailyRaw(daily, mode));
+}
+
+/** Agregace bez kontinuity – open bucketu = open prvního dne. */
+function aggregateDailyRaw(
   daily: Candle[],
   mode: "1w" | "1M"
 ): Candle[] {
