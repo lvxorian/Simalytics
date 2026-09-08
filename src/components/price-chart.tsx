@@ -9,7 +9,9 @@ import {
   HistogramSeries,
   LineSeries,
   LineStyle,
+  TickMarkType,
   createChart,
+  type Time,
   type IChartApi,
   type ISeriesApi,
   type UTCTimestamp,
@@ -49,6 +51,53 @@ const OVERLAY_META = [
 ] as const;
 
 type OverlayKey = (typeof OVERLAY_META)[number]["key"];
+
+// ── Časová pásma – osa a crosshair v pražském čase ──────────────────
+// Lightweight Charts vykresluje timestampy doslova (bez konverze pásma),
+// takže UTC data by se uživateli jevila o 2 h „zastaralá“. Data držíme
+// v UTC (výpočty, agregace, countdown), jen formattery osy převádějí
+// na Europe/Prague – Intl zohledňuje letní čas.
+
+const fmtHM = new Intl.DateTimeFormat("cs-CZ", {
+  timeZone: "Europe/Prague",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+const fmtDayMonth = new Intl.DateTimeFormat("cs-CZ", {
+  timeZone: "Europe/Prague",
+  day: "numeric",
+  month: "numeric",
+});
+const fmtMonthShort = new Intl.DateTimeFormat("cs-CZ", {
+  timeZone: "Europe/Prague",
+  month: "short",
+});
+const fmtYear = new Intl.DateTimeFormat("cs-CZ", {
+  timeZone: "Europe/Prague",
+  year: "numeric",
+});
+const fmtDayMonthYear = new Intl.DateTimeFormat("cs-CZ", {
+  timeZone: "Europe/Prague",
+  day: "numeric",
+  month: "numeric",
+  year: "numeric",
+});
+
+/** Čas osy (unix sekundy) → popisek v pražském čase dle váhy ticku. */
+function pragueTickLabel(time: number, tickMarkType: TickMarkType): string {
+  const d = new Date(time * 1000);
+  switch (tickMarkType) {
+    case TickMarkType.Year:
+      return fmtYear.format(d);
+    case TickMarkType.Month:
+      return fmtMonthShort.format(d);
+    case TickMarkType.DayOfMonth:
+      return fmtDayMonth.format(d);
+    default:
+      return fmtHM.format(d);
+  }
+}
 
 /** České skloňování „svíčka“ (1 svíčka, 2–4 svíčky, 5+ svíček). */
 function candleWord(n: number): string {
@@ -343,13 +392,29 @@ export function PriceChart({
         borderColor: "rgba(138,147,166,0.15)",
         timeVisible: true,
         secondsVisible: false,
+        // Osa v pražském čase (data jsou UTC, formattery převádějí)
+        tickMarkFormatter: (
+          time: Time,
+          tickMarkType: TickMarkType
+        ) => pragueTickLabel(time as number, tickMarkType),
       },
       // Když je aktivní nástroj (výběr rozsahu VP nebo pravítko), zamkneme
       // pan/zoom grafu (jako ve TV při kreslení) – tažení myší pak měří
       handleScroll: !vpEnabled && !rulerEnabled,
       handleScale: !vpEnabled && !rulerEnabled,
       crosshair: { mode: CrosshairMode.Normal },
-      localization: { locale: "cs-CZ" },
+      localization: {
+        locale: "cs-CZ",
+        // Crosshair label – denní+ TF jen datum, intraday i s časem (Praha)
+        timeFormatter: (time: Time) => {
+          const d = new Date((time as number) * 1000);
+          const dailyOnly =
+            intervalKey === "1d" || intervalKey === "1w" || intervalKey === "1M";
+          return dailyOnly
+            ? fmtDayMonthYear.format(d)
+            : `${fmtDayMonth.format(d)} ${fmtHM.format(d)}`;
+        },
+      },
     });
     chartRef.current = chart;
 
@@ -478,7 +543,7 @@ export function PriceChart({
       chart.remove();
       chartRef.current = null;
     };
-  }, [candles, mode, extras, visible, vpEnabled, rulerEnabled]);
+  }, [candles, mode, extras, visible, vpEnabled, rulerEnabled, intervalKey]);
 
   // Bump při pan/zoom – přepočítá pixelovou geometrii overlayů
   const [vpEpoch, setVpEpoch] = useState(0);

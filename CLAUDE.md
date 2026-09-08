@@ -84,7 +84,10 @@ src/components/            # vizní komponenty (viz níže)
   (ink navy pozadí, modrá primár #5b8def, IBM Plex Sans/Mono).
 - **Grafy**: TradingView Lightweight Charts v5 API — `chart.addSeries(
   CandlestickSeries, …)`, NE staré `addCandlestickSeries()`. Čas = unix
-  sekundy UTC. Svíčky z `toCandles()` i `aggregateDaily()` mají kontinuitu
+  sekundy UTC (data NIKDY nepřevádět na jiný offset), ale osa a crosshair
+  se formattují do Europe/Prague přes `tickMarkFormatter` +
+  `localization.timeFormatter` v `price-chart.tsx` (Intl zohlední
+  letní čas; jinak by grafy působily o 2 h „zastarale“). Svíčky z `toCandles()` i `aggregateDaily()` mají kontinuitu
   (open = předchozí close, prázdné buckety = plochá svíčka) — neměnit zpět,
   jinak graf vypadá roztříštěně. Kontinuita denních svíček se aplikuje
   přes `applyContinuity()` v market page (Simco Tools data jsou „surová").
