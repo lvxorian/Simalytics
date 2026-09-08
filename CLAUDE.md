@@ -159,8 +159,10 @@ src/components/            # vizní komponenty (viz níže)
   countdown v headeru; wrapper grafu se přemístí
   přes appendChild
   do overlaye (chart se NERE-MOUNTUJE – zoom/nástroje přežijí) a po
-  zavření se vrátí do `originalParentRef`. Esc = nejdřív zruš měření,
-  pak zavři fullscreen. `containerRef` musí zůstat uvnitř `chartHostRef`
+  zavření se vrátí do `originalParentRef`. Klávesy: F = fullscreen
+  toggle (ignoruje fokus ve vstupních polích), Esc = nejdřív zruš
+  měření, pak zavři fullscreen. `containerRef` musí zůstat uvnitř
+  `chartHostRef`
   (autoSize přepočítá sám; geometrii overlayů bumpne vpEpoch).
 - **Auto-refresh dat**: `AutoRefresh` (router.refresh()) na market page
   každých 20 s + okamžitý refresh při návratu na kartu (visibilitychange –

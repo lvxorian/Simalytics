@@ -972,11 +972,28 @@ export function PriceChart({
     setRulerGeom({ ax, ay, bx, by, width: rect.width });
   }, [rulerActive, candles, visible, vpEpoch]);
 
-  // Esc: nejdřív deaktivuj nástroj / zruš měření, pak odvyber objekt,
-  // ve fullscreen pak Esc minimalizuje graf. Připnutý VP objekt Esc
-  // nemaže (jen odvybere) – mazání je na koši.
+  // Klávesové zkratky:
+  // Esc – nejdřív deaktivuj nástroj / zruš měření, pak odvyber objekt,
+  //       ve fullscreen pak minimalizuje graf. Připnutý VP objekt Esc
+  //       nemaže (jen odvybere) – mazání je na koši.
+  // F   – přepne fullscreen (jen když fokus není ve vstupním poli, ať
+  //       ruší psaní poznámek/alertů)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.key === "f" || e.key === "F") {
+        const target = e.target as HTMLElement | null;
+        const typing =
+          target &&
+          (target.tagName === "INPUT" ||
+            target.tagName === "TEXTAREA" ||
+            target.tagName === "SELECT" ||
+            target.isContentEditable);
+        if (!typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          e.preventDefault();
+          setIsFullscreen((v) => !v);
+        }
+        return;
+      }
       if (e.key !== "Escape") return;
       if (vpTool || rulerEnabled) {
         rulerAnchor.current = null;
@@ -1038,10 +1055,10 @@ export function PriceChart({
             <button
               type="button"
               onClick={() => setIsFullscreen(true)}
-              title="Celá obrazovka"
+              title="Celá obrazovka (F)"
               aria-label="Celá obrazovka"
               aria-pressed={isFullscreen}
-              className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              className="flex size-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
             >
               <Maximize2 className="size-[18px]" />
             </button>
@@ -1207,7 +1224,7 @@ export function PriceChart({
           }}
           title="Odstranit Volume Profile"
           aria-label="Odstranit Volume Profile"
-          className="absolute z-30 flex size-7 -translate-x-1/2 items-center justify-center rounded-md border border-border/80 bg-popover/95 text-muted-foreground shadow-lg backdrop-blur transition-colors hover:bg-secondary hover:text-foreground"
+          className="absolute z-30 flex size-7 -translate-x-1/2 cursor-pointer items-center justify-center rounded-md border border-border/80 bg-popover/95 text-muted-foreground shadow-lg backdrop-blur transition-colors hover:bg-secondary hover:text-foreground"
           style={{ top: 10, display: "none" }}
         >
           <Trash2 className="size-4" />
@@ -1232,13 +1249,14 @@ export function PriceChart({
         />
 
         {/* Cenovka přichyceného bodu – jen režim Linie (u svíček crosshair
-            label na ose stačí, tady chybí orientace) */}
+            label na ose stačí, tady chybí orientace). Větší odsazení nahoru,
+            ať nepřekrývá křivku grafu. */}
         {mode === "area" && lineHover && (
           <div
             className="pointer-events-none absolute z-10 -translate-x-1/2 rounded-md border border-border/80 bg-popover/95 px-1.5 py-0.5 font-mono text-[11px] font-medium tabular-nums text-foreground shadow-md backdrop-blur"
             style={{
               left: lineHover.x,
-              top: Math.max(4, lineHover.y - 26),
+              top: Math.max(4, lineHover.y - 48),
             }}
           >
             {formatPrice(lineHover.price)}
@@ -1379,7 +1397,7 @@ export function PriceChart({
                 onClick={() => setIsFullscreen(false)}
                 title="Zmenšit (Esc)"
                 aria-label="Ukončit celou obrazovku"
-                className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                className="flex size-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
               >
                 <Minimize2 className="size-[18px]" />
               </button>
