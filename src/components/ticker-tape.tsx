@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { ItemIcon } from "@/components/item-icon";
-import { getLatestPrices, getPricesAround24hAgo, getSparklines } from "@/lib/data";
+import { getLatestPrices, getLatestVwaps, getPricesAround24hAgo } from "@/lib/data";
 import { formatPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -10,8 +10,9 @@ type TickerEntry = {
   name: string;
   image_url: string | null;
   price: number;
-  quantity: number | null;
   change24h: number | null;
+  /** Denní VWAP (kvalita 0) – základ divergence vs. fair value. */
+  vwap: number | null;
 };
 
 /** Malý caret (▲/▼) jako v reálných tickerech. */
@@ -28,9 +29,10 @@ function Caret({ up, className }: { up: boolean; className?: string }) {
 }
 
 /**
- * Moderní ticker ve stylu burzovi platforem – dvě řady jedoucí proti
- * sobě (pohyby vs. objem), dlaždice s ikonou, cenou, změnou a
- * sparklinou. Hover zastaví řadu a zvýrazní dlaždici.
+ * Ticker ve stylu burzovních platforem – JEDNA řada se všemi komoditami
+ * (seřazeno dle |24h změny|, položky bez změny na konci). Dlaždice:
+ * ikona, cena, 24h změna a divergence vs. denní VWAP (fair value).
+ * Hover zastaví řadu a zvýrazní dlaždici.
  */
 export async function TickerTape() {
   let entries: TickerEntry[] = [];
@@ -38,49 +40,36 @@ export async function TickerTape() {
   try {
     const latest = await getLatestPrices(0);
     const ids = latest.map((r) => r.item_id);
-    const [dayAgo, sparks] = await Promise.all([
+    const [dayAgo, vwaps] = await Promise.all([
       getPricesAround24hAgo(ids),
-      getSparklines(ids, 0, 24, 20),
+      getLatestVwaps(ids, 0),
     ]);
 
     entries = latest
       .map((r) => {
         const base = dayAgo.get(r.item_id);
+        const vwap = vwaps.get(r.item_id) ?? null;
         return {
           id: r.item_id,
           name: r.name,
           image_url: r.image_url,
           price: r.price,
-          quantity: r.quantity,
           change24h: base && base > 0 ? ((r.price - base) / base) * 100 : null,
+          vwap: vwap && vwap > 0 ? vwap : null,
         };
       })
-      // Seřadíme dle |změny|, ale NEZAHODÍME položky bez 24h změny –
-      // ty jdou na konec (lista má obsah i krátce po nasazení)
-      .sort(
-        (a, b) => Math.abs(b.change24h ?? 0) - Math.abs(a.change24h ?? 0)
-      );
+      // Největší pohyby vpřed, položky bez 24h změny na konec –
+      // NIC se nezahazuje, lista má vždy obsah celého trhu
+      .sort((a, b) => {
+        const key = (e: TickerEntry) =>
+          e.change24h === null ? -1 : Math.abs(e.change24h);
+        return key(b) - key(a);
+      });
   } catch {
     return null; // DB nedostupná → lista se prostě nezobrazí
   }
 
   if (entries.length === 0) return null;
-
-  // Horní řada: pohyby (gainers i losers střídané pro vizuální rytmus)
-  const movers = entries.slice(0, 18);
-  const interwoven: TickerEntry[] = [];
-  const gainers = movers.filter((e) => (e.change24h ?? 0) > 0);
-  const losers = movers.filter((e) => (e.change24h ?? 0) < 0);
-  const maxLen = Math.max(gainers.length, losers.length);
-  for (let i = 0; i < maxLen; i++) {
-    if (gainers[i]) interwoven.push(gainers[i]);
-    if (losers[i]) interwoven.push(losers[i]);
-  }
-
-  // Dolní řada: největší objemy (obchodní aktivita)
-  const volumes = [...entries]
-    .sort((a, b) => (b.quantity ?? 0) - (a.quantity ?? 0))
-    .slice(0, 18);
 
   return (
     <div
@@ -88,12 +77,7 @@ export async function TickerTape() {
       role="marquee"
       aria-label="Běžící ceny komodit"
     >
-      {/* Horní řada – pohyby (→) */}
-      <TickerRow entries={interwoven} sparklines keyPrefix="mv" reverse={false} />
-      {/* Dolní řada – objemy (←), decentnější */}
-      <div className="border-t border-border/40 bg-background/30">
-        <TickerRow entries={volumes} keyPrefix="vol" reverse showVolume />
-      </div>
+      <TickerRow entries={entries} keyPrefix="tk" />
     </div>
   );
 }
@@ -101,17 +85,14 @@ export async function TickerTape() {
 function TickerRow({
   entries,
   keyPrefix,
-  reverse,
-  showVolume = false,
-  sparklines = false,
 }: {
   entries: TickerEntry[];
   keyPrefix: string;
-  reverse: boolean;
-  showVolume?: boolean;
-  sparklines?: boolean;
 }) {
-  // Dvojnásobný obsah = plynulá nekonečná smyčka (translateX(-50%))
+  // Dvojnásobný obsah = plynulá nekonečná smyčka (translateX(-50%)).
+  // Rychlost škálujeme s délkou řady (~10 s na dlaždici), aby px/s
+  // tempo zůstalo stejné jako u původní krátké listy – POMALÉ.
+  const speed = `${Math.max(360, entries.length * 10)}s`;
   const copies = [0, 1];
 
   return (
@@ -121,16 +102,22 @@ function TickerRow({
       <div className="pointer-events-none absolute inset-y-0 right-0 z-16 w-16 bg-gradient-to-l from-background/90 to-transparent" />
 
       <div
-        className={cn(
-          "flex w-max items-center",
-          reverse ? "animate-marquee-reverse" : "animate-marquee"
-        )}
+        className="animate-marquee flex w-max items-center"
+        style={{ "--ticker-speed": speed } as React.CSSProperties}
       >
         {copies.map((copy) => (
           <ul key={`${keyPrefix}-${copy}`} aria-hidden={copy === 1} className="flex items-center">
             {entries.map((entry) => {
               const up = (entry.change24h ?? 0) > 0;
               const down = (entry.change24h ?? 0) < 0;
+              // Divergence vs. denní VWAP: pod VWAPem = relativně levné (up),
+              // nad = drahé (down) – konzistentní se skenerem příležitostí
+              const vwapDiv =
+                entry.vwap != null && entry.vwap > 0
+                  ? ((entry.price - entry.vwap) / entry.vwap) * 100
+                  : null;
+              const cheap = vwapDiv !== null && vwapDiv < 0;
+
               return (
                 <li key={`${keyPrefix}-${copy}-${entry.id}`}>
                   <Link
@@ -182,12 +169,19 @@ function TickerRow({
                       </div>
                     </div>
 
-                    {showVolume && entry.quantity != null && (
-                      <span className="ml-1 hidden shrink-0 rounded-md bg-secondary/70 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground sm:block">
-                        {new Intl.NumberFormat("cs-CZ", {
-                          notation: "compact",
-                          maximumFractionDigits: 1,
-                        }).format(entry.quantity)}
+                    {/* VWAP divergence – „fair value“ metrika jako na burze */}
+                    {vwapDiv !== null && (
+                      <span
+                        title={`Cena vs. denní VWAP (Q0): ${vwapDiv > 0 ? "+" : ""}${vwapDiv.toFixed(1)} % – ${
+                          cheap ? "pod fair value (relativně levná)" : "nad fair value (relativně drahá)"
+                        }`}
+                        className={cn(
+                          "ml-1 hidden shrink-0 rounded-md px-1.5 py-0.5 font-mono text-[10px] sm:block",
+                          cheap ? "bg-up/10 text-up" : "bg-down/10 text-down"
+                        )}
+                      >
+                        VWAP {vwapDiv > 0 ? "+" : "−"}
+                        {Math.abs(vwapDiv).toFixed(1)} %
                       </span>
                     )}
                   </Link>

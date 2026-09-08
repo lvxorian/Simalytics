@@ -88,8 +88,9 @@ export type SimcoRealmSummary = {
   date: string;
   activeCompanies: number;
   companiesValue: number;
-  totalBuildings: number;
-  bondsSold: number;
+  // API doplňuje až u dokončených dní (completed: true) – dnes tedy undefined
+  totalBuildings?: number;
+  bondsSold?: number;
   phase: "normal" | "boom" | "recession";
   completed: boolean;
 };

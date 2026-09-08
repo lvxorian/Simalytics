@@ -61,6 +61,12 @@ export default async function StatistikyPage() {
     ) ?? phaseRanges[0];
   const previousPhase = phaseRanges[1];
 
+  // Dnešní summary je completed: false – budovy/bondy API doplňuje až za den.
+  // Makro KPI proto ukazujeme z posledního DOKONČENÉHO dne (plná čísla).
+  const completedSummaries = summaries.filter((s) => s.completed);
+  const macro = completedSummaries[0] ?? summaries[0];
+  const macroPrev = completedSummaries[1];
+
   const activeEvents = events
     .filter((e) => new Date(e.until) >= now)
     .sort((a, b) => a.speedModifier - b.speedModifier);
@@ -89,27 +95,35 @@ export default async function StatistikyPage() {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <MacroStat
               label="Aktivní firmy"
-              value={summaries[0].activeCompanies.toLocaleString("cs-CZ")}
-              delta={pctDelta(summaries[0].activeCompanies, summaries[1]?.activeCompanies)}
+              value={macro.activeCompanies.toLocaleString("cs-CZ")}
+              delta={pctDelta(macro.activeCompanies, macroPrev?.activeCompanies)}
             />
             <MacroStat
               label="Hodnota firem"
-              value={formatCompact(summaries[0].companiesValue)}
-              delta={pctDelta(summaries[0].companiesValue, summaries[1]?.companiesValue)}
+              value={formatCompact(macro.companiesValue)}
+              delta={pctDelta(macro.companiesValue, macroPrev?.companiesValue)}
             />
             <MacroStat
               label="Celkem budov"
-              value={summaries[0].totalBuildings.toLocaleString("cs-CZ")}
-              delta={pctDelta(summaries[0].totalBuildings, summaries[1]?.totalBuildings)}
+              value={
+                macro.totalBuildings != null
+                  ? macro.totalBuildings.toLocaleString("cs-CZ")
+                  : "–"
+              }
+              delta={pctDelta(macro.totalBuildings, macroPrev?.totalBuildings)}
             />
             <MacroStat
               label="Prodané bondy"
-              value={formatCompact(summaries[0].bondsSold)}
-              delta={pctDelta(summaries[0].bondsSold, summaries[1]?.bondsSold)}
+              value={
+                macro.bondsSold != null
+                  ? formatCompact(macro.bondsSold)
+                  : "–"
+              }
+              delta={pctDelta(macro.bondsSold, macroPrev?.bondsSold)}
             />
           </div>
           <p className="text-xs text-muted-foreground">
-            Denní data z {formatDate(summaries[0].date)} · zdroj Simco Tools
+            Denní data z {formatDate(macro.date)} · zdroj Simco Tools
             realm summaries.
           </p>
         </section>
