@@ -16,6 +16,7 @@ import {
   type IChartApi,
   type ISeriesApi,
   type LogicalRange,
+  type MouseEventParams,
   type UTCTimestamp,
 } from "lightweight-charts";
 import {
@@ -488,6 +489,29 @@ export function PriceChart({
     }
     mainSeriesRef.current = mainSeries;
 
+    // Plovoucí cenovka u přichyceného bodu (jen režim Linie) – ukáže cenu
+    // bodu, na který se crosshair přichytil
+    const onCrosshairMove = (param: MouseEventParams<Time>) => {
+      if (mode !== "area" || param.time == null || !param.point) {
+        setLineHover(null);
+        return;
+      }
+      const data = param.seriesData.get(mainSeries);
+      const value = data && "value" in data ? Number(data.value) : null;
+      if (value == null) {
+        setLineHover(null);
+        return;
+      }
+      const x = chart.timeScale().timeToCoordinate(param.time as UTCTimestamp);
+      const y = mainSeries.priceToCoordinate(value);
+      if (x == null || y == null) {
+        setLineHover(null);
+        return;
+      }
+      setLineHover({ x, y, price: value });
+    };
+    chart.subscribeCrosshairMove(onCrosshairMove);
+
     // Objemový histogram (vlastní cenová osa dole, přes overlay)
     if (hasVolume) {
       const volSeries = chart.addSeries(HistogramSeries, {
@@ -586,6 +610,7 @@ export function PriceChart({
     chart.timeScale().subscribeVisibleLogicalRangeChange(onRangeChange);
 
     return () => {
+      chart.unsubscribeCrosshairMove(onCrosshairMove);
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRangeChange);
       chart.remove();
       chartRef.current = null;
@@ -594,6 +619,12 @@ export function PriceChart({
 
   // Bump při pan/zoom – přepočítá pixelovou geometrii overlayů
   const [vpEpoch, setVpEpoch] = useState(0);
+  // Plovoucí cenovka v režimu Linie – cena bodu pod crosshairem
+  const [lineHover, setLineHover] = useState<{
+    x: number;
+    y: number;
+    price: number;
+  } | null>(null);
   // Uložený logický rozsah (bar indexy) – zoom přežije rekonstrukci grafu
   const savedLogicalRange = useRef<{ from: number; to: number } | null>(null);
   const prevIntervalRef = useRef(intervalKey);
@@ -1026,6 +1057,20 @@ export function PriceChart({
             setRulerPreview(null);
           }}
         />
+
+        {/* Cenovka přichyceného bodu – jen režim Linie (u svíček crosshair
+            label na ose stačí, tady chybí orientace) */}
+        {mode === "area" && lineHover && (
+          <div
+            className="pointer-events-none absolute z-10 -translate-x-1/2 rounded-md border border-border/80 bg-popover/95 px-1.5 py-0.5 font-mono text-[11px] font-medium tabular-nums text-foreground shadow-md backdrop-blur"
+            style={{
+              left: lineHover.x,
+              top: Math.max(4, lineHover.y - 26),
+            }}
+          >
+            {formatPrice(lineHover.price)}
+          </div>
+        )}
 
         {/* SVG overlay – biny profilu, POC linka, Value Area, výběr tažením */}
         {profile && vpGeom && vpAreaX && (

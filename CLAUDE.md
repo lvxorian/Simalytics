@@ -131,6 +131,10 @@ src/components/            # vizní komponenty (viz níže)
   Vzájemně se vylučuje s výběrem rozsahu VP; oba nástroje zamykají
   pan/zoom, Esc/Vymazat ruší měření. Při změně typu grafu (mode/
   candles vs area) počítat s tím, že snap čte `candles` prop.
+- **Cenovka bodu v režimu Linie** (`price-chart.tsx`): crosshair se v
+  area módu přichytává na body linie; plovoucí cenovka nad bodem
+  (`subscribeCrosshairMove` → `seriesData.get(mainSeries)`) ukáže jeho
+  cenu. Jen pro `mode === "area"` – u svíček stačí crosshair label na ose.
 - **Alerty z grafu**: pravé tlačítko do grafu (`onContextMenu` v
   `price-chart.tsx`) → kontextové menu (`chart-context-menu.tsx`) s
   „Nastavit alert“ – cena předvyplněná z místa kliknutí (snap na OHLC).
