@@ -350,6 +350,7 @@ export default async function MarketItemPage({
             <PriceChart
               candles={candles}
               mode={chartMode}
+              intervalKey={opt.key}
               extras={{
                 volume:
                   opt.key === "1d" || opt.key === "1w" || opt.key === "1M"

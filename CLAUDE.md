@@ -102,6 +102,25 @@ src/components/            # vizní komponenty (viz níže)
   chce POMALÉ tempo — nezrychlovat. Skleněný gradient design: `.ticker-tape`
   (gradientní pás + duhová top linka) a `.ticker-tile` / `-up` / `-down`
   (tónované dlaždice) — barvy jen přes tyto třídy, ne ad-hoc bg.
+- **Countdown svíčky** (`components/candle-countdown.tsx` + prop
+  `intervalKey` v `price-chart.tsx`): odpočet do zavření aktuálního TF
+  v hlavičce grafu; hranice bucketů musí odpovídat agregaci v
+  `lib/candles.ts` (epoch intervaly, UTC dny, pondělí pro 1W, 1. den
+  měsíce pro 1M). Po zavření svíčky spustí `router.refresh()` a
+  chvíli ukáže „obnoveno". Při změně agregace bucketů upravit i
+  `bucketStart()`/`bucketEnd()` v candle-countdown.
+- **Nástrojová lišta grafu** (`price-chart.tsx`): svislá lišta u levého
+  horního okraje grafu (absolute overlay nad canvasem) s velkými ikonami
+  18px à la TradingView – Fixed Range VP (`ChartBarDecreasing`), pravítko
+  (`RulerDimensionLine`) a po měření i X (vymazat). Countdown svíčky
+  zůstává v hlavičce vpravo. Kliky na lištu nesmí spouštět drag/měření
+  (lišta je sourozenec chart containeru, ne jeho potomek).
+- **Měřicí pravítko** (`price-chart.tsx`): tažením myši
+  úsečka od–do (snap na čas svíčky binárním hledáním + snap ceny na OHLC
+  ± 12 px), overlay ukáže % změnu, Δ, délku trvání a počet svíček.
+  Vzájemně se vylučuje s výběrem rozsahu VP; oba nástroje zamykají
+  pan/zoom, Esc/Vymazat ruší měření. Při změně typu grafu (mode/
+  candles vs area) počítat s tím, že snap čte `candles` prop.
 - **Fáze ekonomiky**: dle hry `recession` = „Recese 📉", `normal` =
   „Stabilní 😐", `boom` = „Růst 📈" (PHASE_LABELS v statistiky/page.tsx).
 - **DB numeric**: postgres.js vrací numeric jako string — v `data.ts` se
