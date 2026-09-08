@@ -13,6 +13,8 @@ export type Candle = {
   high: number;
   low: number;
   close: number;
+  /** Reálný objem (denní svíčky ze Simco Tools); intraday ticky ho nemají. */
+  volume?: number;
 };
 
 export type PriceTick = { recorded_at: string; price: number };
@@ -162,6 +164,47 @@ export function aggregateVolumePoints(
   return [...buckets.entries()]
     .sort((a, b) => a[0] - b[0])
     .map(([time, value]) => ({ time, value }));
+}
+
+/**
+ * Agreguje denní svíčky (s objemy) na týdenní/měsíční buckety pro
+ * volume profile – OHLC standardně, objemy se SČÍTAJÍ.
+ */
+export function aggregateDailyWithVolume(
+  daily: Candle[],
+  mode: "1w" | "1M"
+): Candle[] {
+  const sorted = [...daily].sort((a, b) => a.time - b.time);
+  const buckets = new Map<number, Candle>();
+
+  for (const c of sorted) {
+    const d = new Date(c.time * 1000);
+    let bucketStart: number;
+
+    if (mode === "1w") {
+      const diffToMonday = (d.getUTCDay() + 6) % 7;
+      const monday = new Date(d);
+      monday.setUTCDate(d.getUTCDate() - diffToMonday);
+      monday.setUTCHours(0, 0, 0, 0);
+      bucketStart = Math.floor(monday.getTime() / 1000);
+    } else {
+      bucketStart = Math.floor(
+        Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1) / 1000
+      );
+    }
+
+    const existing = buckets.get(bucketStart);
+    if (!existing) {
+      buckets.set(bucketStart, { ...c, time: bucketStart });
+    } else {
+      existing.high = Math.max(existing.high, c.high);
+      existing.low = Math.min(existing.low, c.low);
+      existing.close = c.close;
+      existing.volume = (existing.volume ?? 0) + (c.volume ?? 0);
+    }
+  }
+
+  return [...buckets.values()].sort((a, b) => a.time - b.time);
 }
 
 // ── Weekly / monthly agregace z denních svíček ──────────────────────

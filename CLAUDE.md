@@ -88,8 +88,16 @@ src/components/            # vizní komponenty (viz níže)
   (open = předchozí close, prázdné buckety = plochá svíčka) — neměnit zpět,
   jinak graf vypadá roztříštěně. Kontinuita denních svíček se aplikuje
   přes `applyContinuity()` v market page (Simco Tools data jsou „surová").
-- **Ticker tape**: dvě řady marquee proti sobě (CSS keyframes v globals.css,
-  `--ticker-speed: 360s`). Hover pauza přes `.ticker-hover-pause`. Uživatel
+- **Fixed Range Volume Profile** (`lib/volume-profile.ts` + overlay v
+  `price-chart.tsx`): tažením myši se vybere rozsah → biny, POC (zlatý),
+  Value Area 70 %. Reálný objem jen u denních svíček (Simco Tools);
+  intraday proxy = počet ticků (`volume ?? 1`) — záměr, `price_history`
+  nemá obchodované objemy. V5 API: cena→pixel je
+  `series.priceToCoordinate()`, NE na `priceScale`.
+- **Ticker tape**: JEDNA řada marquee se všemi komoditami (CSS keyframes
+  v globals.css; rychlost `--ticker-speed` se škáluje s počtem dlaždic,
+  default 360s). Dlaždice = cena + 24h % + divergence vs. denní VWAP
+  (fair value). Hover pauza přes `.ticker-hover-pause`. Uživatel
   chce POMALÉ tempo — nezrychlovat. Skleněný gradient design: `.ticker-tape`
   (gradientní pás + duhová top linka) a `.ticker-tile` / `-up` / `-down`
   (tónované dlaždice) — barvy jen přes tyto třídy, ne ad-hoc bg.

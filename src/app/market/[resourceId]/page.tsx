@@ -15,6 +15,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import {
   aggregateDaily,
+  aggregateDailyWithVolume,
   aggregateVolumePoints,
   applyContinuity,
   resolveIntervalOption,
@@ -85,6 +86,8 @@ export default async function MarketItemPage({
   let volume: { time: number; value: number }[] | undefined;
   let vwap: { time: number; value: number }[] | undefined;
   let dataSource = "";
+  // Zdroj svíček pro Fixed Range Volume Profile (s objemy, kde existují)
+  let vpCandles: Candle[] = [];
 
   if (opt.key === "1d" || opt.key === "1w" || opt.key === "1M") {
     // Denní svíčky z backfillu (Simco Tools, ~3 měsíce, s objemem a VWAP)
@@ -95,6 +98,7 @@ export default async function MarketItemPage({
       high: c.high,
       low: c.low,
       close: c.close,
+      volume: c.volume ?? undefined,
     }));
 
     // Dnešní (rozpracovaná) svíčka z našich ticků – Simco Tools ji
@@ -118,6 +122,7 @@ export default async function MarketItemPage({
     // Kontinuita i pro denní svíčky (open = prev close) – jinak vypadají
     // denní/TW grafy „odtržené“ oproti reálným burzovním grafům
     candles = applyContinuity(dailyCandles);
+    vpCandles = dailyCandles; // denní svíčky mají reálný objem
     dataSource = "denní svíčky · Simco Tools";
 
     if (opt.key === "1d") {
@@ -136,9 +141,9 @@ export default async function MarketItemPage({
         opt.key === "1w" ? "týdenní svíčky · agregace z denních" : "měsíční svíčky · agregace z denních";
     }
   } else {
-    // Intraday TF agregované z našich ticků (poller každých 5 minut)
     const ticks = await getPriceHistory(id, 0, opt.days);
     candles = toCandles(ticks, opt.seconds);
+    vpCandles = candles; // intraday: proxy objem = 1 tick (spočítá klient)
     dataSource = `ticky · posledních ${opt.days} dní`;
   }
 
@@ -346,6 +351,11 @@ export default async function MarketItemPage({
                 low: periodLow ?? undefined,
                 average: periodAvg ?? undefined,
               }}
+              volumeProfile={
+                opt.key === "1w" || opt.key === "1M"
+                  ? aggregateDailyWithVolume(vpCandles, opt.key)
+                  : vpCandles
+              }
             />
           ) : (
             <div className="flex h-72 flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
