@@ -1,0 +1,5536 @@
+{
+  "1": {
+    "name": "Power",
+    "producedAt": "E",
+    "producedAtName": "Elektrárna",
+    "producedFrom": [],
+    "neededFor": [
+      {
+        "id": 2,
+        "name": "Voda",
+        "nameCs": "Voda"
+      },
+      {
+        "id": 10,
+        "name": "Ropa",
+        "nameCs": "Ropa"
+      },
+      {
+        "id": 11,
+        "name": "Benzín",
+        "nameCs": "Benzín"
+      },
+      {
+        "id": 12,
+        "name": "Nafta",
+        "nameCs": "Nafta"
+      },
+      {
+        "id": 13,
+        "name": "Přeprava",
+        "nameCs": "Přeprava"
+      },
+      {
+        "id": 14,
+        "name": "Minerály",
+        "nameCs": "Minerály"
+      },
+      {
+        "id": 15,
+        "name": "Bauxit",
+        "nameCs": "Bauxit"
+      },
+      {
+        "id": 16,
+        "name": "Křemík",
+        "nameCs": "Křemík"
+      },
+      {
+        "id": 17,
+        "name": "Chemikálie",
+        "nameCs": "Chemikálie"
+      },
+      {
+        "id": 18,
+        "name": "Hliník",
+        "nameCs": "Hliník"
+      },
+      {
+        "id": 19,
+        "name": "Plast",
+        "nameCs": "Plast"
+      },
+      {
+        "id": 41,
+        "name": "Látka",
+        "nameCs": "Látka"
+      },
+      {
+        "id": 42,
+        "name": "Železná ruda",
+        "nameCs": "Železná ruda"
+      },
+      {
+        "id": 43,
+        "name": "Ocel",
+        "nameCs": "Ocel"
+      },
+      {
+        "id": 44,
+        "name": "Písek",
+        "nameCs": "Písek"
+      },
+      {
+        "id": 45,
+        "name": "Sklo",
+        "nameCs": "Sklo"
+      },
+      {
+        "id": 68,
+        "name": "Zlatá ruda",
+        "nameCs": "Zlatá ruda"
+      },
+      {
+        "id": 69,
+        "name": "Zlaté cihly",
+        "nameCs": "Zlaté cihly"
+      },
+      {
+        "id": 73,
+        "name": "Ethanol",
+        "nameCs": "Ethanol"
+      },
+      {
+        "id": 74,
+        "name": "Methan",
+        "nameCs": "Methan"
+      },
+      {
+        "id": 75,
+        "name": "Uhlíková vlákna",
+        "nameCs": "Uhlíková vlákna"
+      },
+      {
+        "id": 83,
+        "name": "Raketové palivo",
+        "nameCs": "Raketové palivo"
+      },
+      {
+        "id": 104,
+        "name": "Jíl",
+        "nameCs": "Jíl"
+      },
+      {
+        "id": 105,
+        "name": "Vápenec",
+        "nameCs": "Vápenec"
+      },
+      {
+        "id": 107,
+        "name": "Ocelové nosníky",
+        "nameCs": "Ocelové nosníky"
+      },
+      {
+        "id": 135,
+        "name": "Cukr",
+        "nameCs": "Cukr"
+      },
+      {
+        "id": 141,
+        "name": "Rostlinný olej",
+        "nameCs": "Rostlinný olej"
+      }
+    ],
+    "producedAnHour": 2779.9987745786016,
+    "baseSalary": 414,
+    "nameCs": "Energie"
+  },
+  "2": {
+    "name": "Water",
+    "producedAt": "W",
+    "producedAtName": "Vodárna",
+    "producedFrom": [
+      {
+        "id": 1,
+        "name": "Power",
+        "amount": 0.2,
+        "nameCs": "Energie"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 3,
+        "name": "Jablka",
+        "nameCs": "Jablka"
+      },
+      {
+        "id": 4,
+        "name": "Pomeranče",
+        "nameCs": "Pomeranče"
+      },
+      {
+        "id": 5,
+        "name": "Hrozny",
+        "nameCs": "Hrozny"
+      },
+      {
+        "id": 6,
+        "name": "Obilí",
+        "nameCs": "Obilí"
+      },
+      {
+        "id": 9,
+        "name": "Vejce",
+        "nameCs": "Vejce"
+      },
+      {
+        "id": 14,
+        "name": "Minerály",
+        "nameCs": "Minerály"
+      },
+      {
+        "id": 15,
+        "name": "Bauxit",
+        "nameCs": "Bauxit"
+      },
+      {
+        "id": 40,
+        "name": "Bavlna",
+        "nameCs": "Bavlna"
+      },
+      {
+        "id": 42,
+        "name": "Železná ruda",
+        "nameCs": "Železná ruda"
+      },
+      {
+        "id": 66,
+        "name": "Semena",
+        "nameCs": "Semena"
+      },
+      {
+        "id": 68,
+        "name": "Zlatá ruda",
+        "nameCs": "Zlatá ruda"
+      },
+      {
+        "id": 72,
+        "name": "Cukrová třtina",
+        "nameCs": "Cukrová třtina"
+      },
+      {
+        "id": 101,
+        "name": "Železobeton",
+        "nameCs": "Železobeton"
+      },
+      {
+        "id": 106,
+        "name": "Dřevo",
+        "nameCs": "Dřevo"
+      },
+      {
+        "id": 115,
+        "name": "Krávy",
+        "nameCs": "Krávy"
+      },
+      {
+        "id": 116,
+        "name": "Prasata",
+        "nameCs": "Prasata"
+      },
+      {
+        "id": 117,
+        "name": "Mléko",
+        "nameCs": "Mléko"
+      },
+      {
+        "id": 118,
+        "name": "Kávová zrna",
+        "nameCs": "Kávová zrna"
+      },
+      {
+        "id": 120,
+        "name": "Zelenina",
+        "nameCs": "Zelenina"
+      },
+      {
+        "id": 126,
+        "name": "Zázvorové pivo",
+        "nameCs": "Zázvorové pivo"
+      },
+      {
+        "id": 136,
+        "name": "Kakao",
+        "nameCs": "Kakao"
+      },
+      {
+        "id": 138,
+        "name": "Omáčka",
+        "nameCs": "Omáčka"
+      },
+      {
+        "id": 146,
+        "name": "Dýně",
+        "nameCs": "Dýně"
+      },
+      {
+        "id": 150,
+        "name": "Stromek",
+        "nameCs": "Stromek"
+      }
+    ],
+    "producedAnHour": 1738.1679389312976,
+    "baseSalary": 345,
+    "nameCs": "Voda"
+  },
+  "3": {
+    "name": "Apples",
+    "producedAt": "P",
+    "producedAtName": "Farma",
+    "producedFrom": [
+      {
+        "id": 2,
+        "name": "Water",
+        "amount": 3,
+        "nameCs": "Voda"
+      },
+      {
+        "id": 66,
+        "name": "Seeds",
+        "amount": 1,
+        "nameCs": "Semena"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 123,
+        "name": "Jablečný koláč",
+        "nameCs": "Jablečný koláč"
+      },
+      {
+        "id": 125,
+        "name": "Jablečný mošt",
+        "nameCs": "Jablečný mošt"
+      },
+      {
+        "id": 154,
+        "name": "Jablečná zmrzlina",
+        "nameCs": "Jablečná zmrzlina"
+      }
+    ],
+    "producedAnHour": 206.25920866299035,
+    "baseSalary": 103.5,
+    "nameCs": "Jablka"
+  },
+  "4": {
+    "name": "Oranges",
+    "producedAt": "P",
+    "producedAtName": "Farma",
+    "producedFrom": [
+      {
+        "id": 2,
+        "name": "Water",
+        "amount": 3,
+        "nameCs": "Voda"
+      },
+      {
+        "id": 66,
+        "name": "Seeds",
+        "amount": 1,
+        "nameCs": "Semena"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 124,
+        "name": "Pomerančový džus",
+        "nameCs": "Pomerančový džus"
+      }
+    ],
+    "producedAnHour": 189.75847196995113,
+    "baseSalary": 103.5,
+    "nameCs": "Pomeranče"
+  },
+  "5": {
+    "name": "Grapes",
+    "producedAt": "P",
+    "producedAtName": "Farma",
+    "producedFrom": [
+      {
+        "id": 2,
+        "name": "Water",
+        "amount": 4,
+        "nameCs": "Voda"
+      },
+      {
+        "id": 66,
+        "name": "Seeds",
+        "amount": 1,
+        "nameCs": "Semena"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 165.0073669303923,
+    "baseSalary": 103.5,
+    "nameCs": "Hrozny"
+  },
+  "6": {
+    "name": "Grain",
+    "producedAt": "P",
+    "producedAtName": "Farma",
+    "producedFrom": [
+      {
+        "id": 2,
+        "name": "Water",
+        "amount": 0.5,
+        "nameCs": "Voda"
+      },
+      {
+        "id": 66,
+        "name": "Seeds",
+        "amount": 1,
+        "nameCs": "Semena"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 9,
+        "name": "Vejce",
+        "nameCs": "Vejce"
+      },
+      {
+        "id": 133,
+        "name": "Mouka",
+        "nameCs": "Mouka"
+      },
+      {
+        "id": 139,
+        "name": "Krmivo",
+        "nameCs": "Krmivo"
+      }
+    ],
+    "producedAnHour": 825.0368346519614,
+    "baseSalary": 103.5,
+    "nameCs": "Obilí"
+  },
+  "7": {
+    "name": "Steak",
+    "producedAt": "e",
+    "producedAtName": "Jatka",
+    "producedFrom": [
+      {
+        "id": 115,
+        "name": "Cows",
+        "amount": 0.125,
+        "nameCs": "Krávy"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 129,
+        "name": "Hamburger",
+        "nameCs": "Hamburger"
+      },
+      {
+        "id": 130,
+        "name": "Lasagne",
+        "nameCs": "Lasagne"
+      }
+    ],
+    "producedAnHour": 27.799987745786016,
+    "baseSalary": 414,
+    "nameCs": "Steak"
+  },
+  "8": {
+    "name": "Sausages",
+    "producedAt": "e",
+    "producedAtName": "Jatka",
+    "producedFrom": [
+      {
+        "id": 116,
+        "name": "Pigs",
+        "amount": 0.0625,
+        "nameCs": "Prasata"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 127,
+        "name": "Mražená pizza",
+        "nameCs": "Mražená pizza"
+      },
+      {
+        "id": 131,
+        "name": "Masové kuličky",
+        "nameCs": "Masové kuličky"
+      }
+    ],
+    "producedAnHour": 83.39996323735805,
+    "baseSalary": 414,
+    "nameCs": "Klobásy"
+  },
+  "9": {
+    "name": "Eggs",
+    "producedAt": "F",
+    "producedAtName": "Ranč",
+    "producedFrom": [
+      {
+        "id": 2,
+        "name": "Water",
+        "amount": 0.4,
+        "nameCs": "Voda"
+      },
+      {
+        "id": 6,
+        "name": "Grain",
+        "amount": 0.5,
+        "nameCs": "Obilí"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 128,
+        "name": "Těstoviny",
+        "nameCs": "Těstoviny"
+      },
+      {
+        "id": 137,
+        "name": "Těsto",
+        "nameCs": "Těsto"
+      }
+    ],
+    "producedAnHour": 324.9977904969995,
+    "baseSalary": 138,
+    "nameCs": "Vejce"
+  },
+  "10": {
+    "name": "Crude oil",
+    "producedAt": "O",
+    "producedAtName": "Těžní věž",
+    "producedFrom": [
+      {
+        "id": 1,
+        "name": "Power",
+        "amount": 25,
+        "nameCs": "Energie"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 11,
+        "name": "Benzín",
+        "nameCs": "Benzín"
+      },
+      {
+        "id": 12,
+        "name": "Nafta",
+        "nameCs": "Nafta"
+      },
+      {
+        "id": 19,
+        "name": "Plast",
+        "nameCs": "Plast"
+      },
+      {
+        "id": 75,
+        "name": "Uhlíková vlákna",
+        "nameCs": "Uhlíková vlákna"
+      }
+    ],
+    "producedAnHour": 45.87202778629322,
+    "baseSalary": 517.5,
+    "nameCs": "Ropa"
+  },
+  "11": {
+    "name": "Petrol",
+    "producedAt": "R",
+    "producedAtName": "Rafinérie",
+    "producedFrom": [
+      {
+        "id": 1,
+        "name": "Power",
+        "amount": 15,
+        "nameCs": "Energie"
+      },
+      {
+        "id": 10,
+        "name": "Crude oil",
+        "amount": 0.75,
+        "nameCs": "Ropa"
+      },
+      {
+        "id": 73,
+        "name": "Ethanol",
+        "amount": 0.25,
+        "nameCs": "Ethanol"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 122.27288737346221,
+    "baseSalary": 482.99999999999994,
+    "nameCs": "Benzín"
+  },
+  "12": {
+    "name": "Diesel",
+    "producedAt": "R",
+    "producedAtName": "Rafinérie",
+    "producedFrom": [
+      {
+        "id": 1,
+        "name": "Power",
+        "amount": 15,
+        "nameCs": "Energie"
+      },
+      {
+        "id": 10,
+        "name": "Crude oil",
+        "amount": 0.75,
+        "nameCs": "Ropa"
+      },
+      {
+        "id": 73,
+        "name": "Ethanol",
+        "amount": 0.25,
+        "nameCs": "Ethanol"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 13,
+        "name": "Přeprava",
+        "nameCs": "Přeprava"
+      },
+      {
+        "id": 111,
+        "name": "Stavební jednotka",
+        "nameCs": "Stavební jednotka"
+      }
+    ],
+    "producedAnHour": 126.34865028591095,
+    "baseSalary": 482.99999999999994,
+    "nameCs": "Nafta"
+  },
+  "13": {
+    "name": "Transport",
+    "producedAt": "S",
+    "producedAtName": "Přepravní depo",
+    "producedFrom": [
+      {
+        "id": 12,
+        "name": "Diesel",
+        "amount": 0.005,
+        "nameCs": "Nafta"
+      },
+      {
+        "id": 1,
+        "name": "Power",
+        "amount": 0.01,
+        "nameCs": "Energie"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 3369.5450406784967,
+    "baseSalary": 310.5,
+    "nameCs": "Přeprava"
+  },
+  "14": {
+    "name": "Minerals",
+    "producedAt": "M",
+    "producedAtName": "Důl",
+    "producedFrom": [
+      {
+        "id": 1,
+        "name": "Power",
+        "amount": 20,
+        "nameCs": "Energie"
+      },
+      {
+        "id": 2,
+        "name": "Water",
+        "amount": 1,
+        "nameCs": "Voda"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 17,
+        "name": "Chemikálie",
+        "nameCs": "Chemikálie"
+      },
+      {
+        "id": 144,
+        "name": "Vánoční ozdoba",
+        "nameCs": "Vánoční ozdoba"
+      }
+    ],
+    "producedAnHour": 125.74233789039475,
+    "baseSalary": 276,
+    "nameCs": "Minerály"
+  },
+  "15": {
+    "name": "Bauxite",
+    "producedAt": "M",
+    "producedAtName": "Důl",
+    "producedFrom": [
+      {
+        "id": 1,
+        "name": "Power",
+        "amount": 14,
+        "nameCs": "Energie"
+      },
+      {
+        "id": 2,
+        "name": "Water",
+        "amount": 0.5,
+        "nameCs": "Voda"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 18,
+        "name": "Hliník",
+        "nameCs": "Hliník"
+      }
+    ],
+    "producedAnHour": 101.79141638746242,
+    "baseSalary": 276,
+    "nameCs": "Bauxit"
+  },
+  "16": {
+    "name": "Silicon",
+    "producedAt": "Y",
+    "producedAtName": "Továrna",
+    "producedFrom": [
+      {
+        "id": 1,
+        "name": "Power",
+        "amount": 3,
+        "nameCs": "Energie"
+      },
+      {
+        "id": 44,
+        "name": "Sand",
+        "amount": 2,
+        "nameCs": "Písek"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 20,
+        "name": "Procesory",
+        "nameCs": "Procesory"
+      },
+      {
+        "id": 21,
+        "name": "Tištěné spoje",
+        "nameCs": "Tištěné spoje"
+      },
+      {
+        "id": 23,
+        "name": "Obrazovky",
+        "nameCs": "Obrazovky"
+      },
+      {
+        "id": 45,
+        "name": "Sklo",
+        "nameCs": "Sklo"
+      },
+      {
+        "id": 79,
+        "name": "Hi-tech tištěné spoje",
+        "nameCs": "Hi-tech tištěné spoje"
+      },
+      {
+        "id": 87,
+        "name": "Tepelný štít",
+        "nameCs": "Tepelný štít"
+      }
+    ],
+    "producedAnHour": 166.7999264747161,
+    "baseSalary": 414,
+    "nameCs": "Křemík"
+  },
+  "17": {
+    "name": "Chemicals",
+    "producedAt": "Y",
+    "producedAtName": "Továrna",
+    "producedFrom": [
+      {
+        "id": 1,
+        "name": "Power",
+        "amount": 0.2,
+        "nameCs": "Energie"
+      },
+      {
+        "id": 14,
+        "name": "Minerals",
+        "amount": 1,
+        "nameCs": "Minerály"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 20,
+        "name": "Procesory",
+        "nameCs": "Procesory"
+      },
+      {
+        "id": 21,
+        "name": "Tištěné spoje",
+        "nameCs": "Tištěné spoje"
+      },
+      {
+        "id": 22,
+        "name": "Baterie",
+        "nameCs": "Baterie"
+      },
+      {
+        "id": 23,
+        "name": "Obrazovky",
+        "nameCs": "Obrazovky"
+      },
+      {
+        "id": 43,
+        "name": "Ocel",
+        "nameCs": "Ocel"
+      },
+      {
+        "id": 52,
+        "name": "Spalovací motor",
+        "nameCs": "Spalovací motor"
+      },
+      {
+        "id": 67,
+        "name": "Vánoční krekry",
+        "nameCs": "Vánoční krekry"
+      },
+      {
+        "id": 79,
+        "name": "Hi-tech tištěné spoje",
+        "nameCs": "Hi-tech tištěné spoje"
+      },
+      {
+        "id": 85,
+        "name": "Nosný stupeň na tuhé palivo",
+        "nameCs": "Nosný stupeň na tuhé palivo"
+      },
+      {
+        "id": 88,
+        "name": "Iontový motor",
+        "nameCs": "Iontový motor"
+      }
+    ],
+    "producedAnHour": 231.6665645482168,
+    "baseSalary": 414,
+    "nameCs": "Chemikálie"
+  },
+  "18": {
+    "name": "Aluminium",
+    "producedAt": "Y",
+    "producedAtName": "Továrna",
+    "producedFrom": [
+      {
+        "id": 1,
+        "name": "Power",
+        "amount": 15,
+        "nameCs": "Energie"
+      },
+      {
+        "id": 15,
+        "name": "Bauxite",
+        "amount": 1,
+        "nameCs": "Bauxit"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 24,
+        "name": "Chytré telefony",
+        "nameCs": "Chytré telefony"
+      },
+      {
+        "id": 25,
+        "name": "Tablety",
+        "nameCs": "Tablety"
+      },
+      {
+        "id": 49,
+        "name": "Luxusní autointeriér",
+        "nameCs": "Luxusní autointeriér"
+      },
+      {
+        "id": 51,
+        "name": "Karoserie",
+        "nameCs": "Karoserie"
+      },
+      {
+        "id": 78,
+        "name": "Křídlo",
+        "nameCs": "Křídlo"
+      },
+      {
+        "id": 84,
+        "name": "Palivová nádrž",
+        "nameCs": "Palivová nádrž"
+      },
+      {
+        "id": 85,
+        "name": "Nosný stupeň na tuhé palivo",
+        "nameCs": "Nosný stupeň na tuhé palivo"
+      },
+      {
+        "id": 86,
+        "name": "Raketový motor",
+        "nameCs": "Raketový motor"
+      },
+      {
+        "id": 89,
+        "name": "Proudový motor",
+        "nameCs": "Proudový motor"
+      },
+      {
+        "id": 109,
+        "name": "Okna",
+        "nameCs": "Okna"
+      },
+      {
+        "id": 144,
+        "name": "Vánoční ozdoba",
+        "nameCs": "Vánoční ozdoba"
+      },
+      {
+        "id": 151,
+        "name": "Velikonoční zajíček",
+        "nameCs": "Velikonoční zajíček"
+      }
+    ],
+    "producedAnHour": 129.73327614700142,
+    "baseSalary": 414,
+    "nameCs": "Hliník"
+  },
+  "19": {
+    "name": "Plastic",
+    "producedAt": "R",
+    "producedAtName": "Rafinérie",
+    "producedFrom": [
+      {
+        "id": 1,
+        "name": "Power",
+        "amount": 5,
+        "nameCs": "Energie"
+      },
+      {
+        "id": 10,
+        "name": "Crude oil",
+        "amount": 0.2,
+        "nameCs": "Ropa"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 26,
+        "name": "Notebooky",
+        "nameCs": "Notebooky"
+      },
+      {
+        "id": 27,
+        "name": "Monitory",
+        "nameCs": "Monitory"
+      },
+      {
+        "id": 28,
+        "name": "Televize",
+        "nameCs": "Televize"
+      },
+      {
+        "id": 50,
+        "name": "Základní interiér",
+        "nameCs": "Základní interiér"
+      },
+      {
+        "id": 62,
+        "name": "Šaty",
+        "nameCs": "Šaty"
+      },
+      {
+        "id": 63,
+        "name": "Boty na podpatku",
+        "nameCs": "Boty na podpatku"
+      },
+      {
+        "id": 65,
+        "name": "Botasky",
+        "nameCs": "Botasky"
+      },
+      {
+        "id": 67,
+        "name": "Vánoční krekry",
+        "nameCs": "Vánoční krekry"
+      },
+      {
+        "id": 98,
+        "name": "Dron",
+        "nameCs": "Dron"
+      },
+      {
+        "id": 114,
+        "name": "Roboti",
+        "nameCs": "Roboti"
+      },
+      {
+        "id": 148,
+        "name": "Kostým čarodějnice",
+        "nameCs": "Kostým čarodějnice"
+      }
+    ],
+    "producedAnHour": 224.16696018468073,
+    "baseSalary": 482.99999999999994,
+    "nameCs": "Plast"
+  },
+  "20": {
+    "name": "Processors",
+    "producedAt": "L",
+    "producedAtName": "Továrna na elektroniku",
+    "producedFrom": [
+      {
+        "id": 16,
+        "name": "Silicon",
+        "amount": 4,
+        "nameCs": "Křemík"
+      },
+      {
+        "id": 17,
+        "name": "Chemicals",
+        "amount": 1,
+        "nameCs": "Chemikálie"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 24,
+        "name": "Chytré telefony",
+        "nameCs": "Chytré telefony"
+      },
+      {
+        "id": 25,
+        "name": "Tablety",
+        "nameCs": "Tablety"
+      },
+      {
+        "id": 26,
+        "name": "Notebooky",
+        "nameCs": "Notebooky"
+      },
+      {
+        "id": 28,
+        "name": "Televize",
+        "nameCs": "Televize"
+      },
+      {
+        "id": 47,
+        "name": "Palubní počítač",
+        "nameCs": "Palubní počítač"
+      },
+      {
+        "id": 114,
+        "name": "Roboti",
+        "nameCs": "Roboti"
+      }
+    ],
+    "producedAnHour": 9.880196231888444,
+    "baseSalary": 379.50000000000006,
+    "nameCs": "Procesory"
+  },
+  "21": {
+    "name": "Electronic components",
+    "producedAt": "L",
+    "producedAtName": "Továrna na elektroniku",
+    "producedFrom": [
+      {
+        "id": 16,
+        "name": "Silicon",
+        "amount": 3,
+        "nameCs": "Křemík"
+      },
+      {
+        "id": 17,
+        "name": "Chemicals",
+        "amount": 1,
+        "nameCs": "Chemikálie"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 24,
+        "name": "Chytré telefony",
+        "nameCs": "Chytré telefony"
+      },
+      {
+        "id": 25,
+        "name": "Tablety",
+        "nameCs": "Tablety"
+      },
+      {
+        "id": 26,
+        "name": "Notebooky",
+        "nameCs": "Notebooky"
+      },
+      {
+        "id": 27,
+        "name": "Monitory",
+        "nameCs": "Monitory"
+      },
+      {
+        "id": 28,
+        "name": "Televize",
+        "nameCs": "Televize"
+      },
+      {
+        "id": 47,
+        "name": "Palubní počítač",
+        "nameCs": "Palubní počítač"
+      },
+      {
+        "id": 48,
+        "name": "Elektromotor",
+        "nameCs": "Elektromotor"
+      },
+      {
+        "id": 52,
+        "name": "Spalovací motor",
+        "nameCs": "Spalovací motor"
+      },
+      {
+        "id": 70,
+        "name": "Luxusní hodinky",
+        "nameCs": "Luxusní hodinky"
+      },
+      {
+        "id": 98,
+        "name": "Dron",
+        "nameCs": "Dron"
+      },
+      {
+        "id": 110,
+        "name": "Nářadí",
+        "nameCs": "Nářadí"
+      },
+      {
+        "id": 147,
+        "name": "Jack o'lantern",
+        "nameCs": "Jack o'lantern"
+      }
+    ],
+    "producedAnHour": 44.460883043498,
+    "baseSalary": 379.50000000000006,
+    "nameCs": "Tištěné spoje"
+  },
+  "22": {
+    "name": "Batteries",
+    "producedAt": "L",
+    "producedAtName": "Továrna na elektroniku",
+    "producedFrom": [
+      {
+        "id": 17,
+        "name": "Chemicals",
+        "amount": 4,
+        "nameCs": "Chemikálie"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 24,
+        "name": "Chytré telefony",
+        "nameCs": "Chytré telefony"
+      },
+      {
+        "id": 25,
+        "name": "Tablety",
+        "nameCs": "Tablety"
+      },
+      {
+        "id": 26,
+        "name": "Notebooky",
+        "nameCs": "Notebooky"
+      },
+      {
+        "id": 53,
+        "name": "Elektromobil",
+        "nameCs": "Elektromobil"
+      },
+      {
+        "id": 54,
+        "name": "Luxusní elektromobil",
+        "nameCs": "Luxusní elektromobil"
+      },
+      {
+        "id": 82,
+        "name": "Polohové čidlo",
+        "nameCs": "Polohové čidlo"
+      },
+      {
+        "id": 88,
+        "name": "Iontový motor",
+        "nameCs": "Iontový motor"
+      },
+      {
+        "id": 98,
+        "name": "Dron",
+        "nameCs": "Dron"
+      },
+      {
+        "id": 110,
+        "name": "Nářadí",
+        "nameCs": "Nářadí"
+      }
+    ],
+    "producedAnHour": 27.170539637693224,
+    "baseSalary": 379.50000000000006,
+    "nameCs": "Baterie"
+  },
+  "23": {
+    "name": "Displays",
+    "producedAt": "L",
+    "producedAtName": "Továrna na elektroniku",
+    "producedFrom": [
+      {
+        "id": 16,
+        "name": "Silicon",
+        "amount": 5,
+        "nameCs": "Křemík"
+      },
+      {
+        "id": 17,
+        "name": "Chemicals",
+        "amount": 4,
+        "nameCs": "Chemikálie"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 24,
+        "name": "Chytré telefony",
+        "nameCs": "Chytré telefony"
+      },
+      {
+        "id": 25,
+        "name": "Tablety",
+        "nameCs": "Tablety"
+      },
+      {
+        "id": 26,
+        "name": "Notebooky",
+        "nameCs": "Notebooky"
+      },
+      {
+        "id": 27,
+        "name": "Monitory",
+        "nameCs": "Monitory"
+      },
+      {
+        "id": 28,
+        "name": "Televize",
+        "nameCs": "Televize"
+      },
+      {
+        "id": 49,
+        "name": "Luxusní autointeriér",
+        "nameCs": "Luxusní autointeriér"
+      },
+      {
+        "id": 50,
+        "name": "Základní interiér",
+        "nameCs": "Základní interiér"
+      },
+      {
+        "id": 81,
+        "name": "Kokpit",
+        "nameCs": "Kokpit"
+      }
+    ],
+    "producedAnHour": 34.58068681160956,
+    "baseSalary": 379.50000000000006,
+    "nameCs": "Obrazovky"
+  },
+  "24": {
+    "name": "Smart phones",
+    "producedAt": "L",
+    "producedAtName": "Továrna na elektroniku",
+    "producedFrom": [
+      {
+        "id": 20,
+        "name": "Processors",
+        "amount": 2,
+        "nameCs": "Procesory"
+      },
+      {
+        "id": 21,
+        "name": "Electronic components",
+        "amount": 1,
+        "nameCs": "Tištěné spoje"
+      },
+      {
+        "id": 22,
+        "name": "Batteries",
+        "amount": 1,
+        "nameCs": "Baterie"
+      },
+      {
+        "id": 23,
+        "name": "Displays",
+        "amount": 1,
+        "nameCs": "Obrazovky"
+      },
+      {
+        "id": 18,
+        "name": "Aluminium",
+        "amount": 2,
+        "nameCs": "Hliník"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 12.350245289860556,
+    "baseSalary": 379.50000000000006,
+    "nameCs": "Chytré telefony"
+  },
+  "25": {
+    "name": "Tablets",
+    "producedAt": "L",
+    "producedAtName": "Továrna na elektroniku",
+    "producedFrom": [
+      {
+        "id": 20,
+        "name": "Processors",
+        "amount": 2,
+        "nameCs": "Procesory"
+      },
+      {
+        "id": 21,
+        "name": "Electronic components",
+        "amount": 1,
+        "nameCs": "Tištěné spoje"
+      },
+      {
+        "id": 22,
+        "name": "Batteries",
+        "amount": 1,
+        "nameCs": "Baterie"
+      },
+      {
+        "id": 23,
+        "name": "Displays",
+        "amount": 2,
+        "nameCs": "Obrazovky"
+      },
+      {
+        "id": 18,
+        "name": "Aluminium",
+        "amount": 3,
+        "nameCs": "Hliník"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 12.350245289860556,
+    "baseSalary": 379.50000000000006,
+    "nameCs": "Tablety"
+  },
+  "26": {
+    "name": "Laptops",
+    "producedAt": "L",
+    "producedAtName": "Továrna na elektroniku",
+    "producedFrom": [
+      {
+        "id": 20,
+        "name": "Processors",
+        "amount": 4,
+        "nameCs": "Procesory"
+      },
+      {
+        "id": 21,
+        "name": "Electronic components",
+        "amount": 3,
+        "nameCs": "Tištěné spoje"
+      },
+      {
+        "id": 22,
+        "name": "Batteries",
+        "amount": 2,
+        "nameCs": "Baterie"
+      },
+      {
+        "id": 23,
+        "name": "Displays",
+        "amount": 2,
+        "nameCs": "Obrazovky"
+      },
+      {
+        "id": 19,
+        "name": "Plastic",
+        "amount": 3,
+        "nameCs": "Plast"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 9.880196231888444,
+    "baseSalary": 379.50000000000006,
+    "nameCs": "Notebooky"
+  },
+  "27": {
+    "name": "Monitors",
+    "producedAt": "L",
+    "producedAtName": "Továrna na elektroniku",
+    "producedFrom": [
+      {
+        "id": 21,
+        "name": "Electronic components",
+        "amount": 2,
+        "nameCs": "Tištěné spoje"
+      },
+      {
+        "id": 23,
+        "name": "Displays",
+        "amount": 3,
+        "nameCs": "Obrazovky"
+      },
+      {
+        "id": 19,
+        "name": "Plastic",
+        "amount": 3,
+        "nameCs": "Plast"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 19.76039246377689,
+    "baseSalary": 379.50000000000006,
+    "nameCs": "Monitory"
+  },
+  "28": {
+    "name": "Televisions",
+    "producedAt": "L",
+    "producedAtName": "Továrna na elektroniku",
+    "producedFrom": [
+      {
+        "id": 20,
+        "name": "Processors",
+        "amount": 1,
+        "nameCs": "Procesory"
+      },
+      {
+        "id": 21,
+        "name": "Electronic components",
+        "amount": 4,
+        "nameCs": "Tištěné spoje"
+      },
+      {
+        "id": 23,
+        "name": "Displays",
+        "amount": 4,
+        "nameCs": "Obrazovky"
+      },
+      {
+        "id": 19,
+        "name": "Plastic",
+        "amount": 5,
+        "nameCs": "Plast"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 17.29034340580478,
+    "baseSalary": 379.50000000000006,
+    "nameCs": "Televize"
+  },
+  "29": {
+    "name": "Plant research",
+    "producedAt": "p",
+    "producedAtName": "Centrum rostlinného výzkumu",
+    "producedFrom": [],
+    "neededFor": [],
+    "producedAnHour": 5.214736634288733,
+    "baseSalary": 448.5,
+    "nameCs": "Rostlinný výzkum"
+  },
+  "30": {
+    "name": "Energy research",
+    "producedAt": "h",
+    "producedAtName": "Fyzikální laboratoř",
+    "producedFrom": [],
+    "neededFor": [],
+    "producedAnHour": 3.6989199852864245,
+    "baseSalary": 586.5,
+    "nameCs": "Energetický výzkum"
+  },
+  "31": {
+    "name": "Mining research",
+    "producedAt": "h",
+    "producedAtName": "Fyzikální laboratoř",
+    "producedFrom": [],
+    "neededFor": [],
+    "producedAnHour": 3.362654532078568,
+    "baseSalary": 586.5,
+    "nameCs": "Těžební výzkum"
+  },
+  "32": {
+    "name": "Electronics research",
+    "producedAt": "h",
+    "producedAtName": "Fyzikální laboratoř",
+    "producedFrom": [],
+    "neededFor": [],
+    "producedAnHour": 2.6901236256628542,
+    "baseSalary": 586.5,
+    "nameCs": "Výzkum elektroniky"
+  },
+  "33": {
+    "name": "Breeding research",
+    "producedAt": "b",
+    "producedAtName": "Šlechtitelská stanice",
+    "producedFrom": [],
+    "neededFor": [],
+    "producedAnHour": 4.169998161867903,
+    "baseSalary": 414,
+    "nameCs": "Šlechtitelský výzkum"
+  },
+  "34": {
+    "name": "Chemistry research",
+    "producedAt": "c",
+    "producedAtName": "Chemická laboratoř",
+    "producedFrom": [],
+    "neededFor": [],
+    "producedAnHour": 5.09666442006077,
+    "baseSalary": 414,
+    "nameCs": "Chemický výzkum"
+  },
+  "35": {
+    "name": "Software",
+    "producedAt": "s",
+    "producedAtName": "VaV softwaru",
+    "producedFrom": [],
+    "neededFor": [],
+    "producedAnHour": 6.389043610949279,
+    "baseSalary": 586.5,
+    "nameCs": "Software"
+  },
+  "40": {
+    "name": "Cotton",
+    "producedAt": "P",
+    "producedAtName": "Farma",
+    "producedFrom": [
+      {
+        "id": 2,
+        "name": "Water",
+        "amount": 1,
+        "nameCs": "Voda"
+      },
+      {
+        "id": 66,
+        "name": "Seeds",
+        "amount": 1,
+        "nameCs": "Semena"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 41,
+        "name": "Látka",
+        "nameCs": "Látka"
+      }
+    ],
+    "producedAnHour": 264.01178708862767,
+    "baseSalary": 103.5,
+    "nameCs": "Bavlna"
+  },
+  "41": {
+    "name": "Fabric",
+    "producedAt": "T",
+    "producedAtName": "Textilní závod",
+    "producedFrom": [
+      {
+        "id": 40,
+        "name": "Cotton",
+        "amount": 2,
+        "nameCs": "Bavlna"
+      },
+      {
+        "id": 1,
+        "name": "Power",
+        "amount": 1,
+        "nameCs": "Energie"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 50,
+        "name": "Základní interiér",
+        "nameCs": "Základní interiér"
+      },
+      {
+        "id": 60,
+        "name": "Spodní prádlo",
+        "nameCs": "Spodní prádlo"
+      },
+      {
+        "id": 61,
+        "name": "Rukavice",
+        "nameCs": "Rukavice"
+      },
+      {
+        "id": 62,
+        "name": "Šaty",
+        "nameCs": "Šaty"
+      },
+      {
+        "id": 148,
+        "name": "Kostým čarodějnice",
+        "nameCs": "Kostým čarodějnice"
+      }
+    ],
+    "producedAnHour": 247.61736418819012,
+    "baseSalary": 138,
+    "nameCs": "Látka"
+  },
+  "42": {
+    "name": "Iron ore",
+    "producedAt": "M",
+    "producedAtName": "Důl",
+    "producedFrom": [
+      {
+        "id": 1,
+        "name": "Power",
+        "amount": 7,
+        "nameCs": "Energie"
+      },
+      {
+        "id": 2,
+        "name": "Water",
+        "amount": 0.5,
+        "nameCs": "Voda"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 43,
+        "name": "Ocel",
+        "nameCs": "Ocel"
+      }
+    ],
+    "producedAnHour": 191.60737202345868,
+    "baseSalary": 276,
+    "nameCs": "Železná ruda"
+  },
+  "43": {
+    "name": "Steel",
+    "producedAt": "Y",
+    "producedAtName": "Továrna",
+    "producedFrom": [
+      {
+        "id": 1,
+        "name": "Power",
+        "amount": 5,
+        "nameCs": "Energie"
+      },
+      {
+        "id": 42,
+        "name": "Iron ore",
+        "amount": 1,
+        "nameCs": "Železná ruda"
+      },
+      {
+        "id": 17,
+        "name": "Chemicals",
+        "amount": 0.1,
+        "nameCs": "Chemikálie"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 48,
+        "name": "Elektromotor",
+        "nameCs": "Elektromotor"
+      },
+      {
+        "id": 51,
+        "name": "Karoserie",
+        "nameCs": "Karoserie"
+      },
+      {
+        "id": 52,
+        "name": "Spalovací motor",
+        "nameCs": "Spalovací motor"
+      },
+      {
+        "id": 57,
+        "name": "Kamión",
+        "nameCs": "Kamión"
+      },
+      {
+        "id": 82,
+        "name": "Polohové čidlo",
+        "nameCs": "Polohové čidlo"
+      },
+      {
+        "id": 86,
+        "name": "Raketový motor",
+        "nameCs": "Raketový motor"
+      },
+      {
+        "id": 87,
+        "name": "Tepelný štít",
+        "nameCs": "Tepelný štít"
+      },
+      {
+        "id": 101,
+        "name": "Železobeton",
+        "nameCs": "Železobeton"
+      },
+      {
+        "id": 107,
+        "name": "Ocelové nosníky",
+        "nameCs": "Ocelové nosníky"
+      },
+      {
+        "id": 110,
+        "name": "Nářadí",
+        "nameCs": "Nářadí"
+      },
+      {
+        "id": 112,
+        "name": "Buldozer",
+        "nameCs": "Buldozer"
+      }
+    ],
+    "producedAnHour": 208.4999080933951,
+    "baseSalary": 414,
+    "nameCs": "Ocel"
+  },
+  "44": {
+    "name": "Sand",
+    "producedAt": "Q",
+    "producedAtName": "Lom",
+    "producedFrom": [
+      {
+        "id": 1,
+        "name": "Power",
+        "amount": 2,
+        "nameCs": "Energie"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 16,
+        "name": "Křemík",
+        "nameCs": "Křemík"
+      },
+      {
+        "id": 101,
+        "name": "Železobeton",
+        "nameCs": "Železobeton"
+      }
+    ],
+    "producedAnHour": 1496.932593933271,
+    "baseSalary": 276,
+    "nameCs": "Písek"
+  },
+  "45": {
+    "name": "Glass",
+    "producedAt": "Y",
+    "producedAtName": "Továrna",
+    "producedFrom": [
+      {
+        "id": 1,
+        "name": "Power",
+        "amount": 2,
+        "nameCs": "Energie"
+      },
+      {
+        "id": 16,
+        "name": "Silicon",
+        "amount": 1,
+        "nameCs": "Křemík"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 51,
+        "name": "Karoserie",
+        "nameCs": "Karoserie"
+      },
+      {
+        "id": 70,
+        "name": "Luxusní hodinky",
+        "nameCs": "Luxusní hodinky"
+      },
+      {
+        "id": 109,
+        "name": "Okna",
+        "nameCs": "Okna"
+      },
+      {
+        "id": 144,
+        "name": "Vánoční ozdoba",
+        "nameCs": "Vánoční ozdoba"
+      }
+    ],
+    "producedAnHour": 138.9999387289301,
+    "baseSalary": 414,
+    "nameCs": "Sklo"
+  },
+  "46": {
+    "name": "Leather",
+    "producedAt": "F",
+    "producedAtName": "Ranč",
+    "producedFrom": [
+      {
+        "id": 115,
+        "name": "Cows",
+        "amount": 0.125,
+        "nameCs": "Krávy"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 49,
+        "name": "Luxusní autointeriér",
+        "nameCs": "Luxusní autointeriér"
+      },
+      {
+        "id": 61,
+        "name": "Rukavice",
+        "nameCs": "Rukavice"
+      },
+      {
+        "id": 63,
+        "name": "Boty na podpatku",
+        "nameCs": "Boty na podpatku"
+      },
+      {
+        "id": 64,
+        "name": "Kabelka",
+        "nameCs": "Kabelka"
+      }
+    ],
+    "producedAnHour": 30.952170523523765,
+    "baseSalary": 138,
+    "nameCs": "Kůže"
+  },
+  "47": {
+    "name": "On-board computer",
+    "producedAt": "L",
+    "producedAtName": "Továrna na elektroniku",
+    "producedFrom": [
+      {
+        "id": 20,
+        "name": "Processors",
+        "amount": 2,
+        "nameCs": "Procesory"
+      },
+      {
+        "id": 21,
+        "name": "Electronic components",
+        "amount": 3,
+        "nameCs": "Tištěné spoje"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 53,
+        "name": "Elektromobil",
+        "nameCs": "Elektromobil"
+      },
+      {
+        "id": 54,
+        "name": "Luxusní elektromobil",
+        "nameCs": "Luxusní elektromobil"
+      },
+      {
+        "id": 55,
+        "name": "Auto",
+        "nameCs": "Auto"
+      },
+      {
+        "id": 56,
+        "name": "Luxusní automobil",
+        "nameCs": "Luxusní automobil"
+      },
+      {
+        "id": 57,
+        "name": "Kamión",
+        "nameCs": "Kamión"
+      },
+      {
+        "id": 80,
+        "name": "Letový počítač",
+        "nameCs": "Letový počítač"
+      },
+      {
+        "id": 98,
+        "name": "Dron",
+        "nameCs": "Dron"
+      }
+    ],
+    "producedAnHour": 14.820294347832668,
+    "baseSalary": 379.50000000000006,
+    "nameCs": "Palubní počítač"
+  },
+  "48": {
+    "name": "Electric motor",
+    "producedAt": "D",
+    "producedAtName": "Továrna na výrobu pohonů",
+    "producedFrom": [
+      {
+        "id": 43,
+        "name": "Steel",
+        "amount": 2,
+        "nameCs": "Ocel"
+      },
+      {
+        "id": 21,
+        "name": "Electronic components",
+        "amount": 3,
+        "nameCs": "Tištěné spoje"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 53,
+        "name": "Elektromobil",
+        "nameCs": "Elektromobil"
+      },
+      {
+        "id": 54,
+        "name": "Luxusní elektromobil",
+        "nameCs": "Luxusní elektromobil"
+      },
+      {
+        "id": 82,
+        "name": "Polohové čidlo",
+        "nameCs": "Polohové čidlo"
+      },
+      {
+        "id": 114,
+        "name": "Roboti",
+        "nameCs": "Roboti"
+      }
+    ],
+    "producedAnHour": 34.69226988688099,
+    "baseSalary": 621,
+    "nameCs": "Elektromotor"
+  },
+  "49": {
+    "name": "Luxury car interior",
+    "producedAt": "1",
+    "producedAtName": "Automobilka",
+    "producedFrom": [
+      {
+        "id": 23,
+        "name": "Displays",
+        "amount": 6,
+        "nameCs": "Obrazovky"
+      },
+      {
+        "id": 18,
+        "name": "Aluminium",
+        "amount": 2,
+        "nameCs": "Hliník"
+      },
+      {
+        "id": 46,
+        "name": "Leather",
+        "amount": 5,
+        "nameCs": "Kůže"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 54,
+        "name": "Luxusní elektromobil",
+        "nameCs": "Luxusní elektromobil"
+      },
+      {
+        "id": 56,
+        "name": "Luxusní automobil",
+        "nameCs": "Luxusní automobil"
+      }
+    ],
+    "producedAnHour": 21.728069309536387,
+    "baseSalary": 448.5,
+    "nameCs": "Luxusní autointeriér"
+  },
+  "50": {
+    "name": "Basic interior",
+    "producedAt": "1",
+    "producedAtName": "Automobilka",
+    "producedFrom": [
+      {
+        "id": 23,
+        "name": "Displays",
+        "amount": 2,
+        "nameCs": "Obrazovky"
+      },
+      {
+        "id": 19,
+        "name": "Plastic",
+        "amount": 2,
+        "nameCs": "Plast"
+      },
+      {
+        "id": 41,
+        "name": "Fabric",
+        "amount": 5,
+        "nameCs": "Látka"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 53,
+        "name": "Elektromobil",
+        "nameCs": "Elektromobil"
+      },
+      {
+        "id": 55,
+        "name": "Auto",
+        "nameCs": "Auto"
+      },
+      {
+        "id": 57,
+        "name": "Kamión",
+        "nameCs": "Kamión"
+      },
+      {
+        "id": 81,
+        "name": "Kokpit",
+        "nameCs": "Kokpit"
+      },
+      {
+        "id": 95,
+        "name": "Jumbo jet",
+        "nameCs": "Jumbo jet"
+      }
+    ],
+    "producedAnHour": 34.76491089525822,
+    "baseSalary": 448.5,
+    "nameCs": "Základní interiér"
+  },
+  "51": {
+    "name": "Car body",
+    "producedAt": "1",
+    "producedAtName": "Automobilka",
+    "producedFrom": [
+      {
+        "id": 18,
+        "name": "Aluminium",
+        "amount": 30,
+        "nameCs": "Hliník"
+      },
+      {
+        "id": 45,
+        "name": "Glass",
+        "amount": 5,
+        "nameCs": "Sklo"
+      },
+      {
+        "id": 43,
+        "name": "Steel",
+        "amount": 5,
+        "nameCs": "Ocel"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 53,
+        "name": "Elektromobil",
+        "nameCs": "Elektromobil"
+      },
+      {
+        "id": 54,
+        "name": "Luxusní elektromobil",
+        "nameCs": "Luxusní elektromobil"
+      },
+      {
+        "id": 55,
+        "name": "Auto",
+        "nameCs": "Auto"
+      },
+      {
+        "id": 56,
+        "name": "Luxusní automobil",
+        "nameCs": "Luxusní automobil"
+      },
+      {
+        "id": 57,
+        "name": "Kamión",
+        "nameCs": "Kamión"
+      },
+      {
+        "id": 112,
+        "name": "Buldozer",
+        "nameCs": "Buldozer"
+      }
+    ],
+    "producedAnHour": 26.073683171443665,
+    "baseSalary": 448.5,
+    "nameCs": "Karoserie"
+  },
+  "52": {
+    "name": "Combustion engine",
+    "producedAt": "D",
+    "producedAtName": "Továrna na výrobu pohonů",
+    "producedFrom": [
+      {
+        "id": 43,
+        "name": "Steel",
+        "amount": 6,
+        "nameCs": "Ocel"
+      },
+      {
+        "id": 17,
+        "name": "Chemicals",
+        "amount": 5,
+        "nameCs": "Chemikálie"
+      },
+      {
+        "id": 21,
+        "name": "Electronic components",
+        "amount": 5,
+        "nameCs": "Tištěné spoje"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 55,
+        "name": "Auto",
+        "nameCs": "Auto"
+      },
+      {
+        "id": 56,
+        "name": "Luxusní automobil",
+        "nameCs": "Luxusní automobil"
+      },
+      {
+        "id": 57,
+        "name": "Kamión",
+        "nameCs": "Kamión"
+      },
+      {
+        "id": 97,
+        "name": "Jednomotorové letadlo",
+        "nameCs": "Jednomotorové letadlo"
+      },
+      {
+        "id": 112,
+        "name": "Buldozer",
+        "nameCs": "Buldozer"
+      }
+    ],
+    "producedAnHour": 6.307685433978363,
+    "baseSalary": 621,
+    "nameCs": "Spalovací motor"
+  },
+  "53": {
+    "name": "Economy e-car",
+    "producedAt": "1",
+    "producedAtName": "Automobilka",
+    "producedFrom": [
+      {
+        "id": 48,
+        "name": "Electric motor",
+        "amount": 2,
+        "nameCs": "Elektromotor"
+      },
+      {
+        "id": 50,
+        "name": "Basic interior",
+        "amount": 1,
+        "nameCs": "Základní interiér"
+      },
+      {
+        "id": 51,
+        "name": "Car body",
+        "amount": 1,
+        "nameCs": "Karoserie"
+      },
+      {
+        "id": 22,
+        "name": "Batteries",
+        "amount": 15,
+        "nameCs": "Baterie"
+      },
+      {
+        "id": 47,
+        "name": "On-board computer",
+        "amount": 1,
+        "nameCs": "Palubní počítač"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 21.728069309536387,
+    "baseSalary": 448.5,
+    "nameCs": "Elektromobil"
+  },
+  "54": {
+    "name": "Luxury e-car",
+    "producedAt": "1",
+    "producedAtName": "Automobilka",
+    "producedFrom": [
+      {
+        "id": 48,
+        "name": "Electric motor",
+        "amount": 4,
+        "nameCs": "Elektromotor"
+      },
+      {
+        "id": 49,
+        "name": "Luxury car interior",
+        "amount": 1,
+        "nameCs": "Luxusní autointeriér"
+      },
+      {
+        "id": 51,
+        "name": "Car body",
+        "amount": 1,
+        "nameCs": "Karoserie"
+      },
+      {
+        "id": 22,
+        "name": "Batteries",
+        "amount": 30,
+        "nameCs": "Baterie"
+      },
+      {
+        "id": 47,
+        "name": "On-board computer",
+        "amount": 2,
+        "nameCs": "Palubní počítač"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 4.345613861907277,
+    "baseSalary": 448.5,
+    "nameCs": "Luxusní elektromobil"
+  },
+  "55": {
+    "name": "Economy car",
+    "producedAt": "1",
+    "producedAtName": "Automobilka",
+    "producedFrom": [
+      {
+        "id": 52,
+        "name": "Combustion engine",
+        "amount": 1,
+        "nameCs": "Spalovací motor"
+      },
+      {
+        "id": 50,
+        "name": "Basic interior",
+        "amount": 1,
+        "nameCs": "Základní interiér"
+      },
+      {
+        "id": 51,
+        "name": "Car body",
+        "amount": 1,
+        "nameCs": "Karoserie"
+      },
+      {
+        "id": 47,
+        "name": "On-board computer",
+        "amount": 1,
+        "nameCs": "Palubní počítač"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 15.209648516675472,
+    "baseSalary": 448.5,
+    "nameCs": "Auto"
+  },
+  "56": {
+    "name": "Luxury car",
+    "producedAt": "1",
+    "producedAtName": "Automobilka",
+    "producedFrom": [
+      {
+        "id": 52,
+        "name": "Combustion engine",
+        "amount": 2,
+        "nameCs": "Spalovací motor"
+      },
+      {
+        "id": 49,
+        "name": "Luxury car interior",
+        "amount": 1,
+        "nameCs": "Luxusní autointeriér"
+      },
+      {
+        "id": 51,
+        "name": "Car body",
+        "amount": 1,
+        "nameCs": "Karoserie"
+      },
+      {
+        "id": 47,
+        "name": "On-board computer",
+        "amount": 2,
+        "nameCs": "Palubní počítač"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 2.1728069309536386,
+    "baseSalary": 448.5,
+    "nameCs": "Luxusní automobil"
+  },
+  "57": {
+    "name": "Truck",
+    "producedAt": "1",
+    "producedAtName": "Automobilka",
+    "producedFrom": [
+      {
+        "id": 52,
+        "name": "Combustion engine",
+        "amount": 6,
+        "nameCs": "Spalovací motor"
+      },
+      {
+        "id": 50,
+        "name": "Basic interior",
+        "amount": 1,
+        "nameCs": "Základní interiér"
+      },
+      {
+        "id": 51,
+        "name": "Car body",
+        "amount": 1,
+        "nameCs": "Karoserie"
+      },
+      {
+        "id": 43,
+        "name": "Steel",
+        "amount": 10,
+        "nameCs": "Ocel"
+      },
+      {
+        "id": 47,
+        "name": "On-board computer",
+        "amount": 1,
+        "nameCs": "Palubní počítač"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 5.214736634288733,
+    "baseSalary": 448.5,
+    "nameCs": "Kamión"
+  },
+  "58": {
+    "name": "Automotive research",
+    "producedAt": "a",
+    "producedAtName": "Automobilový výzkum a vývoj",
+    "producedFrom": [],
+    "neededFor": [],
+    "producedAnHour": 4.660878956821966,
+    "baseSalary": 552,
+    "nameCs": "Automobilový výzkum"
+  },
+  "59": {
+    "name": "Fashion research",
+    "producedAt": "f",
+    "producedAtName": "Designové studio",
+    "producedFrom": [],
+    "neededFor": [],
+    "producedAnHour": 7.387543565242372,
+    "baseSalary": 448.5,
+    "nameCs": "Módní výzkum"
+  },
+  "60": {
+    "name": "Underwear",
+    "producedAt": "T",
+    "producedAtName": "Textilní závod",
+    "producedFrom": [
+      {
+        "id": 41,
+        "name": "Fabric",
+        "amount": 1,
+        "nameCs": "Látka"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 170.23693787938072,
+    "baseSalary": 138,
+    "nameCs": "Spodní prádlo"
+  },
+  "61": {
+    "name": "Gloves",
+    "producedAt": "T",
+    "producedAtName": "Textilní závod",
+    "producedFrom": [
+      {
+        "id": 41,
+        "name": "Fabric",
+        "amount": 0.5,
+        "nameCs": "Látka"
+      },
+      {
+        "id": 46,
+        "name": "Leather",
+        "amount": 0.5,
+        "nameCs": "Kůže"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 147.02280998673788,
+    "baseSalary": 138,
+    "nameCs": "Rukavice"
+  },
+  "62": {
+    "name": "Dress",
+    "producedAt": "T",
+    "producedAtName": "Textilní závod",
+    "producedFrom": [
+      {
+        "id": 41,
+        "name": "Fabric",
+        "amount": 3,
+        "nameCs": "Látka"
+      },
+      {
+        "id": 19,
+        "name": "Plastic",
+        "amount": 0.5,
+        "nameCs": "Plast"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 154.76085261761884,
+    "baseSalary": 138,
+    "nameCs": "Šaty"
+  },
+  "63": {
+    "name": "Stiletto Heel",
+    "producedAt": "T",
+    "producedAtName": "Textilní závod",
+    "producedFrom": [
+      {
+        "id": 46,
+        "name": "Leather",
+        "amount": 1,
+        "nameCs": "Kůže"
+      },
+      {
+        "id": 19,
+        "name": "Plastic",
+        "amount": 0.2,
+        "nameCs": "Plast"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 100.59455420145224,
+    "baseSalary": 138,
+    "nameCs": "Boty na podpatku"
+  },
+  "64": {
+    "name": "Handbags",
+    "producedAt": "T",
+    "producedAtName": "Textilní závod",
+    "producedFrom": [
+      {
+        "id": 46,
+        "name": "Leather",
+        "amount": 1.5,
+        "nameCs": "Kůže"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 69.64238367792848,
+    "baseSalary": 138,
+    "nameCs": "Kabelka"
+  },
+  "65": {
+    "name": "Sneakers",
+    "producedAt": "T",
+    "producedAtName": "Textilní závod",
+    "producedFrom": [
+      {
+        "id": 19,
+        "name": "Plastic",
+        "amount": 1,
+        "nameCs": "Plast"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 177.97498051026164,
+    "baseSalary": 138,
+    "nameCs": "Botasky"
+  },
+  "66": {
+    "name": "Seeds",
+    "producedAt": "P",
+    "producedAtName": "Farma",
+    "producedFrom": [
+      {
+        "id": 2,
+        "name": "Water",
+        "amount": 0.1,
+        "nameCs": "Voda"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 3,
+        "name": "Jablka",
+        "nameCs": "Jablka"
+      },
+      {
+        "id": 4,
+        "name": "Pomeranče",
+        "nameCs": "Pomeranče"
+      },
+      {
+        "id": 5,
+        "name": "Hrozny",
+        "nameCs": "Hrozny"
+      },
+      {
+        "id": 6,
+        "name": "Obilí",
+        "nameCs": "Obilí"
+      },
+      {
+        "id": 40,
+        "name": "Bavlna",
+        "nameCs": "Bavlna"
+      },
+      {
+        "id": 72,
+        "name": "Cukrová třtina",
+        "nameCs": "Cukrová třtina"
+      },
+      {
+        "id": 106,
+        "name": "Dřevo",
+        "nameCs": "Dřevo"
+      },
+      {
+        "id": 118,
+        "name": "Kávová zrna",
+        "nameCs": "Kávová zrna"
+      },
+      {
+        "id": 120,
+        "name": "Zelenina",
+        "nameCs": "Zelenina"
+      },
+      {
+        "id": 136,
+        "name": "Kakao",
+        "nameCs": "Kakao"
+      },
+      {
+        "id": 146,
+        "name": "Dýně",
+        "nameCs": "Dýně"
+      }
+    ],
+    "producedAnHour": 907.5405181171576,
+    "baseSalary": 103.5,
+    "nameCs": "Semena"
+  },
+  "67": {
+    "name": "Xmas crackers",
+    "producedAt": "Y",
+    "producedAtName": "Továrna",
+    "producedFrom": [
+      {
+        "id": 17,
+        "name": "Chemicals",
+        "amount": 0.5,
+        "nameCs": "Chemikálie"
+      },
+      {
+        "id": 19,
+        "name": "Plastic",
+        "amount": 0.1,
+        "nameCs": "Plast"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 240.93322713014547,
+    "baseSalary": 414,
+    "nameCs": "Vánoční krekry"
+  },
+  "68": {
+    "name": "Gold ore",
+    "producedAt": "M",
+    "producedAtName": "Důl",
+    "producedFrom": [
+      {
+        "id": 1,
+        "name": "Power",
+        "amount": 80,
+        "nameCs": "Energie"
+      },
+      {
+        "id": 2,
+        "name": "Water",
+        "amount": 2,
+        "nameCs": "Voda"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 69,
+        "name": "Zlaté cihly",
+        "nameCs": "Zlaté cihly"
+      }
+    ],
+    "producedAnHour": 59.877303757330836,
+    "baseSalary": 276,
+    "nameCs": "Zlatá ruda"
+  },
+  "69": {
+    "name": "Golden bars",
+    "producedAt": "Y",
+    "producedAtName": "Továrna",
+    "producedFrom": [
+      {
+        "id": 1,
+        "name": "Power",
+        "amount": 40,
+        "nameCs": "Energie"
+      },
+      {
+        "id": 68,
+        "name": "Gold ore",
+        "amount": 200,
+        "nameCs": "Zlatá ruda"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 70,
+        "name": "Luxusní hodinky",
+        "nameCs": "Luxusní hodinky"
+      },
+      {
+        "id": 71,
+        "name": "Náhrdelník",
+        "nameCs": "Náhrdelník"
+      },
+      {
+        "id": 79,
+        "name": "Hi-tech tištěné spoje",
+        "nameCs": "Hi-tech tištěné spoje"
+      },
+      {
+        "id": 96,
+        "name": "Tryskové letadlo",
+        "nameCs": "Tryskové letadlo"
+      }
+    ],
+    "producedAnHour": 32.433319036750355,
+    "baseSalary": 414,
+    "nameCs": "Zlaté cihly"
+  },
+  "70": {
+    "name": "Luxury watch",
+    "producedAt": "T",
+    "producedAtName": "Textilní závod",
+    "producedFrom": [
+      {
+        "id": 69,
+        "name": "Golden bars",
+        "amount": 0.1,
+        "nameCs": "Zlaté cihly"
+      },
+      {
+        "id": 21,
+        "name": "Electronic components",
+        "amount": 2,
+        "nameCs": "Tištěné spoje"
+      },
+      {
+        "id": 45,
+        "name": "Glass",
+        "amount": 0.5,
+        "nameCs": "Sklo"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 19.345106577202355,
+    "baseSalary": 138,
+    "nameCs": "Luxusní hodinky"
+  },
+  "71": {
+    "name": "Necklace",
+    "producedAt": "T",
+    "producedAtName": "Textilní závod",
+    "producedFrom": [
+      {
+        "id": 69,
+        "name": "Golden bars",
+        "amount": 0.25,
+        "nameCs": "Zlaté cihly"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 42.55923446984518,
+    "baseSalary": 138,
+    "nameCs": "Náhrdelník"
+  },
+  "72": {
+    "name": "Sugarcane",
+    "producedAt": "P",
+    "producedAtName": "Farma",
+    "producedFrom": [
+      {
+        "id": 2,
+        "name": "Water",
+        "amount": 3,
+        "nameCs": "Voda"
+      },
+      {
+        "id": 66,
+        "name": "Seeds",
+        "amount": 1,
+        "nameCs": "Semena"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 73,
+        "name": "Ethanol",
+        "nameCs": "Ethanol"
+      },
+      {
+        "id": 135,
+        "name": "Cukr",
+        "nameCs": "Cukr"
+      }
+    ],
+    "producedAnHour": 660.0294677215692,
+    "baseSalary": 103.5,
+    "nameCs": "Cukrová třtina"
+  },
+  "73": {
+    "name": "Ethanol",
+    "producedAt": "6",
+    "producedAtName": "Stáčírna",
+    "producedFrom": [
+      {
+        "id": 1,
+        "name": "Power",
+        "amount": 20,
+        "nameCs": "Energie"
+      },
+      {
+        "id": 72,
+        "name": "Sugarcane",
+        "amount": 10,
+        "nameCs": "Cukrová třtina"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 11,
+        "name": "Benzín",
+        "nameCs": "Benzín"
+      },
+      {
+        "id": 12,
+        "name": "Nafta",
+        "nameCs": "Nafta"
+      }
+    ],
+    "producedAnHour": 63.84170198583947,
+    "baseSalary": 241.49999999999997,
+    "nameCs": "Ethanol"
+  },
+  "74": {
+    "name": "Methane",
+    "producedAt": "O",
+    "producedAtName": "Těžní věž",
+    "producedFrom": [
+      {
+        "id": 1,
+        "name": "Power",
+        "amount": 20,
+        "nameCs": "Energie"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 83,
+        "name": "Raketové palivo",
+        "nameCs": "Raketové palivo"
+      }
+    ],
+    "producedAnHour": 61.16270371505763,
+    "baseSalary": 517.5,
+    "nameCs": "Methan"
+  },
+  "75": {
+    "name": "Carbon fibers",
+    "producedAt": "R",
+    "producedAtName": "Rafinérie",
+    "producedFrom": [
+      {
+        "id": 10,
+        "name": "Crude oil",
+        "amount": 0.1,
+        "nameCs": "Ropa"
+      },
+      {
+        "id": 1,
+        "name": "Power",
+        "amount": 0.5,
+        "nameCs": "Energie"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 76,
+        "name": "Uhlíkový kompozit",
+        "nameCs": "Uhlíkový kompozit"
+      }
+    ],
+    "producedAnHour": 269.0003522216169,
+    "baseSalary": 482.99999999999994,
+    "nameCs": "Uhlíková vlákna"
+  },
+  "76": {
+    "name": "Carbon composite",
+    "producedAt": "Y",
+    "producedAtName": "Továrna",
+    "producedFrom": [
+      {
+        "id": 75,
+        "name": "Carbon fibers",
+        "amount": 8,
+        "nameCs": "Uhlíková vlákna"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 77,
+        "name": "Trup",
+        "nameCs": "Trup"
+      },
+      {
+        "id": 78,
+        "name": "Křídlo",
+        "nameCs": "Křídlo"
+      }
+    ],
+    "producedAnHour": 74.13330065542938,
+    "baseSalary": 414,
+    "nameCs": "Uhlíkový kompozit"
+  },
+  "77": {
+    "name": "Fuselage",
+    "producedAt": "7",
+    "producedAtName": "Letecká továrna",
+    "producedFrom": [
+      {
+        "id": 76,
+        "name": "Carbon composite",
+        "amount": 40,
+        "nameCs": "Uhlíkový kompozit"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 90,
+        "name": "Suborbitální 2. stupeň",
+        "nameCs": "Suborbitální 2. stupeň"
+      },
+      {
+        "id": 92,
+        "name": "Orbitální nosný stupeň",
+        "nameCs": "Orbitální nosný stupeň"
+      },
+      {
+        "id": 95,
+        "name": "Jumbo jet",
+        "nameCs": "Jumbo jet"
+      },
+      {
+        "id": 96,
+        "name": "Tryskové letadlo",
+        "nameCs": "Tryskové letadlo"
+      },
+      {
+        "id": 97,
+        "name": "Jednomotorové letadlo",
+        "nameCs": "Jednomotorové letadlo"
+      }
+    ],
+    "producedAnHour": 3.6989199852864245,
+    "baseSalary": 586.5,
+    "nameCs": "Trup"
+  },
+  "78": {
+    "name": "Wing",
+    "producedAt": "7",
+    "producedAtName": "Letecká továrna",
+    "producedFrom": [
+      {
+        "id": 76,
+        "name": "Carbon composite",
+        "amount": 30,
+        "nameCs": "Uhlíkový kompozit"
+      },
+      {
+        "id": 18,
+        "name": "Aluminium",
+        "amount": 5,
+        "nameCs": "Hliník"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 95,
+        "name": "Jumbo jet",
+        "nameCs": "Jumbo jet"
+      },
+      {
+        "id": 96,
+        "name": "Tryskové letadlo",
+        "nameCs": "Tryskové letadlo"
+      },
+      {
+        "id": 97,
+        "name": "Jednomotorové letadlo",
+        "nameCs": "Jednomotorové letadlo"
+      }
+    ],
+    "producedAnHour": 9.079167236612133,
+    "baseSalary": 586.5,
+    "nameCs": "Křídlo"
+  },
+  "79": {
+    "name": "High grade e-comps",
+    "producedAt": "L",
+    "producedAtName": "Továrna na elektroniku",
+    "producedFrom": [
+      {
+        "id": 16,
+        "name": "Silicon",
+        "amount": 4,
+        "nameCs": "Křemík"
+      },
+      {
+        "id": 17,
+        "name": "Chemicals",
+        "amount": 3,
+        "nameCs": "Chemikálie"
+      },
+      {
+        "id": 69,
+        "name": "Golden bars",
+        "amount": 0.0625,
+        "nameCs": "Zlaté cihly"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 80,
+        "name": "Letový počítač",
+        "nameCs": "Letový počítač"
+      },
+      {
+        "id": 81,
+        "name": "Kokpit",
+        "nameCs": "Kokpit"
+      },
+      {
+        "id": 86,
+        "name": "Raketový motor",
+        "nameCs": "Raketový motor"
+      },
+      {
+        "id": 88,
+        "name": "Iontový motor",
+        "nameCs": "Iontový motor"
+      },
+      {
+        "id": 89,
+        "name": "Proudový motor",
+        "nameCs": "Proudový motor"
+      },
+      {
+        "id": 99,
+        "name": "Družice",
+        "nameCs": "Družice"
+      }
+    ],
+    "producedAnHour": 1.976039246377689,
+    "baseSalary": 379.50000000000006,
+    "nameCs": "Hi-tech tištěné spoje"
+  },
+  "80": {
+    "name": "Flight computer",
+    "producedAt": "8",
+    "producedAtName": "Letecká elektronika",
+    "producedFrom": [
+      {
+        "id": 79,
+        "name": "High grade e-comps",
+        "amount": 4,
+        "nameCs": "Hi-tech tištěné spoje"
+      },
+      {
+        "id": 47,
+        "name": "On-board computer",
+        "amount": 2,
+        "nameCs": "Palubní počítač"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 90,
+        "name": "Suborbitální 2. stupeň",
+        "nameCs": "Suborbitální 2. stupeň"
+      },
+      {
+        "id": 99,
+        "name": "Družice",
+        "nameCs": "Družice"
+      }
+    ],
+    "producedAnHour": 2.602036412214896,
+    "baseSalary": 724.5,
+    "nameCs": "Letový počítač"
+  },
+  "81": {
+    "name": "Cockpit",
+    "producedAt": "8",
+    "producedAtName": "Letecká elektronika",
+    "producedFrom": [
+      {
+        "id": 79,
+        "name": "High grade e-comps",
+        "amount": 4,
+        "nameCs": "Hi-tech tištěné spoje"
+      },
+      {
+        "id": 23,
+        "name": "Displays",
+        "amount": 8,
+        "nameCs": "Obrazovky"
+      },
+      {
+        "id": 50,
+        "name": "Basic interior",
+        "amount": 1,
+        "nameCs": "Základní interiér"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 93,
+        "name": "Vesmírná loď",
+        "nameCs": "Vesmírná loď"
+      },
+      {
+        "id": 95,
+        "name": "Jumbo jet",
+        "nameCs": "Jumbo jet"
+      },
+      {
+        "id": 96,
+        "name": "Tryskové letadlo",
+        "nameCs": "Tryskové letadlo"
+      },
+      {
+        "id": 97,
+        "name": "Jednomotorové letadlo",
+        "nameCs": "Jednomotorové letadlo"
+      }
+    ],
+    "producedAnHour": 2.602036412214896,
+    "baseSalary": 724.5,
+    "nameCs": "Kokpit"
+  },
+  "82": {
+    "name": "Attitude control",
+    "producedAt": "8",
+    "producedAtName": "Letecká elektronika",
+    "producedFrom": [
+      {
+        "id": 43,
+        "name": "Steel",
+        "amount": 3,
+        "nameCs": "Ocel"
+      },
+      {
+        "id": 22,
+        "name": "Batteries",
+        "amount": 5,
+        "nameCs": "Baterie"
+      },
+      {
+        "id": 48,
+        "name": "Electric motor",
+        "amount": 3,
+        "nameCs": "Elektromotor"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 90,
+        "name": "Suborbitální 2. stupeň",
+        "nameCs": "Suborbitální 2. stupeň"
+      },
+      {
+        "id": 93,
+        "name": "Vesmírná loď",
+        "nameCs": "Vesmírná loď"
+      },
+      {
+        "id": 99,
+        "name": "Družice",
+        "nameCs": "Družice"
+      }
+    ],
+    "producedAnHour": 3.122443694657875,
+    "baseSalary": 724.5,
+    "nameCs": "Polohové čidlo"
+  },
+  "83": {
+    "name": "Rocket fuel",
+    "producedAt": "R",
+    "producedAtName": "Rafinérie",
+    "producedFrom": [
+      {
+        "id": 74,
+        "name": "Methane",
+        "amount": 1,
+        "nameCs": "Methan"
+      },
+      {
+        "id": 1,
+        "name": "Power",
+        "amount": 5,
+        "nameCs": "Energie"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 84,
+        "name": "Palivová nádrž",
+        "nameCs": "Palivová nádrž"
+      },
+      {
+        "id": 85,
+        "name": "Nosný stupeň na tuhé palivo",
+        "nameCs": "Nosný stupeň na tuhé palivo"
+      }
+    ],
+    "producedAnHour": 85.59102116142355,
+    "baseSalary": 482.99999999999994,
+    "nameCs": "Raketové palivo"
+  },
+  "84": {
+    "name": "Propellant tank",
+    "producedAt": "7",
+    "producedAtName": "Letecká továrna",
+    "producedFrom": [
+      {
+        "id": 18,
+        "name": "Aluminium",
+        "amount": 50,
+        "nameCs": "Hliník"
+      },
+      {
+        "id": 83,
+        "name": "Rocket fuel",
+        "amount": 250,
+        "nameCs": "Raketové palivo"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 90,
+        "name": "Suborbitální 2. stupeň",
+        "nameCs": "Suborbitální 2. stupeň"
+      },
+      {
+        "id": 92,
+        "name": "Orbitální nosný stupeň",
+        "nameCs": "Orbitální nosný stupeň"
+      },
+      {
+        "id": 93,
+        "name": "Vesmírná loď",
+        "nameCs": "Vesmírná loď"
+      }
+    ],
+    "producedAnHour": 5.043981798117851,
+    "baseSalary": 586.5,
+    "nameCs": "Palivová nádrž"
+  },
+  "85": {
+    "name": "Solid fuel booster",
+    "producedAt": "D",
+    "producedAtName": "Továrna na výrobu pohonů",
+    "producedFrom": [
+      {
+        "id": 18,
+        "name": "Aluminium",
+        "amount": 30,
+        "nameCs": "Hliník"
+      },
+      {
+        "id": 83,
+        "name": "Rocket fuel",
+        "amount": 100,
+        "nameCs": "Raketové palivo"
+      },
+      {
+        "id": 17,
+        "name": "Chemicals",
+        "amount": 50,
+        "nameCs": "Chemikálie"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 91,
+        "name": "Suborbitální raketa",
+        "nameCs": "Suborbitální raketa"
+      }
+    ],
+    "producedAnHour": 0.31538427169891814,
+    "baseSalary": 621,
+    "nameCs": "Nosný stupeň na tuhé palivo"
+  },
+  "86": {
+    "name": "Rocket engine",
+    "producedAt": "D",
+    "producedAtName": "Továrna na výrobu pohonů",
+    "producedFrom": [
+      {
+        "id": 43,
+        "name": "Steel",
+        "amount": 20,
+        "nameCs": "Ocel"
+      },
+      {
+        "id": 79,
+        "name": "High grade e-comps",
+        "amount": 8,
+        "nameCs": "Hi-tech tištěné spoje"
+      },
+      {
+        "id": 18,
+        "name": "Aluminium",
+        "amount": 10,
+        "nameCs": "Hliník"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 92,
+        "name": "Orbitální nosný stupeň",
+        "nameCs": "Orbitální nosný stupeň"
+      },
+      {
+        "id": 93,
+        "name": "Vesmírná loď",
+        "nameCs": "Vesmírná loď"
+      }
+    ],
+    "producedAnHour": 0.31538427169891814,
+    "baseSalary": 621,
+    "nameCs": "Raketový motor"
+  },
+  "87": {
+    "name": "Heat shield",
+    "producedAt": "7",
+    "producedAtName": "Letecká továrna",
+    "producedFrom": [
+      {
+        "id": 43,
+        "name": "Steel",
+        "amount": 20,
+        "nameCs": "Ocel"
+      },
+      {
+        "id": 16,
+        "name": "Silicon",
+        "amount": 30,
+        "nameCs": "Křemík"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 93,
+        "name": "Vesmírná loď",
+        "nameCs": "Vesmírná loď"
+      }
+    ],
+    "producedAnHour": 13.450618128314272,
+    "baseSalary": 586.5,
+    "nameCs": "Tepelný štít"
+  },
+  "88": {
+    "name": "Ion drive",
+    "producedAt": "D",
+    "producedAtName": "Továrna na výrobu pohonů",
+    "producedFrom": [
+      {
+        "id": 79,
+        "name": "High grade e-comps",
+        "amount": 8,
+        "nameCs": "Hi-tech tištěné spoje"
+      },
+      {
+        "id": 22,
+        "name": "Batteries",
+        "amount": 30,
+        "nameCs": "Baterie"
+      },
+      {
+        "id": 17,
+        "name": "Chemicals",
+        "amount": 15,
+        "nameCs": "Chemikálie"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 90,
+        "name": "Suborbitální 2. stupeň",
+        "nameCs": "Suborbitální 2. stupeň"
+      },
+      {
+        "id": 99,
+        "name": "Družice",
+        "nameCs": "Družice"
+      }
+    ],
+    "producedAnHour": 0.6307685433978363,
+    "baseSalary": 621,
+    "nameCs": "Iontový motor"
+  },
+  "89": {
+    "name": "Jet engine",
+    "producedAt": "D",
+    "producedAtName": "Továrna na výrobu pohonů",
+    "producedFrom": [
+      {
+        "id": 79,
+        "name": "High grade e-comps",
+        "amount": 4,
+        "nameCs": "Hi-tech tištěné spoje"
+      },
+      {
+        "id": 18,
+        "name": "Aluminium",
+        "amount": 5,
+        "nameCs": "Hliník"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 95,
+        "name": "Jumbo jet",
+        "nameCs": "Jumbo jet"
+      },
+      {
+        "id": 96,
+        "name": "Tryskové letadlo",
+        "nameCs": "Tryskové letadlo"
+      }
+    ],
+    "producedAnHour": 0.9461528150967544,
+    "baseSalary": 621,
+    "nameCs": "Proudový motor"
+  },
+  "90": {
+    "name": "Sub-orbital 2nd stage",
+    "producedAt": "7",
+    "producedAtName": "Letecká továrna",
+    "producedFrom": [
+      {
+        "id": 77,
+        "name": "Fuselage",
+        "amount": 8,
+        "nameCs": "Trup"
+      },
+      {
+        "id": 84,
+        "name": "Propellant tank",
+        "amount": 2,
+        "nameCs": "Palivová nádrž"
+      },
+      {
+        "id": 80,
+        "name": "Flight computer",
+        "amount": 2,
+        "nameCs": "Letový počítač"
+      },
+      {
+        "id": 88,
+        "name": "Ion drive",
+        "amount": 4,
+        "nameCs": "Iontový motor"
+      },
+      {
+        "id": 82,
+        "name": "Attitude control",
+        "amount": 2,
+        "nameCs": "Polohové čidlo"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 91,
+        "name": "Suborbitální raketa",
+        "nameCs": "Suborbitální raketa"
+      }
+    ],
+    "producedAnHour": 3.362654532078568,
+    "baseSalary": 586.5,
+    "nameCs": "Suborbitální 2. stupeň"
+  },
+  "91": {
+    "name": "Sub-orbital rocket",
+    "producedAt": "9",
+    "producedAtName": "Vertikální montovna raket",
+    "producedFrom": [
+      {
+        "id": 85,
+        "name": "Solid fuel booster",
+        "amount": 1,
+        "nameCs": "Nosný stupeň na tuhé palivo"
+      },
+      {
+        "id": 90,
+        "name": "Sub-orbital 2nd stage",
+        "amount": 1,
+        "nameCs": "Suborbitální 2. stupeň"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 100,
+        "name": "Leteckokosmický výzkum",
+        "nameCs": "Leteckokosmický výzkum"
+      }
+    ],
+    "producedAnHour": 0.7321370818546697,
+    "baseSalary": 759.0000000000001,
+    "nameCs": "Suborbitální raketa"
+  },
+  "92": {
+    "name": "Orbital booster",
+    "producedAt": "7",
+    "producedAtName": "Letecká továrna",
+    "producedFrom": [
+      {
+        "id": 77,
+        "name": "Fuselage",
+        "amount": 40,
+        "nameCs": "Trup"
+      },
+      {
+        "id": 84,
+        "name": "Propellant tank",
+        "amount": 16,
+        "nameCs": "Palivová nádrž"
+      },
+      {
+        "id": 86,
+        "name": "Rocket engine",
+        "amount": 34,
+        "nameCs": "Raketový motor"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 94,
+        "name": "BFR",
+        "nameCs": "BFR"
+      }
+    ],
+    "producedAnHour": 1.681327266039284,
+    "baseSalary": 586.5,
+    "nameCs": "Orbitální nosný stupeň"
+  },
+  "93": {
+    "name": "Starship",
+    "producedAt": "7",
+    "producedAtName": "Letecká továrna",
+    "producedFrom": [
+      {
+        "id": 81,
+        "name": "Cockpit",
+        "amount": 2,
+        "nameCs": "Kokpit"
+      },
+      {
+        "id": 87,
+        "name": "Heat shield",
+        "amount": 10,
+        "nameCs": "Tepelný štít"
+      },
+      {
+        "id": 82,
+        "name": "Attitude control",
+        "amount": 4,
+        "nameCs": "Polohové čidlo"
+      },
+      {
+        "id": 84,
+        "name": "Propellant tank",
+        "amount": 6,
+        "nameCs": "Palivová nádrž"
+      },
+      {
+        "id": 86,
+        "name": "Rocket engine",
+        "amount": 7,
+        "nameCs": "Raketový motor"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 94,
+        "name": "BFR",
+        "nameCs": "BFR"
+      }
+    ],
+    "producedAnHour": 0.3362654532078568,
+    "baseSalary": 586.5,
+    "nameCs": "Vesmírná loď"
+  },
+  "94": {
+    "name": "BFR",
+    "producedAt": "9",
+    "producedAtName": "Vertikální montovna raket",
+    "producedFrom": [
+      {
+        "id": 92,
+        "name": "Orbital booster",
+        "amount": 1,
+        "nameCs": "Orbitální nosný stupeň"
+      },
+      {
+        "id": 93,
+        "name": "Starship",
+        "amount": 1,
+        "nameCs": "Vesmírná loď"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 100,
+        "name": "Leteckokosmický výzkum",
+        "nameCs": "Leteckokosmický výzkum"
+      }
+    ],
+    "producedAnHour": 0.2440456939515566,
+    "baseSalary": 759.0000000000001,
+    "nameCs": "BFR"
+  },
+  "95": {
+    "name": "Jumbo jet",
+    "producedAt": "0",
+    "producedAtName": "Hangár",
+    "producedFrom": [
+      {
+        "id": 77,
+        "name": "Fuselage",
+        "amount": 40,
+        "nameCs": "Trup"
+      },
+      {
+        "id": 78,
+        "name": "Wing",
+        "amount": 10,
+        "nameCs": "Křídlo"
+      },
+      {
+        "id": 81,
+        "name": "Cockpit",
+        "amount": 2,
+        "nameCs": "Kokpit"
+      },
+      {
+        "id": 50,
+        "name": "Basic interior",
+        "amount": 140,
+        "nameCs": "Základní interiér"
+      },
+      {
+        "id": 89,
+        "name": "Jet engine",
+        "amount": 4,
+        "nameCs": "Proudový motor"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 0.07321370818546698,
+    "baseSalary": 759.0000000000001,
+    "nameCs": "Jumbo jet"
+  },
+  "96": {
+    "name": "Luxury jet",
+    "producedAt": "0",
+    "producedAtName": "Hangár",
+    "producedFrom": [
+      {
+        "id": 77,
+        "name": "Fuselage",
+        "amount": 14,
+        "nameCs": "Trup"
+      },
+      {
+        "id": 78,
+        "name": "Wing",
+        "amount": 2,
+        "nameCs": "Křídlo"
+      },
+      {
+        "id": 81,
+        "name": "Cockpit",
+        "amount": 1,
+        "nameCs": "Kokpit"
+      },
+      {
+        "id": 69,
+        "name": "Golden bars",
+        "amount": 2,
+        "nameCs": "Zlaté cihly"
+      },
+      {
+        "id": 89,
+        "name": "Jet engine",
+        "amount": 2,
+        "nameCs": "Proudový motor"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 0.19523655516124527,
+    "baseSalary": 759.0000000000001,
+    "nameCs": "Tryskové letadlo"
+  },
+  "97": {
+    "name": "Single engine plane",
+    "producedAt": "0",
+    "producedAtName": "Hangár",
+    "producedFrom": [
+      {
+        "id": 77,
+        "name": "Fuselage",
+        "amount": 8,
+        "nameCs": "Trup"
+      },
+      {
+        "id": 78,
+        "name": "Wing",
+        "amount": 2,
+        "nameCs": "Křídlo"
+      },
+      {
+        "id": 81,
+        "name": "Cockpit",
+        "amount": 1,
+        "nameCs": "Kokpit"
+      },
+      {
+        "id": 52,
+        "name": "Combustion engine",
+        "amount": 1,
+        "nameCs": "Spalovací motor"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 1.7083198576608962,
+    "baseSalary": 759.0000000000001,
+    "nameCs": "Jednomotorové letadlo"
+  },
+  "98": {
+    "name": "Quadcopter",
+    "producedAt": "8",
+    "producedAtName": "Letecká elektronika",
+    "producedFrom": [
+      {
+        "id": 47,
+        "name": "On-board computer",
+        "amount": 1,
+        "nameCs": "Palubní počítač"
+      },
+      {
+        "id": 22,
+        "name": "Batteries",
+        "amount": 1,
+        "nameCs": "Baterie"
+      },
+      {
+        "id": 21,
+        "name": "Electronic components",
+        "amount": 3,
+        "nameCs": "Tištěné spoje"
+      },
+      {
+        "id": 19,
+        "name": "Plastic",
+        "amount": 2,
+        "nameCs": "Plast"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 14.311200267181928,
+    "baseSalary": 724.5,
+    "nameCs": "Dron"
+  },
+  "99": {
+    "name": "Satellite",
+    "producedAt": "8",
+    "producedAtName": "Letecká elektronika",
+    "producedFrom": [
+      {
+        "id": 80,
+        "name": "Flight computer",
+        "amount": 4,
+        "nameCs": "Letový počítač"
+      },
+      {
+        "id": 88,
+        "name": "Ion drive",
+        "amount": 1,
+        "nameCs": "Iontový motor"
+      },
+      {
+        "id": 79,
+        "name": "High grade e-comps",
+        "amount": 8,
+        "nameCs": "Hi-tech tištěné spoje"
+      },
+      {
+        "id": 82,
+        "name": "Attitude control",
+        "amount": 2,
+        "nameCs": "Polohové čidlo"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 0.1301018206107448,
+    "baseSalary": 724.5,
+    "nameCs": "Družice"
+  },
+  "100": {
+    "name": "Aerospace research",
+    "producedAt": "l",
+    "producedAtName": null,
+    "producedFrom": [
+      {
+        "id": 91,
+        "name": "Sub-orbital rocket",
+        "amount": 1,
+        "nameCs": "Suborbitální raketa"
+      },
+      {
+        "id": 94,
+        "name": "BFR",
+        "amount": 1,
+        "nameCs": "BFR"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 0.3822668982191102,
+    "baseSalary": 517.5,
+    "nameCs": "Leteckokosmický výzkum"
+  },
+  "101": {
+    "name": "Reinforced concrete",
+    "producedAt": "o",
+    "producedAtName": "Betonárna",
+    "producedFrom": [
+      {
+        "id": 103,
+        "name": "Cement",
+        "amount": 15,
+        "nameCs": "Cement"
+      },
+      {
+        "id": 44,
+        "name": "Sand",
+        "amount": 20,
+        "nameCs": "Písek"
+      },
+      {
+        "id": 2,
+        "name": "Water",
+        "amount": 20,
+        "nameCs": "Voda"
+      },
+      {
+        "id": 43,
+        "name": "Steel",
+        "amount": 5,
+        "nameCs": "Ocel"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 202.54402275371314,
+    "baseSalary": 379.50000000000006,
+    "nameCs": "Železobeton"
+  },
+  "102": {
+    "name": "Bricks",
+    "producedAt": "o",
+    "producedAtName": "Betonárna",
+    "producedFrom": [
+      {
+        "id": 104,
+        "name": "Clay",
+        "amount": 0.5,
+        "nameCs": "Jíl"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 395.2078492755378,
+    "baseSalary": 379.50000000000006,
+    "nameCs": "Cihly"
+  },
+  "103": {
+    "name": "Cement",
+    "producedAt": "o",
+    "producedAtName": "Betonárna",
+    "producedFrom": [
+      {
+        "id": 105,
+        "name": "Limestone",
+        "amount": 3,
+        "nameCs": "Vápenec"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 101,
+        "name": "Železobeton",
+        "nameCs": "Železobeton"
+      }
+    ],
+    "producedAnHour": 321.10637753637445,
+    "baseSalary": 379.50000000000006,
+    "nameCs": "Cement"
+  },
+  "104": {
+    "name": "Clay",
+    "producedAt": "Q",
+    "producedAtName": "Lom",
+    "producedFrom": [
+      {
+        "id": 1,
+        "name": "Power",
+        "amount": 1,
+        "nameCs": "Energie"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 102,
+        "name": "Cihly",
+        "nameCs": "Cihly"
+      }
+    ],
+    "producedAnHour": 1137.668771389286,
+    "baseSalary": 276,
+    "nameCs": "Jíl"
+  },
+  "105": {
+    "name": "Limestone",
+    "producedAt": "Q",
+    "producedAtName": "Lom",
+    "producedFrom": [
+      {
+        "id": 1,
+        "name": "Power",
+        "amount": 2,
+        "nameCs": "Energie"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 103,
+        "name": "Cement",
+        "nameCs": "Cement"
+      }
+    ],
+    "producedAnHour": 838.2822526026317,
+    "baseSalary": 276,
+    "nameCs": "Vápenec"
+  },
+  "106": {
+    "name": "Wood",
+    "producedAt": "P",
+    "producedAtName": "Farma",
+    "producedFrom": [
+      {
+        "id": 2,
+        "name": "Water",
+        "amount": 4,
+        "nameCs": "Voda"
+      },
+      {
+        "id": 66,
+        "name": "Seeds",
+        "amount": 1,
+        "nameCs": "Semena"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 108,
+        "name": "Prkna",
+        "nameCs": "Prkna"
+      }
+    ],
+    "producedAnHour": 78.37849929193634,
+    "baseSalary": 103.5,
+    "nameCs": "Dřevo"
+  },
+  "107": {
+    "name": "Beams",
+    "producedAt": "x",
+    "producedAtName": "Stavební továrna",
+    "producedFrom": [
+      {
+        "id": 43,
+        "name": "Steel",
+        "amount": 1,
+        "nameCs": "Ocel"
+      },
+      {
+        "id": 1,
+        "name": "Power",
+        "amount": 4,
+        "nameCs": "Energie"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 111,
+        "name": "Stavební jednotka",
+        "nameCs": "Stavební jednotka"
+      }
+    ],
+    "producedAnHour": 142.65170193570592,
+    "baseSalary": 482.99999999999994,
+    "nameCs": "Ocelové nosníky"
+  },
+  "108": {
+    "name": "Planks",
+    "producedAt": "x",
+    "producedAtName": "Stavební továrna",
+    "producedFrom": [
+      {
+        "id": 106,
+        "name": "Wood",
+        "amount": 0.5,
+        "nameCs": "Dřevo"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 110,
+        "name": "Nářadí",
+        "nameCs": "Nářadí"
+      }
+    ],
+    "producedAnHour": 126.34865028591095,
+    "baseSalary": 482.99999999999994,
+    "nameCs": "Prkna"
+  },
+  "109": {
+    "name": "Windows",
+    "producedAt": "x",
+    "producedAtName": "Stavební továrna",
+    "producedFrom": [
+      {
+        "id": 18,
+        "name": "Aluminium",
+        "amount": 2,
+        "nameCs": "Hliník"
+      },
+      {
+        "id": 45,
+        "name": "Glass",
+        "amount": 1,
+        "nameCs": "Sklo"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 111,
+        "name": "Stavební jednotka",
+        "nameCs": "Stavební jednotka"
+      }
+    ],
+    "producedAnHour": 18.34093310601933,
+    "baseSalary": 482.99999999999994,
+    "nameCs": "Okna"
+  },
+  "110": {
+    "name": "Tools",
+    "producedAt": "x",
+    "producedAtName": "Stavební továrna",
+    "producedFrom": [
+      {
+        "id": 43,
+        "name": "Steel",
+        "amount": 0.5,
+        "nameCs": "Ocel"
+      },
+      {
+        "id": 108,
+        "name": "Planks",
+        "amount": 0.5,
+        "nameCs": "Prkna"
+      },
+      {
+        "id": 21,
+        "name": "Electronic components",
+        "amount": 1,
+        "nameCs": "Tištěné spoje"
+      },
+      {
+        "id": 22,
+        "name": "Batteries",
+        "amount": 1,
+        "nameCs": "Baterie"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 111,
+        "name": "Stavební jednotka",
+        "nameCs": "Stavební jednotka"
+      }
+    ],
+    "producedAnHour": 28.530340387141184,
+    "baseSalary": 482.99999999999994,
+    "nameCs": "Nářadí"
+  },
+  "111": {
+    "name": "Construction units",
+    "producedAt": "g",
+    "producedAtName": "Montovna",
+    "producedFrom": [
+      {
+        "id": 112,
+        "name": "Bulldozer",
+        "amount": 0.125,
+        "nameCs": "Buldozer"
+      },
+      {
+        "id": 12,
+        "name": "Diesel",
+        "amount": 5,
+        "nameCs": "Nafta"
+      },
+      {
+        "id": 109,
+        "name": "Windows",
+        "amount": 4,
+        "nameCs": "Okna"
+      },
+      {
+        "id": 107,
+        "name": "Beams",
+        "amount": 8,
+        "nameCs": "Ocelové nosníky"
+      },
+      {
+        "id": 110,
+        "name": "Tools",
+        "amount": 4,
+        "nameCs": "Nářadí"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 1.0534351145038168,
+    "baseSalary": 345,
+    "nameCs": "Stavební jednotka"
+  },
+  "112": {
+    "name": "Bulldozer",
+    "producedAt": "1",
+    "producedAtName": "Automobilka",
+    "producedFrom": [
+      {
+        "id": 43,
+        "name": "Steel",
+        "amount": 4,
+        "nameCs": "Ocel"
+      },
+      {
+        "id": 51,
+        "name": "Car body",
+        "amount": 1,
+        "nameCs": "Karoserie"
+      },
+      {
+        "id": 52,
+        "name": "Combustion engine",
+        "amount": 2,
+        "nameCs": "Spalovací motor"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 111,
+        "name": "Stavební jednotka",
+        "nameCs": "Stavební jednotka"
+      }
+    ],
+    "producedAnHour": 6.0838594066701885,
+    "baseSalary": 448.5,
+    "nameCs": "Buldozer"
+  },
+  "113": {
+    "name": "Materials research",
+    "producedAt": "c",
+    "producedAtName": "Chemická laboratoř",
+    "producedFrom": [],
+    "neededFor": [],
+    "producedAnHour": 3.7066650327714687,
+    "baseSalary": 414,
+    "nameCs": "Materiálový výzkum"
+  },
+  "114": {
+    "name": "Robots",
+    "producedAt": "L",
+    "producedAtName": "Továrna na elektroniku",
+    "producedFrom": [
+      {
+        "id": 48,
+        "name": "Electric motor",
+        "amount": 1,
+        "nameCs": "Elektromotor"
+      },
+      {
+        "id": 20,
+        "name": "Processors",
+        "amount": 2,
+        "nameCs": "Procesory"
+      },
+      {
+        "id": 19,
+        "name": "Plastic",
+        "amount": 10,
+        "nameCs": "Plast"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 2.470049057972111,
+    "baseSalary": 379.50000000000006,
+    "nameCs": "Roboti"
+  },
+  "115": {
+    "name": "Cows",
+    "producedAt": "F",
+    "producedAtName": "Ranč",
+    "producedFrom": [
+      {
+        "id": 2,
+        "name": "Water",
+        "amount": 16,
+        "nameCs": "Voda"
+      },
+      {
+        "id": 139,
+        "name": "Fodder",
+        "amount": 12,
+        "nameCs": "Krmivo"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 7,
+        "name": "Steak",
+        "nameCs": "Steak"
+      },
+      {
+        "id": 46,
+        "name": "Kůže",
+        "nameCs": "Kůže"
+      }
+    ],
+    "producedAnHour": 38.69021315440471,
+    "baseSalary": 138,
+    "nameCs": "Krávy"
+  },
+  "116": {
+    "name": "Pigs",
+    "producedAt": "F",
+    "producedAtName": "Ranč",
+    "producedFrom": [
+      {
+        "id": 2,
+        "name": "Water",
+        "amount": 4,
+        "nameCs": "Voda"
+      },
+      {
+        "id": 139,
+        "name": "Fodder",
+        "amount": 4,
+        "nameCs": "Krmivo"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 8,
+        "name": "Klobásy",
+        "nameCs": "Klobásy"
+      }
+    ],
+    "producedAnHour": 85.11846893969036,
+    "baseSalary": 138,
+    "nameCs": "Prasata"
+  },
+  "117": {
+    "name": "Milk",
+    "producedAt": "F",
+    "producedAtName": "Ranč",
+    "producedFrom": [
+      {
+        "id": 2,
+        "name": "Water",
+        "amount": 2,
+        "nameCs": "Voda"
+      },
+      {
+        "id": 139,
+        "name": "Fodder",
+        "amount": 0.5,
+        "nameCs": "Krmivo"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 122,
+        "name": "Sýr",
+        "nameCs": "Sýr"
+      },
+      {
+        "id": 134,
+        "name": "Máslo",
+        "nameCs": "Máslo"
+      },
+      {
+        "id": 140,
+        "name": "Čokoláda",
+        "nameCs": "Čokoláda"
+      },
+      {
+        "id": 151,
+        "name": "Velikonoční zajíček",
+        "nameCs": "Velikonoční zajíček"
+      },
+      {
+        "id": 152,
+        "name": "Ramadánové sladkosti",
+        "nameCs": "Ramadánové sladkosti"
+      },
+      {
+        "id": 153,
+        "name": "Čokoládová zmrzlina",
+        "nameCs": "Čokoládová zmrzlina"
+      },
+      {
+        "id": 154,
+        "name": "Jablečná zmrzlina",
+        "nameCs": "Jablečná zmrzlina"
+      }
+    ],
+    "producedAnHour": 123.80868209409506,
+    "baseSalary": 138,
+    "nameCs": "Mléko"
+  },
+  "118": {
+    "name": "Coffee beans",
+    "producedAt": "P",
+    "producedAtName": "Farma",
+    "producedFrom": [
+      {
+        "id": 2,
+        "name": "Water",
+        "amount": 0.5,
+        "nameCs": "Voda"
+      },
+      {
+        "id": 66,
+        "name": "Seeds",
+        "amount": 1,
+        "nameCs": "Semena"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 119,
+        "name": "Mletá káva",
+        "nameCs": "Mletá káva"
+      }
+    ],
+    "producedAnHour": 420.7687856725003,
+    "baseSalary": 103.5,
+    "nameCs": "Kávová zrna"
+  },
+  "119": {
+    "name": "Coffee powder",
+    "producedAt": "i",
+    "producedAtName": "Mlýn",
+    "producedFrom": [
+      {
+        "id": 118,
+        "name": "Coffee beans",
+        "amount": 10,
+        "nameCs": "Kávová zrna"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 132,
+        "name": "Koktejly",
+        "nameCs": "Koktejly"
+      }
+    ],
+    "producedAnHour": 24.700490579721112,
+    "baseSalary": 379.50000000000006,
+    "nameCs": "Mletá káva"
+  },
+  "120": {
+    "name": "Vegetables",
+    "producedAt": "P",
+    "producedAtName": "Farma",
+    "producedFrom": [
+      {
+        "id": 2,
+        "name": "Water",
+        "amount": 2,
+        "nameCs": "Voda"
+      },
+      {
+        "id": 66,
+        "name": "Seeds",
+        "amount": 5,
+        "nameCs": "Semena"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 126,
+        "name": "Zázvorové pivo",
+        "nameCs": "Zázvorové pivo"
+      },
+      {
+        "id": 127,
+        "name": "Mražená pizza",
+        "nameCs": "Mražená pizza"
+      },
+      {
+        "id": 129,
+        "name": "Hamburger",
+        "nameCs": "Hamburger"
+      },
+      {
+        "id": 138,
+        "name": "Omáčka",
+        "nameCs": "Omáčka"
+      },
+      {
+        "id": 139,
+        "name": "Krmivo",
+        "nameCs": "Krmivo"
+      },
+      {
+        "id": 141,
+        "name": "Rostlinný olej",
+        "nameCs": "Rostlinný olej"
+      },
+      {
+        "id": 142,
+        "name": "Salát",
+        "nameCs": "Salát"
+      },
+      {
+        "id": 143,
+        "name": "Samosa",
+        "nameCs": "Samosa"
+      }
+    ],
+    "producedAnHour": 288.7628921281865,
+    "baseSalary": 103.5,
+    "nameCs": "Zelenina"
+  },
+  "121": {
+    "name": "Bread",
+    "producedAt": "j",
+    "producedAtName": "Pekárna",
+    "producedFrom": [
+      {
+        "id": 137,
+        "name": "Dough",
+        "amount": 1,
+        "nameCs": "Těsto"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 129,
+        "name": "Hamburger",
+        "nameCs": "Hamburger"
+      },
+      {
+        "id": 131,
+        "name": "Masové kuličky",
+        "nameCs": "Masové kuličky"
+      },
+      {
+        "id": 149,
+        "name": "Dýňová polévka",
+        "nameCs": "Dýňová polévka"
+      }
+    ],
+    "producedAnHour": 13.036841585721833,
+    "baseSalary": 448.5,
+    "nameCs": "Chléb"
+  },
+  "122": {
+    "name": "Cheese",
+    "producedAt": "k",
+    "producedAtName": "Potravinářský závod",
+    "producedFrom": [
+      {
+        "id": 117,
+        "name": "Milk",
+        "amount": 1,
+        "nameCs": "Mléko"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 127,
+        "name": "Mražená pizza",
+        "nameCs": "Mražená pizza"
+      },
+      {
+        "id": 130,
+        "name": "Lasagne",
+        "nameCs": "Lasagne"
+      },
+      {
+        "id": 142,
+        "name": "Salát",
+        "nameCs": "Salát"
+      }
+    ],
+    "producedAnHour": 5.928117739133067,
+    "baseSalary": 379.50000000000006,
+    "nameCs": "Sýr"
+  },
+  "123": {
+    "name": "Apple pie",
+    "producedAt": "j",
+    "producedAtName": "Pekárna",
+    "producedFrom": [
+      {
+        "id": 137,
+        "name": "Dough",
+        "amount": 1,
+        "nameCs": "Těsto"
+      },
+      {
+        "id": 3,
+        "name": "Apples",
+        "amount": 2,
+        "nameCs": "Jablka"
+      },
+      {
+        "id": 135,
+        "name": "Sugar",
+        "amount": 2,
+        "nameCs": "Cukr"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 6.518420792860916,
+    "baseSalary": 448.5,
+    "nameCs": "Jablečný koláč"
+  },
+  "124": {
+    "name": "Orange juice",
+    "producedAt": "6",
+    "producedAtName": "Stáčírna",
+    "producedFrom": [
+      {
+        "id": 4,
+        "name": "Oranges",
+        "amount": 5,
+        "nameCs": "Pomeranče"
+      },
+      {
+        "id": 135,
+        "name": "Sugar",
+        "amount": 1,
+        "nameCs": "Cukr"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 132,
+        "name": "Koktejly",
+        "nameCs": "Koktejly"
+      }
+    ],
+    "producedAnHour": 95.7625529787592,
+    "baseSalary": 241.49999999999997,
+    "nameCs": "Pomerančový džus"
+  },
+  "125": {
+    "name": "Apple cider",
+    "producedAt": "6",
+    "producedAtName": "Stáčírna",
+    "producedFrom": [
+      {
+        "id": 3,
+        "name": "Apples",
+        "amount": 8,
+        "nameCs": "Jablka"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 132,
+        "name": "Koktejly",
+        "nameCs": "Koktejly"
+      }
+    ],
+    "producedAnHour": 38.305021191503684,
+    "baseSalary": 241.49999999999997,
+    "nameCs": "Jablečný mošt"
+  },
+  "126": {
+    "name": "Ginger beer",
+    "producedAt": "6",
+    "producedAtName": "Stáčírna",
+    "producedFrom": [
+      {
+        "id": 2,
+        "name": "Water",
+        "amount": 1,
+        "nameCs": "Voda"
+      },
+      {
+        "id": 120,
+        "name": "Vegetables",
+        "amount": 3,
+        "nameCs": "Zelenina"
+      },
+      {
+        "id": 135,
+        "name": "Sugar",
+        "amount": 2,
+        "nameCs": "Cukr"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 132,
+        "name": "Koktejly",
+        "nameCs": "Koktejly"
+      }
+    ],
+    "producedAnHour": 76.61004238300737,
+    "baseSalary": 241.49999999999997,
+    "nameCs": "Zázvorové pivo"
+  },
+  "127": {
+    "name": "Frozen pizza",
+    "producedAt": "k",
+    "producedAtName": "Potravinářský závod",
+    "producedFrom": [
+      {
+        "id": 137,
+        "name": "Dough",
+        "amount": 2,
+        "nameCs": "Těsto"
+      },
+      {
+        "id": 120,
+        "name": "Vegetables",
+        "amount": 2,
+        "nameCs": "Zelenina"
+      },
+      {
+        "id": 122,
+        "name": "Cheese",
+        "amount": 1,
+        "nameCs": "Sýr"
+      },
+      {
+        "id": 8,
+        "name": "Sausages",
+        "amount": 1,
+        "nameCs": "Klobásy"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 9.880196231888444,
+    "baseSalary": 379.50000000000006,
+    "nameCs": "Mražená pizza"
+  },
+  "128": {
+    "name": "Pasta",
+    "producedAt": "k",
+    "producedAtName": "Potravinářský závod",
+    "producedFrom": [
+      {
+        "id": 133,
+        "name": "Flour",
+        "amount": 2,
+        "nameCs": "Mouka"
+      },
+      {
+        "id": 9,
+        "name": "Eggs",
+        "amount": 2,
+        "nameCs": "Vejce"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 130,
+        "name": "Lasagne",
+        "nameCs": "Lasagne"
+      }
+    ],
+    "producedAnHour": 19.76039246377689,
+    "baseSalary": 379.50000000000006,
+    "nameCs": "Těstoviny"
+  },
+  "129": {
+    "name": "Hamburger",
+    "producedAt": "m",
+    "producedAtName": "Catering",
+    "producedFrom": [
+      {
+        "id": 7,
+        "name": "Steak",
+        "amount": 4,
+        "nameCs": "Steak"
+      },
+      {
+        "id": 120,
+        "name": "Vegetables",
+        "amount": 3,
+        "nameCs": "Zelenina"
+      },
+      {
+        "id": 134,
+        "name": "Butter",
+        "amount": 1,
+        "nameCs": "Máslo"
+      },
+      {
+        "id": 121,
+        "name": "Bread",
+        "amount": 0.5,
+        "nameCs": "Chléb"
+      },
+      {
+        "id": 141,
+        "name": "Vegetable oil",
+        "amount": 0.5,
+        "nameCs": "Rostlinný olej"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 0.5915995109588201,
+    "baseSalary": 655.5,
+    "nameCs": "Hamburger"
+  },
+  "130": {
+    "name": "Lasagna",
+    "producedAt": "m",
+    "producedAtName": "Catering",
+    "producedFrom": [
+      {
+        "id": 7,
+        "name": "Steak",
+        "amount": 1,
+        "nameCs": "Steak"
+      },
+      {
+        "id": 122,
+        "name": "Cheese",
+        "amount": 0.5,
+        "nameCs": "Sýr"
+      },
+      {
+        "id": 128,
+        "name": "Pasta",
+        "amount": 1,
+        "nameCs": "Těstoviny"
+      },
+      {
+        "id": 138,
+        "name": "Sauce",
+        "amount": 1,
+        "nameCs": "Omáčka"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 1.7747985328764604,
+    "baseSalary": 655.5,
+    "nameCs": "Lasagne"
+  },
+  "131": {
+    "name": "Meat balls",
+    "producedAt": "m",
+    "producedAtName": "Catering",
+    "producedFrom": [
+      {
+        "id": 8,
+        "name": "Sausages",
+        "amount": 2,
+        "nameCs": "Klobásy"
+      },
+      {
+        "id": 121,
+        "name": "Bread",
+        "amount": 1,
+        "nameCs": "Chléb"
+      },
+      {
+        "id": 138,
+        "name": "Sauce",
+        "amount": 1,
+        "nameCs": "Omáčka"
+      },
+      {
+        "id": 141,
+        "name": "Vegetable oil",
+        "amount": 0.5,
+        "nameCs": "Rostlinný olej"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 1.1831990219176403,
+    "baseSalary": 655.5,
+    "nameCs": "Masové kuličky"
+  },
+  "132": {
+    "name": "Cocktails",
+    "producedAt": "m",
+    "producedAtName": "Catering",
+    "producedFrom": [
+      {
+        "id": 124,
+        "name": "Orange juice",
+        "amount": 1,
+        "nameCs": "Pomerančový džus"
+      },
+      {
+        "id": 125,
+        "name": "Apple cider",
+        "amount": 1,
+        "nameCs": "Jablečný mošt"
+      },
+      {
+        "id": 126,
+        "name": "Ginger beer",
+        "amount": 2,
+        "nameCs": "Zázvorové pivo"
+      },
+      {
+        "id": 119,
+        "name": "Coffee powder",
+        "amount": 8,
+        "nameCs": "Mletá káva"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 0.5915995109588201,
+    "baseSalary": 655.5,
+    "nameCs": "Koktejly"
+  },
+  "133": {
+    "name": "Flour",
+    "producedAt": "i",
+    "producedAtName": "Mlýn",
+    "producedFrom": [
+      {
+        "id": 6,
+        "name": "Grain",
+        "amount": 15,
+        "nameCs": "Obilí"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 128,
+        "name": "Těstoviny",
+        "nameCs": "Těstoviny"
+      },
+      {
+        "id": 137,
+        "name": "Těsto",
+        "nameCs": "Těsto"
+      },
+      {
+        "id": 143,
+        "name": "Samosa",
+        "nameCs": "Samosa"
+      },
+      {
+        "id": 152,
+        "name": "Ramadánové sladkosti",
+        "nameCs": "Ramadánové sladkosti"
+      }
+    ],
+    "producedAnHour": 93.86186420294023,
+    "baseSalary": 379.50000000000006,
+    "nameCs": "Mouka"
+  },
+  "134": {
+    "name": "Butter",
+    "producedAt": "k",
+    "producedAtName": "Potravinářský závod",
+    "producedFrom": [
+      {
+        "id": 117,
+        "name": "Milk",
+        "amount": 0.5,
+        "nameCs": "Mléko"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 129,
+        "name": "Hamburger",
+        "nameCs": "Hamburger"
+      },
+      {
+        "id": 137,
+        "name": "Těsto",
+        "nameCs": "Těsto"
+      },
+      {
+        "id": 138,
+        "name": "Omáčka",
+        "nameCs": "Omáčka"
+      },
+      {
+        "id": 149,
+        "name": "Dýňová polévka",
+        "nameCs": "Dýňová polévka"
+      },
+      {
+        "id": 152,
+        "name": "Ramadánové sladkosti",
+        "nameCs": "Ramadánové sladkosti"
+      },
+      {
+        "id": 155,
+        "name": "Čokoládové vajíčko",
+        "nameCs": "Čokoládové vajíčko"
+      }
+    ],
+    "producedAnHour": 14.820294347832668,
+    "baseSalary": 379.50000000000006,
+    "nameCs": "Máslo"
+  },
+  "135": {
+    "name": "Sugar",
+    "producedAt": "k",
+    "producedAtName": "Potravinářský závod",
+    "producedFrom": [
+      {
+        "id": 72,
+        "name": "Sugarcane",
+        "amount": 1,
+        "nameCs": "Cukrová třtina"
+      },
+      {
+        "id": 1,
+        "name": "Power",
+        "amount": 0.5,
+        "nameCs": "Energie"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 123,
+        "name": "Jablečný koláč",
+        "nameCs": "Jablečný koláč"
+      },
+      {
+        "id": 124,
+        "name": "Pomerančový džus",
+        "nameCs": "Pomerančový džus"
+      },
+      {
+        "id": 126,
+        "name": "Zázvorové pivo",
+        "nameCs": "Zázvorové pivo"
+      },
+      {
+        "id": 140,
+        "name": "Čokoláda",
+        "nameCs": "Čokoláda"
+      },
+      {
+        "id": 151,
+        "name": "Velikonoční zajíček",
+        "nameCs": "Velikonoční zajíček"
+      },
+      {
+        "id": 152,
+        "name": "Ramadánové sladkosti",
+        "nameCs": "Ramadánové sladkosti"
+      },
+      {
+        "id": 153,
+        "name": "Čokoládová zmrzlina",
+        "nameCs": "Čokoládová zmrzlina"
+      },
+      {
+        "id": 154,
+        "name": "Jablečná zmrzlina",
+        "nameCs": "Jablečná zmrzlina"
+      },
+      {
+        "id": 155,
+        "name": "Čokoládové vajíčko",
+        "nameCs": "Čokoládové vajíčko"
+      }
+    ],
+    "producedAnHour": 44.460883043498,
+    "baseSalary": 379.50000000000006,
+    "nameCs": "Cukr"
+  },
+  "136": {
+    "name": "Cocoa",
+    "producedAt": "P",
+    "producedAtName": "Farma",
+    "producedFrom": [
+      {
+        "id": 2,
+        "name": "Water",
+        "amount": 1,
+        "nameCs": "Voda"
+      },
+      {
+        "id": 66,
+        "name": "Seeds",
+        "amount": 1,
+        "nameCs": "Semena"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 140,
+        "name": "Čokoláda",
+        "nameCs": "Čokoláda"
+      },
+      {
+        "id": 151,
+        "name": "Velikonoční zajíček",
+        "nameCs": "Velikonoční zajíček"
+      }
+    ],
+    "producedAnHour": 173.2577352769119,
+    "baseSalary": 103.5,
+    "nameCs": "Kakao"
+  },
+  "137": {
+    "name": "Dough",
+    "producedAt": "j",
+    "producedAtName": "Pekárna",
+    "producedFrom": [
+      {
+        "id": 133,
+        "name": "Flour",
+        "amount": 2,
+        "nameCs": "Mouka"
+      },
+      {
+        "id": 9,
+        "name": "Eggs",
+        "amount": 1,
+        "nameCs": "Vejce"
+      },
+      {
+        "id": 134,
+        "name": "Butter",
+        "amount": 0.5,
+        "nameCs": "Máslo"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 121,
+        "name": "Chléb",
+        "nameCs": "Chléb"
+      },
+      {
+        "id": 123,
+        "name": "Jablečný koláč",
+        "nameCs": "Jablečný koláč"
+      },
+      {
+        "id": 127,
+        "name": "Mražená pizza",
+        "nameCs": "Mražená pizza"
+      }
+    ],
+    "producedAnHour": 13.036841585721833,
+    "baseSalary": 448.5,
+    "nameCs": "Těsto"
+  },
+  "138": {
+    "name": "Sauce",
+    "producedAt": "m",
+    "producedAtName": "Catering",
+    "producedFrom": [
+      {
+        "id": 120,
+        "name": "Vegetables",
+        "amount": 2,
+        "nameCs": "Zelenina"
+      },
+      {
+        "id": 134,
+        "name": "Butter",
+        "amount": 0.5,
+        "nameCs": "Máslo"
+      },
+      {
+        "id": 2,
+        "name": "Water",
+        "amount": 0.5,
+        "nameCs": "Voda"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 130,
+        "name": "Lasagne",
+        "nameCs": "Lasagne"
+      },
+      {
+        "id": 131,
+        "name": "Masové kuličky",
+        "nameCs": "Masové kuličky"
+      }
+    ],
+    "producedAnHour": 0.8873992664382302,
+    "baseSalary": 655.5,
+    "nameCs": "Omáčka"
+  },
+  "139": {
+    "name": "Fodder",
+    "producedAt": "i",
+    "producedAtName": "Mlýn",
+    "producedFrom": [
+      {
+        "id": 120,
+        "name": "Vegetables",
+        "amount": 0.5,
+        "nameCs": "Zelenina"
+      },
+      {
+        "id": 6,
+        "name": "Grain",
+        "amount": 10,
+        "nameCs": "Obilí"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 115,
+        "name": "Krávy",
+        "nameCs": "Krávy"
+      },
+      {
+        "id": 116,
+        "name": "Prasata",
+        "nameCs": "Prasata"
+      },
+      {
+        "id": 117,
+        "name": "Mléko",
+        "nameCs": "Mléko"
+      }
+    ],
+    "producedAnHour": 306.2860831885418,
+    "baseSalary": 379.50000000000006,
+    "nameCs": "Krmivo"
+  },
+  "140": {
+    "name": "Chocolate",
+    "producedAt": "k",
+    "producedAtName": "Potravinářský závod",
+    "producedFrom": [
+      {
+        "id": 136,
+        "name": "Cocoa",
+        "amount": 10,
+        "nameCs": "Kakao"
+      },
+      {
+        "id": 117,
+        "name": "Milk",
+        "amount": 0.5,
+        "nameCs": "Mléko"
+      },
+      {
+        "id": 135,
+        "name": "Sugar",
+        "amount": 1,
+        "nameCs": "Cukr"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 153,
+        "name": "Čokoládová zmrzlina",
+        "nameCs": "Čokoládová zmrzlina"
+      },
+      {
+        "id": 155,
+        "name": "Čokoládové vajíčko",
+        "nameCs": "Čokoládové vajíčko"
+      }
+    ],
+    "producedAnHour": 3.458068681160956,
+    "baseSalary": 379.50000000000006,
+    "nameCs": "Čokoláda"
+  },
+  "141": {
+    "name": "Vegetable oil",
+    "producedAt": "k",
+    "producedAtName": "Potravinářský závod",
+    "producedFrom": [
+      {
+        "id": 120,
+        "name": "Vegetables",
+        "amount": 10,
+        "nameCs": "Zelenina"
+      },
+      {
+        "id": 1,
+        "name": "Power",
+        "amount": 1,
+        "nameCs": "Energie"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 129,
+        "name": "Hamburger",
+        "nameCs": "Hamburger"
+      },
+      {
+        "id": 131,
+        "name": "Masové kuličky",
+        "nameCs": "Masové kuličky"
+      },
+      {
+        "id": 142,
+        "name": "Salát",
+        "nameCs": "Salát"
+      },
+      {
+        "id": 143,
+        "name": "Samosa",
+        "nameCs": "Samosa"
+      }
+    ],
+    "producedAnHour": 39.52078492755378,
+    "baseSalary": 379.50000000000006,
+    "nameCs": "Rostlinný olej"
+  },
+  "142": {
+    "name": "Salad",
+    "producedAt": "m",
+    "producedAtName": "Catering",
+    "producedFrom": [
+      {
+        "id": 120,
+        "name": "Vegetables",
+        "amount": 5,
+        "nameCs": "Zelenina"
+      },
+      {
+        "id": 141,
+        "name": "Vegetable oil",
+        "amount": 0.5,
+        "nameCs": "Rostlinný olej"
+      },
+      {
+        "id": 122,
+        "name": "Cheese",
+        "amount": 2,
+        "nameCs": "Sýr"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 2.3663980438352805,
+    "baseSalary": 655.5,
+    "nameCs": "Salát"
+  },
+  "143": {
+    "name": "Samosa",
+    "producedAt": "m",
+    "producedAtName": "Catering",
+    "producedFrom": [
+      {
+        "id": 120,
+        "name": "Vegetables",
+        "amount": 5,
+        "nameCs": "Zelenina"
+      },
+      {
+        "id": 141,
+        "name": "Vegetable oil",
+        "amount": 1,
+        "nameCs": "Rostlinný olej"
+      },
+      {
+        "id": 133,
+        "name": "Flour",
+        "amount": 4,
+        "nameCs": "Mouka"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 2.0705982883558702,
+    "baseSalary": 655.5,
+    "nameCs": "Samosa"
+  },
+  "144": {
+    "name": "Xmas ornament",
+    "producedAt": "Y",
+    "producedAtName": "Továrna",
+    "producedFrom": [
+      {
+        "id": 45,
+        "name": "Glass",
+        "amount": 0.5,
+        "nameCs": "Sklo"
+      },
+      {
+        "id": 14,
+        "name": "Minerals",
+        "amount": 0.25,
+        "nameCs": "Minerály"
+      },
+      {
+        "id": 18,
+        "name": "Aluminium",
+        "amount": 0.125,
+        "nameCs": "Hliník"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 194.59991422050211,
+    "baseSalary": 414,
+    "nameCs": "Vánoční ozdoba"
+  },
+  "145": {
+    "name": "Recipes",
+    "producedAt": "q",
+    "producedAtName": "Kuchyně",
+    "producedFrom": [],
+    "neededFor": [],
+    "producedAnHour": 4.204935880410212,
+    "baseSalary": 517.5,
+    "nameCs": "Recepty"
+  },
+  "146": {
+    "name": "Pumpkin",
+    "producedAt": "P",
+    "producedAtName": "Farma",
+    "producedFrom": [
+      {
+        "id": 2,
+        "name": "Water",
+        "amount": 8,
+        "nameCs": "Voda"
+      },
+      {
+        "id": 66,
+        "name": "Seeds",
+        "amount": 2,
+        "nameCs": "Semena"
+      }
+    ],
+    "neededFor": [
+      {
+        "id": 147,
+        "name": "Jack o'lantern",
+        "nameCs": "Jack o'lantern"
+      },
+      {
+        "id": 149,
+        "name": "Dýňová polévka",
+        "nameCs": "Dýňová polévka"
+      }
+    ],
+    "producedAnHour": 140.25626189083343,
+    "baseSalary": 103.5,
+    "nameCs": "Dýně"
+  },
+  "147": {
+    "name": "Jack o'lantern",
+    "producedAt": "L",
+    "producedAtName": "Továrna na elektroniku",
+    "producedFrom": [
+      {
+        "id": 146,
+        "name": "Pumpkin",
+        "amount": 1,
+        "nameCs": "Dýně"
+      },
+      {
+        "id": 21,
+        "name": "Electronic components",
+        "amount": 0.5,
+        "nameCs": "Tištěné spoje"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 306.2860831885418,
+    "baseSalary": 379.50000000000006,
+    "nameCs": "Jack o'lantern"
+  },
+  "148": {
+    "name": "Witch costume",
+    "producedAt": "T",
+    "producedAtName": "Textilní závod",
+    "producedFrom": [
+      {
+        "id": 41,
+        "name": "Fabric",
+        "amount": 4,
+        "nameCs": "Látka"
+      },
+      {
+        "id": 19,
+        "name": "Plastic",
+        "amount": 1,
+        "nameCs": "Plast"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 123.80868209409506,
+    "baseSalary": 138,
+    "nameCs": "Kostým čarodějnice"
+  },
+  "149": {
+    "name": "Pumpkin soup",
+    "producedAt": "m",
+    "producedAtName": "Catering",
+    "producedFrom": [
+      {
+        "id": 134,
+        "name": "Butter",
+        "amount": 2,
+        "nameCs": "Máslo"
+      },
+      {
+        "id": 146,
+        "name": "Pumpkin",
+        "amount": 10,
+        "nameCs": "Dýně"
+      },
+      {
+        "id": 121,
+        "name": "Bread",
+        "amount": 0.5,
+        "nameCs": "Chléb"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 2.3663980438352805,
+    "baseSalary": 655.5,
+    "nameCs": "Dýňová polévka"
+  },
+  "150": {
+    "name": "Tree",
+    "producedAt": "v",
+    "producedAtName": "Lesní školka",
+    "producedFrom": [
+      {
+        "id": 2,
+        "name": "Water",
+        "amount": 12,
+        "nameCs": "Voda"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 10.153997453550545,
+    "baseSalary": 79.35000000000001,
+    "nameCs": "Stromek"
+  },
+  "151": {
+    "name": "Easter Bunny",
+    "producedAt": "k",
+    "producedAtName": "Potravinářský závod",
+    "producedFrom": [
+      {
+        "id": 136,
+        "name": "Cocoa",
+        "amount": 8,
+        "nameCs": "Kakao"
+      },
+      {
+        "id": 117,
+        "name": "Milk",
+        "amount": 0.25,
+        "nameCs": "Mléko"
+      },
+      {
+        "id": 135,
+        "name": "Sugar",
+        "amount": 0.25,
+        "nameCs": "Cukr"
+      },
+      {
+        "id": 18,
+        "name": "Aluminium",
+        "amount": 0.0625,
+        "nameCs": "Hliník"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 3.952078492755378,
+    "baseSalary": 379.50000000000006,
+    "nameCs": "Velikonoční zajíček"
+  },
+  "152": {
+    "name": "Ramadan sweets",
+    "producedAt": "k",
+    "producedAtName": "Potravinářský závod",
+    "producedFrom": [
+      {
+        "id": 133,
+        "name": "Flour",
+        "amount": 2,
+        "nameCs": "Mouka"
+      },
+      {
+        "id": 134,
+        "name": "Butter",
+        "amount": 1,
+        "nameCs": "Máslo"
+      },
+      {
+        "id": 135,
+        "name": "Sugar",
+        "amount": 0.25,
+        "nameCs": "Cukr"
+      },
+      {
+        "id": 117,
+        "name": "Milk",
+        "amount": 0.5,
+        "nameCs": "Mléko"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 5.434107927538645,
+    "baseSalary": 379.50000000000006,
+    "nameCs": "Ramadánové sladkosti"
+  },
+  "153": {
+    "name": "Chocolate icecream",
+    "producedAt": "k",
+    "producedAtName": "Potravinářský závod",
+    "producedFrom": [
+      {
+        "id": 117,
+        "name": "Milk",
+        "amount": 2,
+        "nameCs": "Mléko"
+      },
+      {
+        "id": 135,
+        "name": "Sugar",
+        "amount": 0.5,
+        "nameCs": "Cukr"
+      },
+      {
+        "id": 140,
+        "name": "Chocolate",
+        "amount": 0.0625,
+        "nameCs": "Čokoláda"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 34.58068681160956,
+    "baseSalary": 379.50000000000006,
+    "nameCs": "Čokoládová zmrzlina"
+  },
+  "154": {
+    "name": "Apple icecream",
+    "producedAt": "k",
+    "producedAtName": "Potravinářský závod",
+    "producedFrom": [
+      {
+        "id": 117,
+        "name": "Milk",
+        "amount": 2,
+        "nameCs": "Mléko"
+      },
+      {
+        "id": 135,
+        "name": "Sugar",
+        "amount": 0.5,
+        "nameCs": "Cukr"
+      },
+      {
+        "id": 3,
+        "name": "Apples",
+        "amount": 4,
+        "nameCs": "Jablka"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 34.58068681160956,
+    "baseSalary": 379.50000000000006,
+    "nameCs": "Jablečná zmrzlina"
+  },
+  "155": {
+    "name": "Cream egg",
+    "producedAt": "k",
+    "producedAtName": "Potravinářský závod",
+    "producedFrom": [
+      {
+        "id": 140,
+        "name": "Chocolate",
+        "amount": 0.1,
+        "nameCs": "Čokoláda"
+      },
+      {
+        "id": 134,
+        "name": "Butter",
+        "amount": 0.5,
+        "nameCs": "Máslo"
+      },
+      {
+        "id": 135,
+        "name": "Sugar",
+        "amount": 0.75,
+        "nameCs": "Cukr"
+      }
+    ],
+    "neededFor": [],
+    "producedAnHour": 12.350245289860556,
+    "baseSalary": 379.50000000000006,
+    "nameCs": "Čokoládové vajíčko"
+  }
+}

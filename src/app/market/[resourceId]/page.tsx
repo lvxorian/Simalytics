@@ -5,6 +5,7 @@ import { ArrowLeft, Info } from "lucide-react";
 
 import { PriceChart } from "@/components/price-chart";
 import { ItemAlertsTable } from "@/components/item-alerts-table";
+import { ItemProfile } from "@/components/item-profile";
 import { getLatestVwaps } from "@/lib/data";
 import { StarButton } from "@/components/star-button";
 import { AutoRefresh } from "@/components/auto-refresh";
@@ -277,8 +278,8 @@ export default async function MarketItemPage({
         Zpět na trh
       </Link>
 
-      {/* ── Hero: ikona + cena + 24h ─────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-5">
+      {/* ── Hero: ikona + cena + 24h + profil suroviny vpravo ── */}
+      <div className="flex flex-wrap items-start gap-5">
         <ItemIcon
           url={img}
           name={item.name}
@@ -329,6 +330,9 @@ export default async function MarketItemPage({
             )}
           </div>
         </div>
+
+        {/* „Firemní profil“ suroviny – výroba, receptura, navazující výroba */}
+        <ItemProfile itemId={id} className="ml-auto" />
       </div>
 
       {/* ── Přepínače intervalu a typu grafu ─────────────────── */}
