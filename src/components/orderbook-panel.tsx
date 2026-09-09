@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
 import { formatCompact, formatPrice } from "@/lib/format";
+import { useLiveOrderbook } from "@/lib/live-prices";
 import { cn } from "@/lib/utils";
 
 type AskRow = {
@@ -14,45 +13,17 @@ type AskRow = {
 /**
  * Mini orderbook (Fáze 3C) – top nejnižších nabídek pod hero na market
  * page. Ukazuje HLUBOKU trhu na straně nákupu: kolik kusů stojí na které
- * úrovni a jestli je za ní NPC (nezájemce trhu) nebo hráč. Data tahá
- * z /api/live/ask (ofiko v3 orderbook, cache 3 s, client poll 6 s –
- * ofiko API má limit 1 req/s, proto pomalejší tempo než ceny).
+ * úrovni a jestli je za ní NPC (nezájemce trhu) nebo hráč.
+ *
+ * Data živě přes SSE (Fáze 3C): market page registruje zájem přes
+ * useLiveOrderbook → hub polluje položku s předností a při změně pushuje
+ * 'orderbook' event (latence ~2–4 s). REST /api/live/ask zůstává jen
+ * jako fallback v offline režimu (6 s polling).
  */
 export function OrderbookPanel({ itemId }: { itemId: number }) {
-  const [asks, setAsks] = useState<AskRow[]>([]);
-  const [loaded, setLoaded] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const { asks, source } = useLiveOrderbook(itemId);
 
-  useEffect(() => {
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-
-    const poll = async () => {
-      try {
-        const res = await fetch(`/api/live/ask?item=${itemId}&depth=5`, {
-          cache: "no-store",
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = (await res.json()) as { asks: AskRow[] };
-        if (cancelled) return;
-        setAsks(data.asks ?? []);
-        setLoaded(true);
-        setFailed(false);
-      } catch {
-        if (!cancelled) setFailed(true);
-      }
-      if (!cancelled) timer = setTimeout(poll, 6_000);
-    };
-
-    void poll();
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-    };
-  }, [itemId]);
-
-  if (failed && asks.length === 0) return null;
-  if (!loaded) {
+  if (asks === null) {
     return (
       <div className="h-[116px] animate-pulse rounded-xl border border-border/60 bg-card" />
     );
@@ -75,9 +46,13 @@ export function OrderbookPanel({ itemId }: { itemId: number }) {
         </span>
         <span
           className="font-mono text-[10px] text-muted-foreground"
-          title="Hloubka trhu – kolik kusů je na které úrovni k dostání"
+          title={
+            source === "sse"
+              ? "Hloubka trhu – kolik kusů je na které úrovni k dostání. Živě přes SSE."
+              : "Hloubka trhu – kolik kusů je na které úrovni k dostání. Offline polling."
+          }
         >
-          koupíš hned ↓
+          koupíš hned ↓{source === "sse" && <span className="ml-1 text-up">●</span>}
         </span>
       </div>
       <ul className="divide-y divide-border/30">

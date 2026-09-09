@@ -40,6 +40,13 @@ export type LiveAlertEvent = {
 
 export type LiveStatus = "connecting" | "live" | "offline";
 
+/** Jedna nabídka orderbooku (ask strana, vzestupně). */
+export type LiveAsk = {
+  price: number;
+  quantity: number;
+  npc: boolean;
+};
+
 export type LiveSnapshot = {
   status: LiveStatus;
   items: ReadonlyMap<number, LiveItem>;
@@ -47,6 +54,8 @@ export type LiveSnapshot = {
   serverOffsetMs: number;
   lastUpdatedMs: number | null;
   events: readonly LiveAlertEvent[];
+  /** Orderbooky položek požadovaných přes useLiveOrderbook (id → top asky). */
+  orderbooks: ReadonlyMap<number, readonly LiveAsk[]>;
 };
 
 const SERVER_SNAPSHOT: LiveSnapshot = {
@@ -55,6 +64,7 @@ const SERVER_SNAPSHOT: LiveSnapshot = {
   serverOffsetMs: 0,
   lastUpdatedMs: null,
   events: [],
+  orderbooks: new Map(),
 };
 
 const REST_FALLBACK_MS = 10_000;
@@ -80,6 +90,10 @@ class LiveStore {
   private mode: "idle" | "sse" | "rest" = "idle";
   private sseHelloTimer: ReturnType<typeof setTimeout> | null = null;
   private sseGotData = false;
+  /** Položky, jejichž orderbook klient chce (?items= v SSE URL). */
+  private orderbookWanted = new Set<number>();
+  /** Aktivní SSE URL – změna (?items=) vyžaduje reconnect. */
+  private sseUrl: string | null = null;
 
   subscribe = (fn: () => void): (() => void) => {
     this.listeners.add(fn);
@@ -111,7 +125,13 @@ class LiveStore {
     }
     this.mode = "sse";
     this.sseGotData = false;
-    const es = new EventSource("/api/live/stream");
+    // URL podle zájmu o orderbooky (?items=) – reconnect s parametrem
+    const url =
+      this.orderbookWanted.size > 0
+        ? `/api/live/stream?items=${[...this.orderbookWanted].join(",")}`
+        : "/api/live/stream";
+    this.sseUrl = url;
+    const es = new EventSource(url);
     this.es = es;
 
     // Pojistka: když do 8 s nedorazí žádná data (blokované SSE za proxy,
@@ -133,9 +153,17 @@ class LiveStore {
         const data = JSON.parse(e.data) as {
           items: LiveItem[];
           stale?: boolean;
+          orderbooks?: { item: number; asks: LiveAsk[] | null }[];
           serverTime: string;
         };
         this.applyItems(data.items, data.serverTime);
+        if (data.orderbooks) {
+          const ob = new Map(this.snap.orderbooks);
+          for (const o of data.orderbooks) {
+            if (o.asks && o.asks.length > 0) ob.set(o.item, o.asks);
+          }
+          this.set({ orderbooks: ob });
+        }
         this.set({
           status: data.stale ? "offline" : "live",
           lastUpdatedMs: Date.now(),
@@ -171,10 +199,27 @@ class LiveStore {
       this.set({ status: "offline" });
     };
 
+    const onOrderbook = (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data) as { item: number; asks: LiveAsk[] };
+        if (!Array.isArray(data.asks)) return;
+        const ob = new Map(this.snap.orderbooks);
+        if (data.asks.length > 0) {
+          ob.set(data.item, data.asks);
+        } else {
+          ob.delete(data.item); // burza prázdná
+        }
+        this.set({ orderbooks: ob });
+      } catch {
+        // ignore
+      }
+    };
+
     es.addEventListener("hello", onHello as EventListener);
     es.addEventListener("tick", onTick as EventListener);
     es.addEventListener("alert", onAlert as EventListener);
     es.addEventListener("stale", onStale as EventListener);
+    es.addEventListener("orderbook", onOrderbook as EventListener);
     es.onopen = () => this.set({ status: "live" });
 
     es.onerror = () => {
@@ -298,6 +343,40 @@ class LiveStore {
       this.restTimer = null;
     }
     this.mode = "idle";
+    this.sseUrl = null;
+  }
+
+  // ── Orderbook (mini orderbook na market page) ────────────────────
+  /**
+   * Zájem o orderbook položky. Volá se z useLiveOrderbook – změní ?items=
+   * parametr SSE a spojení se přepojí (hub začne položku pollovat s
+   * předností a při změně pushovat 'orderbook' event).
+   */
+  wantOrderbook(itemId: number) {
+    const added = !this.orderbookWanted.has(itemId);
+    this.orderbookWanted.add(itemId);
+    // Reconnect jen když běží SSE a URL se reálně změní
+    if (
+      added &&
+      this.mode === "sse" &&
+      this.orderbookWanted.size === 1 // první položka = změna URL z "/stream" na "?items="
+    ) {
+      this.stopSse();
+      this.startSse();
+    } else if (added && this.mode === "idle" && this.listeners.size > 0) {
+      this.startSse();
+    }
+  }
+
+  forgetOrderbook(itemId: number) {
+    this.orderbookWanted.delete(itemId);
+    // Necháme spojení běžet – ?items= zůstane, dokud se store nepouští
+    // (prakticky: market page unmount = jen zbytky; reconnect jen pro
+    // čistotu při úplném vyprázdnění).
+    if (this.orderbookWanted.size === 0 && this.mode === "sse") {
+      this.stopSse();
+      this.startSse(); // přepojit na /stream bez ?items=
+    }
   }
 }
 
@@ -324,6 +403,74 @@ export function useLiveSnapshot(): LiveSnapshot {
     livePrices.getSnapshot,
     livePrices.getServerSnapshot
   );
+}
+
+/**
+ * Orderbook jedné položky (mini orderbook na market page, Fáze 3C):
+ *  - registruje zájem v store → SSE URL dostane ?items= → hub polluje
+ *    položku s PŘEDNOSTÍ a při změně pošle 'orderbook' event,
+ *  - REST fallback: když běží store v rest režimu, panel polluje sám
+ *    /api/live/ask (6 s, respektuje pomalejší fallback tempo).
+ *
+ * Vrací null dokud nejsou data (SSR/orderbook fetch), pole asků poté
+ * (prázdné pole = burza nemá nabídky).
+ */
+export function useLiveOrderbook(
+  itemId: number
+): { asks: LiveAsk[] | null; source: "sse" | "rest" | "none" } {
+  const [asks, setAsks] = useState<LiveAsk[] | null>(null);
+  const [source, setSource] = useState<"sse" | "rest" | "none">("none");
+  const { status } = useLiveSnapshot();
+
+  // Registrace zájmu (hub začne pollovat s předností)
+  useEffect(() => {
+    livePrices.wantOrderbook(itemId);
+    return () => livePrices.forgetOrderbook(itemId);
+  }, [itemId]);
+
+  // SSE cesta: čti orderbooks ze snapshotu (reference per položka)
+  const ob = useSyncExternalStore(
+    livePrices.subscribe,
+    () => livePrices.getSnapshot().orderbooks.get(itemId) ?? null,
+    () => null
+  );
+
+  useEffect(() => {
+    if (ob !== null) {
+      setAsks([...ob]);
+      setSource("sse");
+      return;
+    }
+    // REST fallback (jen v rest režimu; sse mode = hub ještě nenačetl)
+    if (status !== "offline" && livePrices.getSnapshot().status !== "connecting") {
+      // v sse mode čekáme na hub event – nesaháme na /api/live/ask
+    }
+    if (status === "offline") {
+      setSource("rest");
+      let cancelled = false;
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      const poll = async () => {
+        try {
+          const res = await fetch(`/api/live/ask?item=${itemId}&depth=5`, {
+            cache: "no-store",
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = (await res.json()) as { asks?: LiveAsk[] };
+          if (!cancelled) setAsks(data.asks ?? []);
+        } catch {
+          // tiché – panel zůstane s posledními daty
+        }
+        if (!cancelled) timer = setTimeout(poll, 6_000);
+      };
+      void poll();
+      return () => {
+        cancelled = true;
+        if (timer) clearTimeout(timer);
+      };
+    }
+  }, [ob, itemId, status]);
+
+  return { asks, source };
 }
 
 /**

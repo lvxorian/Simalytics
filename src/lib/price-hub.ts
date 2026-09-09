@@ -1,6 +1,6 @@
 import { getDb } from "@/lib/db";
 import { getFollowedSummaries, getMarketPrices } from "@/lib/simcotools";
-import { getLowestAsk } from "@/lib/simco-official";
+import { getLowestAsk, getOrderbookAsks } from "@/lib/simco-official";
 import {
   evaluateLiveAlerts,
   persistTicks,
@@ -32,6 +32,13 @@ export type HubTick = {
   datetime: string;
 };
 
+/** Jedna nabídka v orderbooku (ask strana, seřazené vzestupně). */
+export type HubAsk = {
+  price: number;
+  quantity: number;
+  npc: boolean;
+};
+
 const HUB_STEP_MS = 2_000; // střídavě A/B → každý endpoint dotazován 1× za 4 s
 const PERSIST_INTERVAL_MS = 30_000;
 const EVAL_INTERVAL_MS = 10_000; // evaluace alertů i bez ticků (mrtvý trh)
@@ -44,9 +51,11 @@ const MAX_SUBS = 50; // pojistka: nic nejsou spam-boti
 const ORDERBOOK_STEP_MS = 2_000;
 
 type Sub = (ev: {
-  type: "tick" | "alert" | "stale";
+  type: "tick" | "alert" | "stale" | "orderbook";
   ticks?: HubTick[];
   alerts?: LiveTrigger[];
+  /** Položky, jejichž orderbook se změnil (event 'orderbook'). */
+  orderbookIds?: number[];
 }) => void;
 
 type HubState = {
@@ -63,6 +72,14 @@ type HubState = {
   lastEvalMs: number;
   /** Nejnižší asky hlídaných položek (buy alert watch). */
   askWatch: Map<number, number>;
+  /** Full orderbook top-5 asků pro položky otevřené diváky (SSE push). */
+  orderbook: Map<number, HubAsk[]>;
+  /** Položky, které si klienti výslovně vyžádali (?items= v SSE). */
+  requestedOrderbookIds: Set<number>;
+  /** Kolo prioritních orderbook pollů. */
+  orderbookCursor: number;
+  /** Čas poslední změny orderbooku (pro hubOrderbookChangedSince). */
+  lastOrderbookChangeMs: number;
   askWatchIds: number[];
   askWatchCursor: number;
   lastOrderbookMs: number;
@@ -88,6 +105,10 @@ function state(): HubState {
       lastPersistMs: 0,
       lastEvalMs: 0,
       askWatch: new Map(),
+      orderbook: new Map(),
+      requestedOrderbookIds: new Set(),
+      orderbookCursor: 0,
+      lastOrderbookChangeMs: 0,
       askWatchIds: [],
       askWatchCursor: 0,
       lastOrderbookMs: 0,
@@ -222,6 +243,10 @@ async function hubStep(s: HubState) {
  * ('price' + 'below') a round-robin polluje jejich nejnižší asky (1 request
  * / cyklus). Výsledek jde do evaluace alertů (ask ≤ práh = nákupní
  * příležitost i bez obchodu). Refresh seznamu max 1× / 60 s.
+ *
+ * Navíc (SSE push): položky, které si klienti vyžádali (?items=), polluje
+ * s PŘEDNOSTÍ a s CELÝM top-5 orderbookem – publish 'orderbook' event při
+ * změně (mini orderbook na market page tak žije bez vlastního pollingu).
  */
 async function orderbookStep(s: HubState) {
   const now = Date.now();
@@ -242,8 +267,37 @@ async function orderbookStep(s: HubState) {
       s.lastOrderbookMs = now;
     }
   }
-  if (s.askWatchIds.length === 0) return;
 
+  // Priorita 1: položky požadované klienty (otevřená market page)
+  // – full top-5, publish při změně. Kolo se otáčí nezávisle na alert watch.
+  if (s.requestedOrderbookIds.size > 0) {
+    const ids = [...s.requestedOrderbookIds];
+    const id = ids[s.orderbookCursor % ids.length];
+    s.orderbookCursor = (s.orderbookCursor + 1) % ids.length;
+    try {
+      const asks = await getOrderbookAsks(id, 0, 5);
+      const prev = s.orderbook.get(id);
+      const next = asks.length > 0 ? asks : null;
+      if (next === null) {
+        s.orderbook.delete(id);
+      } else {
+        s.orderbook.set(id, next);
+      }
+      // Publish jen při skutečné změně (JSON srovnání – 5 položek, levné)
+      const changed =
+        JSON.stringify(prev ?? null) !== JSON.stringify(next ?? null);
+      if (changed) {
+        s.lastOrderbookChangeMs = Date.now();
+        publish({ type: "orderbook", orderbookIds: [id] });
+      }
+      return; // tento krok šel na prioritní položku
+    } catch {
+      // orderbook selhání – spadni na alert watch kolo
+    }
+  }
+
+  // Priorita 2: alert watch (nejnižší ask pro evaluaci buy alertů)
+  if (s.askWatchIds.length === 0) return;
   const id = s.askWatchIds[s.askWatchCursor % s.askWatchIds.length];
   s.askWatchCursor = (s.askWatchCursor + 1) % Math.max(1, s.askWatchIds.length);
 
@@ -305,4 +359,39 @@ export function hubSnapshot(): HubTick[] {
 
 export function hubIsStale(): boolean {
   return state().stale;
+}
+
+/**
+ * Registrace zájmu klienta o orderbook položek (market page otevře SSE
+ * s ?items=id). Hub tuto položku polluje S PŘEDNOSTÍ (full top-5) a při
+ * změně publikuje 'orderbook' event. Vrací aktuální snapshot k okamžitému
+ * odeslání + unregister funkci.
+ */
+export function registerOrderbookInterest(
+  itemId: number
+): { asks: HubAsk[] | null; unregister: () => void } {
+  const s = state();
+  s.requestedOrderbookIds.add(itemId);
+  return {
+    asks: s.orderbook.get(itemId) ?? null,
+    unregister: () => {
+      s.requestedOrderbookIds.delete(itemId);
+      // Cache necháme (další divák téže položky dostane hned data);
+      // GC: smažeme jen položky bez zájmu a bez alert watch při příštím
+      // cyklu – jednoduchost předána na malou velikost mapy (max pár IDS).
+      if (s.requestedOrderbookIds.size === 0) {
+        s.orderbook.clear();
+      }
+    },
+  };
+}
+
+/** Orderbook snapshot pro položku (SSE 'hello' event). */
+export function hubOrderbook(itemId: number): HubAsk[] | null {
+  return state().orderbook.get(itemId) ?? null;
+}
+
+/** Změnil se orderbook od času ms? (pro rozhodnutí o refetch fallbacku) */
+export function hubOrderbookChangedSince(ms: number): boolean {
+  return state().lastOrderbookChangeMs > ms;
 }
