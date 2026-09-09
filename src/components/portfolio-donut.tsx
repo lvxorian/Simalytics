@@ -130,11 +130,13 @@ export function PortfolioDonut({
   // Ať se text v centru nikdy nedotkne ringu: souhrn má 3 řádky, detail
   // hoveru 2–3 – obě varianty se vejdou do vnitřního průměru (r−stroke).
   return (
-    <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-center sm:gap-8">
-      <div
-        className="relative shrink-0"
-        onMouseLeave={() => setHoveredKey(null)}
-      >
+    <div
+      className="flex flex-col items-center gap-6 sm:flex-row sm:items-center sm:gap-8"
+      // Pojistka: opustí-li myš celý box (koláč + legenda), vrátit výchozí
+      // zobrazení – zvýraznění nesmí zůstat viset.
+      onMouseLeave={() => setHoveredKey(null)}
+    >
+      <div className="relative shrink-0">
         <svg
           width={232}
           height={232}
@@ -191,6 +193,9 @@ export function PortfolioDonut({
                   transitionDelay: grown ? `${animDelay}ms` : "0ms",
                 }}
                 onMouseEnter={() => setHoveredKey(seg.slice.key)}
+                onMouseLeave={() =>
+                  setHoveredKey((k) => (k === seg.slice.key ? null : k))
+                }
               />
             );
           })}
@@ -246,6 +251,9 @@ export function PortfolioDonut({
               <Link
                 href={seg.slice.href ?? "#"}
                 onMouseEnter={() => setHoveredKey(seg.slice.key)}
+                onMouseLeave={() =>
+                  setHoveredKey((k) => (k === seg.slice.key ? null : k))
+                }
                 className={cn(
                   "group flex items-center gap-2 rounded-md px-1.5 py-1 transition-all duration-200",
                   isHovered && "bg-secondary/60",
