@@ -33,6 +33,7 @@ export type HubTick = {
 
 const HUB_STEP_MS = 2_000; // střídavě A/B → každý endpoint dotazován 1× za 4 s
 const PERSIST_INTERVAL_MS = 30_000;
+const EVAL_INTERVAL_MS = 10_000; // evaluace alertů i bez ticků (mrtvý trh)
 const MAX_SUBS = 50; // pojistka: nic nejsou spam-boti
 
 type Sub = (ev: {
@@ -51,6 +52,8 @@ type HubState = {
   /** Sledované položky (track_ticks) – null = ještě nenahráno. */
   trackedIds: Set<number> | null;
   lastPersistMs: number;
+  /** Poslední evaluace alertů (i bez ticků běží podle EVAL_INTERVAL_MS). */
+  lastEvalMs: number;
   toggle: boolean;
   stale: boolean;
 };
@@ -69,6 +72,7 @@ function state(): HubState {
       seen: new Map(),
       trackedIds: null,
       lastPersistMs: 0,
+      lastEvalMs: 0,
       toggle: false,
       stale: false,
     };
@@ -146,16 +150,28 @@ async function hubStep(s: HubState) {
 
     if (changed.length > 0) {
       publish({ type: "tick", ticks: changed });
+      s.lastEvalMs = 0; // tick = vynucená evaluace hned
+    }
 
-      // Evaluace alertů – hned po publishi (latence alertu ≤ ~2 s)
+    // ── Evaluace alertů ─────────────────────────────────────────────
+    // Po ticku hned (latence ≤ ~2 s); i bez ticků pravidelně každých
+    // EVAL_INTERVAL_MS – nově vložený alert se spustí i na mrtvém trhu
+    // (žádné obchody → žádné ticky → jinak by čekal až do dalšího).
+    const nowMs = Date.now();
+    if (changed.length > 0 || nowMs - s.lastEvalMs >= EVAL_INTERVAL_MS) {
+      s.lastEvalMs = nowMs;
       try {
-        const priceMap = new Map(s.latest.size > 0 ? [...s.latest.entries()].map(([id, t]) => [id, t.price]) : []);
+        const priceMap = new Map(
+          [...s.latest.entries()].map(([id, t]) => [id, t.price])
+        );
         const alerts = await evaluateLiveAlerts(priceMap);
         if (alerts.length > 0) publish({ type: "alert", alerts });
       } catch {
         // evaluace nesmí shodit smyčku
       }
+    }
 
+    if (changed.length > 0) {
       // Persist – throttle 30 s, idempotentní
       const now = Date.now();
       if (now - s.lastPersistMs >= PERSIST_INTERVAL_MS) {
