@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useActionState, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BellPlus, X } from "lucide-react";
 
@@ -54,6 +54,12 @@ export function ChartContextMenu({
     price != null ? price.toFixed(3) : ""
   );
   const boxRef = useRef<HTMLDivElement | null>(null);
+  // Pozice menu – počítá se z REÁLNĚ změřené velikosti boxu (menu i
+  // formulář mají jinou výšku) a velikosti rodiče (chart container),
+  // takže menu je VŽDY celé viditelné – klik dole v grafu ho zvedne
+  // nahoru místo překrytí spodní hranou. Skryté, dokud není spočítáno
+  // (useLayoutEffect = bez probliknutí).
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
 
   // Zavřít na Esc nebo klik mimo menu
   useEffect(() => {
@@ -84,17 +90,63 @@ export function ChartContextMenu({
 
   const canCreate = itemId != null && price != null;
 
-  // Menu překlopit, když by přetékalo doprava/dolů (šířka ~260 px)
-  const flipX = x > 320;
-  const flipY = y > 420;
+  // ── Pozicování menu: vždy celé viditelné v rámci rodiče ──────────
+  // Po každém renderu (otevření menu, přepnutí na formulář, chyba/úspěch
+  // = změna výšky) přepočítat pozici z měřeného bounding boxu menu a
+  // rodiče. Preferovaná pozice = místo kliknutí; když by box přetekl,
+  // překlopí se doleva/nahoru; když nejde překlopit, hranu rodiče
+  // respektuje (clamp). Výsledek: tlačítko „Uložit alert“ je vždy
+  // klikatelné, nikdy skryté pod hranou grafu.
+  useLayoutEffect(() => {
+    const box = boxRef.current;
+    const parent = box?.parentElement;
+    if (!box || !parent) return;
+
+    const bRect = box.getBoundingClientRect();
+    const pRect = parent.getBoundingClientRect();
+    const margin = 4;
+    const boxW = bRect.width;
+    const boxH = bRect.height;
+
+    // Rodič může být posunutý vzhledem ke kontextu menu (fullscreen
+    // re-parent) – pracujeme s relativními souřadnicemi
+    const relX = x;
+    const relY = y;
+
+    // Vodorovně: preferuj vpravo od kurzoru, přetéká-li, překlop doleva,
+    // a pořád-li mimo, clamp na hranu rodiče
+    let left = relX + 4;
+    if (left + boxW > pRect.width - margin) {
+      left = relX - boxW - 4;
+    }
+    if (left < margin) left = margin;
+    if (left + boxW > pRect.width - margin) {
+      left = pRect.width - boxW - margin;
+    }
+    if (left < margin) left = margin;
+
+    // Svisle: preferuj pod kurzorem; přetéká-li, nad kurzor; pak clamp
+    let top = relY + 4;
+    if (top + boxH > pRect.height - margin) {
+      top = relY - boxH - 4;
+    }
+    if (top < margin) top = margin;
+    if (top + boxH > pRect.height - margin) {
+      top = pRect.height - boxH - margin;
+    }
+    if (top < margin) top = margin;
+
+    setPos({ left, top });
+  }); // bez deps – musí se přepočítat i po přepnutí na formulář
 
   return (
     <div
       ref={boxRef}
       className="absolute z-30 w-64 rounded-lg border border-border bg-popover shadow-xl"
       style={{
-        left: flipX ? x - 256 : x + 4,
-        top: flipY ? y - 100 : y + 4,
+        left: pos?.left ?? x + 4,
+        top: pos?.top ?? y + 4,
+        visibility: pos ? "visible" : "hidden",
       }}
       // zabránit, aby klik do menu spustil drag v grafu
       onMouseDown={(e) => e.stopPropagation()}

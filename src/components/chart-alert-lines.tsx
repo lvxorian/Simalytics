@@ -46,6 +46,9 @@ type DragState = {
 
 const LABEL_W = 84;
 const LABEL_H = 20;
+// Mezera mezi koncem linky/popisku a cenovou osou (osa je vpravo a
+// nesmí se překrývat – popisek proto končí PRED osou, ne nad ní).
+const PRICE_AXIS_GAP = 68;
 
 export function ChartAlertLines({
   alerts,
@@ -94,6 +97,9 @@ export function ChartAlertLines({
     // pozice koše – jen u tažené linky
     let trashXY: { x: number; y: number } | null = null;
 
+    /** Pravý okraj popisku – mezera před cenovou osou (nechat vidět osu). */
+    const labelX = (width: number) => width - LABEL_W - PRICE_AXIS_GAP;
+
     for (const a of priceAlerts) {
       const y = priceToY(getThreshold(a));
 
@@ -116,18 +122,18 @@ export function ChartAlertLines({
 
       ctx.save();
       ctx.globalAlpha = alpha;
-      // linka
+      // linka – končí před popiskem, který stojí VLEVO od cenové osy
       ctx.strokeStyle = color;
       ctx.lineWidth = dragging ? 2 : 1.25;
       ctx.setLineDash(dragging ? [] : [6, 4]);
       ctx.beginPath();
       ctx.moveTo(0, y + 0.5);
-      ctx.lineTo(rect.width - LABEL_W - 4, y + 0.5);
+      ctx.lineTo(labelX(rect.width), y + 0.5);
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // popisek vpravo (přes cenovou osu): zvoneček + cena
-      const lx = rect.width - LABEL_W - 4;
+      // popisek vlevo od cenové osy: zvoneček + cena (nepřekrývá osu)
+      const lx = labelX(rect.width);
       ctx.fillStyle = color;
       ctx.fillRect(lx, y - LABEL_H / 2, LABEL_W, LABEL_H);
       ctx.fillStyle = "rgba(11,18,32,0.9)";
