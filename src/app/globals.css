@@ -340,6 +340,18 @@ html.light .ticker-tile-down:hover {
   }
 }
 
+/* ── Hvězdička watchlistu: glow pod ikonou při hoveru ────────── */
+/* Používá StarButton (market table, market detail, watchlist) –
+   svítí v barvě primární modré, světlo „zpod“ ikony jako u TV. */
+.star-glow {
+  transition: filter 0.2s ease;
+}
+button:hover .star-glow,
+button:focus-visible .star-glow {
+  filter: drop-shadow(0 0 6px rgb(91 141 239 / 0.75))
+    drop-shadow(0 0 14px rgb(91 141 239 / 0.35));
+}
+
 /* ── Scrollbary ──────────────────────────────────────────────── */
 ::-webkit-scrollbar {
   width: 8px;

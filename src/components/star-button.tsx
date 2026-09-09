@@ -40,7 +40,11 @@ export function StarButton({
       )}
     >
       <Star
-        className={cn("shrink-0", size === "sm" ? "size-3.5" : "size-5", watched && "fill-primary")}
+        className={cn(
+          "star-glow shrink-0",
+          size === "sm" ? "size-3.5" : "size-5",
+          watched && "fill-primary"
+        )}
       />
     </button>
   );
