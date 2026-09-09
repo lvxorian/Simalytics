@@ -2,13 +2,16 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 
 import {
   deletePortfolioHoldingAction,
 } from "@/app/actions";
+import {
+  PortfolioEditLotsDialog,
+  type EditableLot,
+} from "@/components/portfolio-edit-lots-dialog";
 import { ItemIcon } from "@/components/item-icon";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -21,20 +24,27 @@ import {
 import { formatPrice, formatSigned, plColorClass } from "@/lib/format";
 import type { PortfolioHolding } from "@/lib/data";
 
-/** Tabulka držeb portfolia s mazáním (klient – interaktivní řádky). */
+/** Řádek tabulky aktiv – držba s editací jednotlivých nákupů. */
+export type AssetRow = PortfolioHolding & { lots: EditableLot[] };
+
+/**
+ * Tabulka aktiv portfolia s editací (tužka) a mazáním (koš).
+ * Tužka otevře dialog s jednotlivými nákupy – množství i pořizovací
+ * cena se dají upravit per nákup; průměr a P/L se přepočítají.
+ */
 export function PortfolioHoldingsTable({
-  holdings,
+  assets,
 }: {
-  holdings: PortfolioHolding[];
+  assets: AssetRow[];
 }) {
-  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
   const handleDelete = (itemId: number, quality: number, key: string) => {
-    setPendingId(key);
+    setPendingKey(key);
     startTransition(async () => {
       await deletePortfolioHoldingAction(itemId, quality);
-      setPendingId(null);
+      setPendingKey(null);
     });
   };
 
@@ -50,13 +60,13 @@ export function PortfolioHoldingsTable({
             <TableHead className="text-right">Hodnota</TableHead>
             <TableHead className="text-right">Nerealizovaný P/L</TableHead>
             <TableHead className="hidden text-right md:table-cell">
-              Pozice
+              Nákupy
             </TableHead>
             <TableHead className="pr-4 text-right">Akce</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {holdings.map((h) => {
+          {assets.map((h) => {
             const key = `${h.item_id}-${h.quality}`;
             return (
               <TableRow key={key}>
@@ -89,6 +99,14 @@ export function PortfolioHoldingsTable({
 
                 <TableCell className="text-right font-mono tabular-nums">
                   {formatPrice(h.avg_buy_price)}
+                  {h.lots.length > 1 && (
+                    <div
+                      className="text-[10px] text-muted-foreground"
+                      title="Vážený průměr napříč nákupy"
+                    >
+                      průměr
+                    </div>
+                  )}
                 </TableCell>
 
                 <TableCell className="text-right font-mono tabular-nums">
@@ -115,33 +133,48 @@ export function PortfolioHoldingsTable({
                 </TableCell>
 
                 <TableCell className="hidden text-right md:table-cell">
-                  <Badge
-                    variant="outline"
-                    className="font-mono text-[10px]"
+                  <span
+                    className="font-mono text-xs text-muted-foreground"
                     title={
-                      h.position_count > 1
-                        ? "Více nákupů agregováno do jedné držby"
-                        : "Jedna otevřená pozice"
+                      h.lots.length > 1
+                        ? "Aktivum tvoří více nákupů – uprav je tužkou"
+                        : "Jeden nákup"
                     }
                   >
-                    {h.position_count}×
-                  </Badge>
+                    {h.lots.length}×
+                  </span>
                 </TableCell>
 
                 <TableCell className="pr-4 text-right">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-8 text-muted-foreground hover:text-down"
-                    onClick={() =>
-                      handleDelete(h.item_id, h.quality, key)
-                    }
-                    disabled={pendingId === key}
-                    title="Odebrat držbu z portfolia"
-                  >
-                    <Trash2 className="size-4" />
-                    <span className="sr-only">Odebrat držbu</span>
-                  </Button>
+                  <div className="flex items-center justify-end gap-1">
+                    <PortfolioEditLotsDialog
+                      holdingLabel={h.name}
+                      qualityLabel={`Q${h.quality}`}
+                      lots={h.lots}
+                      trigger={
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="text-muted-foreground hover:text-foreground"
+                          title="Upravit nákupy (množství, cena)"
+                        >
+                          <Pencil className="size-4" />
+                          <span className="sr-only">Upravit aktivum</span>
+                        </Button>
+                      }
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="text-muted-foreground hover:text-down"
+                      onClick={() => handleDelete(h.item_id, h.quality, key)}
+                      disabled={pendingKey === key}
+                      title="Odebrat aktivum z portfolia"
+                    >
+                      <Trash2 className="size-4" />
+                      <span className="sr-only">Odebrat aktivum</span>
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             );

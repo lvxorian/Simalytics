@@ -342,7 +342,15 @@ export async function addConditionNote(input: {
   `;
 }
 
-// ── PORTFOLIO (agregace otevřených pozic na držby) ──────────────────
+// ── PORTFOLIO (agregace otevřených pozic na aktiva) ──────────────────
+
+/** Nákup (lot) – jedna otevřená pozice v rámci aktiva. */
+export type EditableLot = {
+  id: string;
+  quantity: number;
+  buy_price: number;
+  opened_at: string;
+};
 
 export type PortfolioHolding = {
   item_id: number;
@@ -394,7 +402,9 @@ export async function createPortfolioHolding(input: {
   await db`update items set track_ticks = true where id = ${input.item_id}`;
 }
 
-/** Smaže držbu z portfolia – odstraní otevřené pozice dané položky a kvality. */
+/**
+ * Smaže držbu z portfolia – odstraní otevřené pozice dané položky a kvality.
+ */
 export async function deletePortfolioHolding(
   itemId: number,
   quality: number
@@ -404,6 +414,70 @@ export async function deletePortfolioHolding(
     delete from positions
     where item_id = ${itemId} and quality = ${quality} and closed_at is null
   `;
+}
+
+/**
+ * Jednotlivé nákupy (lots) jedné držby – pro dialog úpravy aktiva.
+ */
+export async function getPositionLots(
+  itemId: number,
+  quality: number
+): Promise<EditableLot[]> {
+  const db = getDb();
+  const rows = (await db`
+    select id, quantity, buy_price, opened_at
+    from positions
+    where item_id = ${itemId} and quality = ${quality} and closed_at is null
+    order by opened_at asc
+  `) as unknown as {
+    id: string;
+    quantity: number;
+    buy_price: string;
+    opened_at: Date;
+  }[];
+
+  return rows.map((r) => ({
+    id: r.id,
+    quantity: Number(r.quantity),
+    buy_price: Number(r.buy_price),
+    opened_at: iso(r.opened_at),
+  }));
+}
+
+/**
+ * Aktualizuje jeden nákup (lot) – množství a pořizovací cenu.
+ * Slouží dialogu „Upravit aktivum“; upravovat lze jen otevřené pozice.
+ */
+export async function updatePositionLot(input: {
+  positionId: string;
+  quantity: number;
+  buyPrice: number;
+}): Promise<void> {
+  const db = getDb();
+  const updated = await db`
+    update positions
+    set quantity = ${input.quantity},
+        buy_price = ${input.buyPrice}
+    where id = ${input.positionId} and closed_at is null
+  `;
+  if (updated.count === 0) {
+    throw new Error("Nákup nebyl nalezen nebo už je uzavřený.");
+  }
+}
+
+/**
+ * Smaže jeden nákup (lot). Slouží dialogu „Upravit aktivum“ – uživatel
+ * tak může z držby odebrat jen vybraný nákup, ne celou držbu.
+ */
+export async function deletePositionLot(positionId: string): Promise<void> {
+  const db = getDb();
+  const deleted = await db`
+    delete from positions
+    where id = ${positionId} and closed_at is null
+  `;
+  if (deleted.count === 0) {
+    throw new Error("Nákup nebyl nalezen nebo už je uzavřený.");
+  }
 }
 
 /**

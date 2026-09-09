@@ -9,11 +9,13 @@ import {
   createPortfolioHolding,
   deleteAlert,
   deletePortfolioHolding,
+  deletePositionLot,
   markAlertsSeen,
   openPosition,
   toggleAlert,
   toggleWatchlist,
   updateAlertThreshold,
+  updatePositionLot,
 } from "@/lib/data";
 
 export type ActionState = { ok: boolean; error?: string };
@@ -216,6 +218,41 @@ export async function deletePortfolioHoldingAction(
   await deletePortfolioHolding(itemId, quality);
   revalidatePath("/portfolio");
   revalidatePath("/positions");
+}
+
+/**
+ * Uloží úpravy aktiv v dialogu portfolia: upraví množství/cenu každého
+ * nákupu (lotu) a smaže loty označené k odstranění. Vše v jedné akci,
+ * ať je editace atomická z pohledu UI. Vrací chybovou zprávu nebo null.
+ */
+export async function updatePortfolioLotsAction(input: {
+  updates: { positionId: string; quantity: number; buyPrice: number }[];
+  deletes: string[];
+}): Promise<{ ok: boolean; error?: string }> {
+  try {
+    for (const u of input.updates) {
+      if (!Number.isFinite(u.quantity) || u.quantity <= 0 || !Number.isInteger(u.quantity))
+        return { ok: false, error: "Množství musí být kladné celé číslo." };
+      if (!Number.isFinite(u.buyPrice) || u.buyPrice <= 0)
+        return { ok: false, error: "Pořizovací cena musí být kladné číslo." };
+    }
+
+    for (const d of input.deletes) {
+      await deletePositionLot(d);
+    }
+    for (const u of input.updates) {
+      await updatePositionLot(u);
+    }
+
+    revalidatePath("/portfolio");
+    revalidatePath("/positions");
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Neznámá chyba.",
+    };
+  }
 }
 
 /** Změní práh alertu (přetažení linky v grafu). */

@@ -3,11 +3,18 @@ import Link from "next/link";
 import { Briefcase, Info, Plus } from "lucide-react";
 
 import { PortfolioDonut, type DonutSlice } from "@/components/portfolio-donut";
-import { PortfolioHoldingsTable } from "@/components/portfolio-holdings-table";
+import {
+  PortfolioHoldingsTable,
+  type AssetRow,
+} from "@/components/portfolio-holdings-table";
 import { PortfolioValueChart } from "@/components/portfolio-value-chart";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getPortfolioHoldings, getPortfolioValueHistory } from "@/lib/data";
+import {
+  getPositionLots,
+  getPortfolioHoldings,
+  getPortfolioValueHistory,
+} from "@/lib/data";
 import { formatPercent, formatPrice, formatSigned } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -25,37 +32,47 @@ export default async function PortfolioPage({
   const { range } = await searchParams;
   const historyDays = range === "7" ? 7 : range === "90" ? 90 : 30;
 
-  const [holdings, valueHistory] = await Promise.all([
-    getPortfolioHoldings().catch(() => []),
-    getPortfolioValueHistory(historyDays).catch(
-      () => [] as { time: number; value: number }[]
-    ),
-  ]);
+  const holdings = await getPortfolioHoldings().catch(() => []);
 
-  const invested = holdings.reduce((s, h) => s + h.invested, 0);
-  const marketValue = holdings.reduce(
+  // Lots (jednotlivé nákupy) pro každé aktivum – paralelně
+  const lotsPerAsset = await Promise.all(
+    holdings.map((h) =>
+      getPositionLots(h.item_id, h.quality).catch(() => [])
+    )
+  );
+  const assets: AssetRow[] = holdings.map((h, i) => ({
+    ...h,
+    lots: lotsPerAsset[i],
+  }));
+
+  const valueHistory = await getPortfolioValueHistory(historyDays).catch(
+    () => [] as { time: number; value: number }[]
+  );
+
+  const invested = assets.reduce((s, h) => s + h.invested, 0);
+  const marketValue = assets.reduce(
     (s, h) => s + (h.market_value ?? h.invested),
     0
   );
-  const totalPl = holdings.reduce(
+  const totalPl = assets.reduce(
     (s, h) => s + (h.unrealized_pl ?? 0),
     0
   );
   const totalPlPct = invested > 0 ? (totalPl / invested) * 100 : null;
-  const best = holdings.reduce<null | (typeof holdings)[number]>((best, h) => {
+  const best = assets.reduce<null | AssetRow>((best, h) => {
     if (h.unrealized_pl_pct === null) return best;
     if (!best || (best.unrealized_pl_pct ?? -Infinity) < h.unrealized_pl_pct)
       return h;
     return best;
   }, null);
-  const worst = holdings.reduce<null | (typeof holdings)[number]>((worst, h) => {
+  const worst = assets.reduce<null | AssetRow>((worst, h) => {
     if (h.unrealized_pl_pct === null) return worst;
     if (!worst || (worst.unrealized_pl_pct ?? Infinity) > h.unrealized_pl_pct)
       return h;
     return worst;
   }, null);
 
-  const slices: DonutSlice[] = holdings
+  const slices: DonutSlice[] = assets
     .filter((h) => h.market_value !== null)
     .map((h) => ({
       key: `${h.item_id}-${h.quality}`,
@@ -75,19 +92,19 @@ export default async function PortfolioPage({
           </p>
           <h1 className="text-3xl font-semibold tracking-tight">Portfolio</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Všechny držby napříč pozicemi – koláč alokace, pořizovací ceny a
-            aktuální zisk/ztráta.
+            Tvá aktiva v jednom přehledu – koláč alokace, vývoj hodnoty a
+            zisk/ztráta podle aktuálních cen.
           </p>
         </div>
         <Button asChild size="sm" className="gap-2 rounded-full">
           <Link href="/positions/new">
             <Plus className="size-4" />
-            Přidat držbu
+            Přidat aktivum
           </Link>
         </Button>
       </div>
 
-      {holdings.length === 0 ? (
+      {assets.length === 0 ? (
         <EmptyState />
       ) : (
         <>
@@ -110,7 +127,7 @@ export default async function PortfolioPage({
               <SummaryCard
                 label="Investováno"
                 value={formatPrice(invested)}
-                hint="celková pořizovací cena držeb"
+                hint="celková pořizovací cena aktiv"
               />
               <SummaryCard
                 label="Tržní hodnota"
@@ -155,12 +172,12 @@ export default async function PortfolioPage({
             </Card>
           )}
 
-          {/* ── Tabulka držeb ──────────────────────────────────── */}
+          {/* ── Tabulka aktiv ──────────────────────────────────── */}
           <section className="space-y-3">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              Držby ({holdings.length})
+              Aktiva ({assets.length})
             </h2>
-            <PortfolioHoldingsTable holdings={holdings} />
+            <PortfolioHoldingsTable assets={assets} />
           </section>
         </>
       )}
@@ -262,12 +279,12 @@ function EmptyState() {
       </div>
       <h2 className="text-lg font-semibold">Portfolio je zatím prázdné</h2>
       <p className="mt-2 text-sm text-muted-foreground">
-        Přidej první držbu tlačítkem „Přidat držbu“, nebo rovnou z detailu
+        Přidej první aktivum tlačítkem „Přidat aktivum“, nebo rovnou z detailu
         komodity – u grafu je tlačítko „Přidat do portfolia“.
       </p>
       <div className="mt-4 flex justify-center gap-3">
         <Button asChild size="sm" className="rounded-full">
-          <Link href="/positions/new">Přidat držbu</Link>
+          <Link href="/positions/new">Přidat aktivum</Link>
         </Button>
         <Button asChild size="sm" variant="outline" className="rounded-full">
           <Link href="/">Prozkoumat trh</Link>

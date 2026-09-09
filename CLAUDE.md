@@ -51,8 +51,9 @@ src/app/
   positions/               # pozice + P/L + condition logging (držba z portfolio
                            # page se ukládá jako otevřená pozice do positions)
   watchlist/               # karty se sparklinami
-  portfolio/               # držby = agregace otevřených pozic; koláč alokace,
-                           # vývoj hodnoty v čase (rekonstrukce z denních close), P/L
+  portfolio/               # aktiva = agregace otevřených pozic (per item+quality;
+                           # víc nákupů = 1 aktivum s váženým průměrem); koláč alokace,
+                           # vývoj hodnoty v čase, P/L, editace nákupů (lots) tužkou
   skener/                  # Signal Engine skener příležitostí (BUY/SELL skóre)
   alerts/                  # přehled alertů + stav notifikačních kanálů
   statistiky/              # fáze ekonomiky, eventy, vládní zakázky, makro, budovy
@@ -184,13 +185,16 @@ src/components/            # vizní komponenty (viz níže)
   pro srovnatelnost mezi TF + hodnota per bar. Body ●●●○○ dle grade.
   Denní svíčky pro obrat se u intraday TF dotahují zvlášť
   (`getDailyCandles`).
-- **Portfolio** (`app/portfolio`, `lib/data.ts`): držba = otevřená pozice
-  v `positions` (uloží ji i dialog „Přidat do portfolia“ z market page,
-  action `addToPortfolioAction`). `getPortfolioHoldings()` agreguje pozice
-  na (item, quality) s váženou průměrnou cenou; `getPortfolioValueHistory()`
-  rekonstruuje denní hodnotu portfolia (kumulativní množství k dni × close
-  z market_candles_daily, fallback max cena dne z ticků). Donut i value
-  chart jsou oddělené client komponenty (portfolio-donut, portfolio-value-chart).
+- **Portfolio** (`app/portfolio`, `lib/data.ts`): aktivum = otevřené pozice
+  agregované na (item, quality) – víc nákupů (lots) tvoří JEDNO aktivum
+  s váženým průměrem; Q0 a Q1 jsou dvě aktiva. Uložení: dialog
+  „Přidat do portfolia“ z market page (action `addToPortfolioAction`).
+  Editace: tužka v tabulce → `PortfolioEditLotsDialog` upraví množství/
+  cenu per lot (`updatePortfolioLotsAction`). `getPortfolioHoldings()`
+  agreguje, `getPositionLots()` vrací nákupy aktiva,
+  `getPortfolioValueHistory()` rekonstruuje denní hodnotu (kumulativní
+  množství k dni × close z market_candles_daily, fallback ticky).
+  Terminologie v UI: „aktivum/aktiva“ (ne držba), nákup = „lot“.
 - **Fáze ekonomiky**: dle hry `recession` = „Recese 📉", `normal` =
   „Stabilní ⚖️", `boom` = „Růst 📈" (PHASE_LABELS v statistiky/page.tsx).
   Kvalita komodit se v UI zkracuje na „Q0" (ne „kvalita 0").
