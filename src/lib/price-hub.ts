@@ -56,6 +56,8 @@ type Sub = (ev: {
   alerts?: LiveTrigger[];
   /** Položky, jejichž orderbook se změnil (event 'orderbook'). */
   orderbookIds?: number[];
+  /** Položky, jejichž DATA ztratila autoritu (event 'stale', per-item). */
+  staleIds?: number[];
 }) => void;
 
 type HubState = {
@@ -76,6 +78,15 @@ type HubState = {
   orderbook: Map<number, HubAsk[]>;
   /** Položky, které si klienti výslovně vyžádali (?items= v SSE). */
   requestedOrderbookIds: Set<number>;
+  /**
+   * Položky, jejichž FOLLOWED patička ukázala cenu, kterou prices NEPOTVRDIL
+   * (mezisoučet/agregát – viz Zlatá ruda 30,00 vs. obchod 31,50). Ceny z
+   * FOLLOWED kroku pro tyto položky se ignorují, dokud prices cenu znovu
+   * nepotvrdí. Nastavuje se v kroku (B), maže v kroku (A).
+   */
+  nonAuthoritative: Set<number>;
+  /** Patičky z posledního kroku (B) – pro reconciliaci v kroku (A). */
+  pendingFootprint: Map<number, number> | null;
   /** Kolo prioritních orderbook pollů. */
   orderbookCursor: number;
   /** Čas poslední změny orderbooku (pro hubOrderbookChangedSince). */
@@ -107,6 +118,8 @@ function state(): HubState {
       askWatch: new Map(),
       orderbook: new Map(),
       requestedOrderbookIds: new Set(),
+      nonAuthoritative: new Set(),
+      pendingFootprint: null,
       orderbookCursor: 0,
       lastOrderbookChangeMs: 0,
       askWatchIds: [],
@@ -161,19 +174,83 @@ async function hubStep(s: HubState) {
         ticks.push({ id: t.resourceId, price: t.price, datetime: t.datetime });
       }
     } else {
-      // (B) market/followed – intra-bar patičky 5min svíček (rychlý tick)
+      // (B) market/followed – intra-bar patičky 5min svíček (rychlý tick).
+      // POZOR: patička někdy ukazuje cenu, kterou market/prices NEZNÁ
+      // (mezisoučet/agregát v rámci 5m svíčky – pozorováno na Zlaté rudě:
+      // patička 30,00 vs. poslední obchod 31,50). Taková cena NENÍ skutečný
+      // obchod → heroto černá/živá grafu by se zbláznila (cena „přeskakuje“).
+      // FIX: položky v `nonAuthoritative` (patička „zaskočila“ a prices to
+      // nepotvrdil) se z FOLLOWED kroku nepublishují, dokud prices cenu
+      // znovu nepotvrdí.
       if (s.trackedIds && s.trackedIds.size > 0) {
         const pairs = [...s.trackedIds].map((id) => ({ resourceId: id, quality: 0 }));
         const summaries = await getFollowedSummaries(pairs);
+        const footprint = new Map<number, number>();
+        // Podezřelé patičky (cena ≠ poslední známá) – publikují se AŽ po
+        // verifikaci proti prices (pod vteřinu navíc, ale žádný falešný tick
+        // se nikdy nedostane do dávky).
+        const suspects: { id: number; price: number; datetime: string }[] = [];
         for (const sm of summaries) {
           if (sm.quality !== 0 || !(sm.price > 0)) continue;
-          ticks.push({
-            id: sm.resourceId,
-            price: sm.price,
-            // timestamp summary = čas poslední aktualizace 5m svíčky
-            datetime: sm.timestamp,
-          });
+          footprint.set(sm.resourceId, sm.price);
+          // Položka bez autority: cenu z patičky NEBEREME (viz komentář výše)
+          if (s.nonAuthoritative.has(sm.resourceId)) continue;
+          const known = s.latest.get(sm.resourceId);
+          if (known && known.price !== sm.price) {
+            suspects.push({
+              id: sm.resourceId,
+              price: sm.price,
+              datetime: sm.timestamp,
+            });
+          } else {
+            // Stejná cena jako známá (jen datetime update) nebo první tick
+            ticks.push({
+              id: sm.resourceId,
+              price: sm.price,
+              datetime: sm.timestamp,
+            });
+          }
         }
+        if (suspects.length > 0) {
+          try {
+            const prices = await getMarketPrices();
+            const priceMap = new Map(
+              prices
+                .filter((t) => t.quality === 0 && t.price > 0)
+                .map((t) => [t.resourceId, t.price])
+            );
+            for (const sp of suspects) {
+              const authoritativePrice = priceMap.get(sp.id);
+              if (authoritativePrice === sp.price) {
+                // Prices patičku POTVRDIL = skutečný nový obchod → publish
+                // (rychlá cesta preserved: patička nás nepozdrží)
+                ticks.push(sp);
+              } else {
+                // Patička ukazuje cenu, kterou prices nezná → mezisoučet/
+                // agregát. Blokuj FOLLOWED cenu do dalšího prices kroku.
+                s.nonAuthoritative.add(sp.id);
+                // Prices zná JINOU (novější) cenu než naše latest? → publish
+                // autoritu (např. obchod proběhl, prices ho vidí, patička ne)
+                const known = s.latest.get(sp.id);
+                if (
+                  known &&
+                  authoritativePrice !== undefined &&
+                  authoritativePrice !== known.price
+                ) {
+                  ticks.push({
+                    id: sp.id,
+                    price: authoritativePrice,
+                    datetime: known.datetime,
+                  });
+                }
+              }
+            }
+          } catch {
+            // prices nedostupné – podezřelé patičky ZAHAZUJEME (bezpečnější
+            // než je publikovat: žádný falešný obchod se neobjeví)
+          }
+        }
+        s.pendingFootprint = footprint;
       }
     }
     s.toggle = !s.toggle;
@@ -181,6 +258,14 @@ async function hubStep(s: HubState) {
 
     // ── Detekce změn + publish ──────────────────────────────────────
     const changed: HubTick[] = [];
+    if (s.toggle === false) {
+      // Krok (A) = prices (autorita). Položky v nonAuthoritative jsou zpět
+      // ve hře, jakmile prices ukáže cenu (jakoukoliv – prices je zdroj pravdy;
+      // nonAuthoritative jen blokovalo FOLLOWED cenu do té doby).
+      for (const t of ticks) {
+        s.nonAuthoritative.delete(t.id);
+      }
+    }
     for (const t of ticks) {
       const key = `${t.price}|${t.datetime}`;
       if (s.seen.get(t.id) === key) continue;
