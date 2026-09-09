@@ -136,8 +136,8 @@ export function PortfolioDonut({
         onMouseLeave={() => setHoveredKey(null)}
       >
         <svg
-          width={216}
-          height={216}
+          width={232}
+          height={232}
           viewBox="0 0 120 120"
           role="img"
           aria-label="Alokace portfolia"
@@ -197,18 +197,20 @@ export function PortfolioDonut({
         </svg>
 
         {/* Střed donutu – souhrn, nebo detail hoverovaného aktiva.
-            pointer-events-none, ať nepřekáží hoveru na segmentech. */}
-        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-5 text-center">
+            pointer-events-none, ať nepřekáží hoveru na segmentech.
+            Text záměrně drobný – vnitřní díra ringu je ~40 px, ať na
+            sebe všechno vystačí a nikde nepřetéká. */}
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-6 text-center">
           {hovered ? (
             <>
-              <span className="max-w-full truncate text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+              <span className="max-w-full truncate text-[9px] font-medium uppercase tracking-wider text-muted-foreground">
                 {hovered.slice.label}
               </span>
-              <span className="mt-0.5 font-mono text-lg font-semibold tabular-nums text-foreground">
+              <span className="font-mono text-[15px] font-semibold leading-tight tabular-nums text-foreground">
                 {formatCompact(hovered.slice.value)} $
               </span>
               <span
-                className="font-mono text-xs tabular-nums"
+                className="font-mono text-[10px] leading-tight tabular-nums"
                 style={{ color: hovered.color }}
               >
                 {hovered.pct.toFixed(1)} % portfolia
@@ -216,14 +218,14 @@ export function PortfolioDonut({
             </>
           ) : (
             <>
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              <span className="text-[9px] uppercase tracking-wider text-muted-foreground">
                 Hodnota
               </span>
-              <span className="mt-0.5 font-mono text-lg font-semibold tabular-nums text-foreground">
+              <span className="font-mono text-[15px] font-semibold leading-tight tabular-nums text-foreground">
                 {formatCompact(totalValue)} $
               </span>
               <span
-                className={`mt-0.5 font-mono text-[11px] tabular-nums ${plTone}`}
+                className={`font-mono text-[10px] leading-tight tabular-nums ${plTone}`}
               >
                 {totalPl === null
                   ? "–"
