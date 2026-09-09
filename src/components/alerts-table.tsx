@@ -22,6 +22,9 @@ import type { AlertWithItem } from "@/lib/data";
 
 /** Popis alertu pro tabulku. */
 export function alertLabel(alert: AlertWithItem): string {
+  if (alert.kind === "limit_sell") {
+    return `Limit prodeje ≥ ${formatPrice(alert.threshold)}`;
+  }
   if (alert.kind === "price") {
     return alert.direction === "above"
       ? `Cena ≥ ${formatPrice(alert.threshold)}`
@@ -85,7 +88,9 @@ export function AlertsTable({ alerts }: { alerts: AlertWithItem[] }) {
                     variant="outline"
                     className={cn(
                       "font-mono text-[11px]",
-                      alert.kind === "score" && "border-primary/30 bg-primary/10 text-primary"
+                      alert.kind === "score" && "border-primary/30 bg-primary/10 text-primary",
+                      alert.kind === "limit_sell" &&
+                        "border-[#d4a72c]/30 bg-[#d4a72c]/10 text-[#d4a72c]"
                     )}
                   >
                     {alertLabel(alert)}

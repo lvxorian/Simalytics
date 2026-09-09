@@ -8,6 +8,7 @@ import {
   createAlert,
   createPortfolioHolding,
   deleteAlert,
+  deleteLimitSellAlert,
   deletePortfolioHolding,
   deletePositionLot,
   markAlertsSeen,
@@ -18,6 +19,7 @@ import {
   toggleWatchlist,
   updateAlertThreshold,
   updatePositionLot,
+  upsertLimitSellAlert,
 } from "@/lib/data";
 
 export type ActionState = { ok: boolean; error?: string };
@@ -215,6 +217,7 @@ export async function deletePortfolioHoldingAction(
   quality: number
 ): Promise<void> {
   await deletePortfolioHolding(itemId, quality);
+  await deleteLimitSellAlert(itemId, quality);
   revalidatePath("/portfolio");
 }
 
@@ -230,6 +233,9 @@ export async function sellPortfolioAssetAction(input: {
 }): Promise<{ ok: boolean; error?: string; realizedPl?: number }> {
   try {
     const res = await sellPortfolioAsset(input);
+    // Hlídka limitu už není potřeba – prodej je odklepnutý (ať to byl
+    // celý aktivum, nebo jen část).
+    await deleteLimitSellAlert(input.itemId, input.quality);
     revalidatePath("/portfolio");
     revalidatePath("/");
     return { ok: true, realizedPl: res.realizedPl };
@@ -242,8 +248,10 @@ export async function sellPortfolioAssetAction(input: {
 }
 
 /**
- * Zadá limitní prodej – jen poznámka v UI (badge „limit X“ u aktiva),
- * finance se nezmění, dokud uživatel prodej neodklepne dialogem Prodat.
+ * Zadá limitní prodej – poznámka v UI (badge „limit X“ u aktiva) plus
+ * hlídka v alerts (kind='limit_sell'): poller hlídá cenu a při dosažení
+ * limitu notifikuje (zvonek + zvuk + webhook/e-mail). Finance se nezmění,
+ * dokud uživatel prodej neodklepne dialogem Prodat.
  */
 export async function setLimitSellAction(input: {
   itemId: number;
@@ -254,7 +262,9 @@ export async function setLimitSellAction(input: {
     if (!Number.isFinite(input.limitPrice) || input.limitPrice <= 0)
       return { ok: false, error: "Limitní cena musí být kladné číslo." };
     await setLimitSellNote(input.itemId, input.quality, input.limitPrice);
+    await upsertLimitSellAlert(input.itemId, input.quality, input.limitPrice);
     revalidatePath("/portfolio");
+    revalidatePath("/alerts");
     return { ok: true };
   } catch (err) {
     return {

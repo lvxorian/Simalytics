@@ -16,7 +16,7 @@ import { useCallback, useEffect, useRef } from "react";
 
 export type AlertLineAlert = {
   id: string;
-  kind: "price" | "score";
+  kind: "price" | "score" | "limit_sell";
   direction: "above" | "below";
   threshold: number;
   active: boolean;

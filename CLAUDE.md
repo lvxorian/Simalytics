@@ -34,10 +34,10 @@ Testy nejsou — ověření = `npm run typecheck` + `npm run build`.
 ```
 db/schema.sql              # items, price_history, positions, condition_log, watchlist
 # upgrades: 001_terminal (candles, watchlist), 002_signal_engine (vwap_daily, contests, cert_kinds),
-#           003_alerts (alerts s cooldownem)
+#           003_alerts (alerts s cooldownem), 005_alert_seen (seen_at), 006_limit_sell_alerts (kind 'limit_sell')
 src/lib/
   metrics.ts               # likvidita (obchody/24h + obrat) a volatilita (annualizovaná σ log-výnosů) – karty na market page
-  alerts.ts                # evaluace alertů (cena + skóre, cooldown)
+  alerts.ts                # evaluace alertů (cena + skóre + limitní prodeje, cooldown)
   notifier.ts              # webhook (Discord/Slack) + e-mail přes Resend REST API
 src/lib/
   db.ts                    # postgres.js klient (Neon pooled, prepare: false pro PgBouncer)
@@ -53,7 +53,9 @@ src/app/
   watchlist/               # karty se sparklinami
   portfolio/               # aktiva = agregace otevřených pozic (per item+quality;
                            # víc nákupů = 1 aktivum s váženým průměrem); koláč alokace,
-                           # vývoj hodnoty v čase, P/L, editace nákupů (lots) tužkou
+                           # vývoj hodnoty v čase, P/L, editace nákupů (lots) tužkou,
+                           # prodej (FIFO odklepnutí) + limitní prodej = alert kind
+                           # 'limit_sell' (poller notifikuje při dosažení limitu)
   skener/                  # Signal Engine skener příležitostí (BUY/SELL skóre)
   alerts/                  # přehled alertů + stav notifikačních kanálů
   statistiky/              # fáze ekonomiky, eventy, vládní zakázky, makro, budovy

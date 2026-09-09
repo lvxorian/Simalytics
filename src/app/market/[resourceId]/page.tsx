@@ -421,13 +421,17 @@ export default async function MarketItemPage({
               currentPrice={lastTick}
               change24h={change24h}
               itemTicker={item.db_letter}
-              alerts={itemAlerts.map((a) => ({
-                id: a.id,
-                kind: a.kind,
-                direction: a.direction,
-                threshold: a.threshold,
-                active: a.active,
-              }))}
+              alerts={itemAlerts
+                // Limitní prodeje se hlídají z portfolia (poller),
+                // do grafu na market page nepatří.
+                .filter((a) => a.kind !== "limit_sell")
+                .map((a) => ({
+                  id: a.id,
+                  kind: a.kind,
+                  direction: a.direction,
+                  threshold: a.threshold,
+                  active: a.active,
+                }))}
               intervalSwitches={(
                 [
                   { key: "5m", label: "5m" },
@@ -590,8 +594,12 @@ export default async function MarketItemPage({
         />
       </div>
 
-      {/* ── Alerty na této komoditě (přidávají se pravým klikem do grafu) ── */}
-      <ItemAlertsTable itemId={id} alerts={itemAlerts} />
+      {/* ── Alerty na této komoditě (přidávají se pravým klikem do grafu);
+             limitní prodeje z portfolia se zobrazují jen na /alerts a u aktiva ── */}
+      <ItemAlertsTable
+        itemId={id}
+        alerts={itemAlerts.filter((a) => a.kind !== "limit_sell")}
+      />
     </div>
   );
 }

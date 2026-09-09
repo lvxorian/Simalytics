@@ -102,6 +102,9 @@ function conditionMet(
 
 /** Popis alertu pro notifikaci. */
 function describeAlert(alert: AlertRow, itemName: string, value: number): string {
+  if (alert.kind === "limit_sell") {
+    return `Limitní prodej ${itemName} Q${alert.quality}: cena je teď ${formatPrice(value)} – dosáhla tvého limitu ${formatPrice(alert.threshold)}. Prodáváš-li ve hře, odklepni to v portfoliu.`;
+  }
   if (alert.kind === "price") {
     return `Cena ${itemName} je teď ${formatPrice(value)} – ${alert.direction === "above" ? "překročila" : "propadla pod"} práh ${formatPrice(alert.threshold)}.`;
   }
@@ -168,11 +171,13 @@ export async function evaluateAlerts(appUrl: string): Promise<AlertRunResult> {
         const notified = await notifyAlert(
           {
             title:
-              alert.kind === "price"
-                ? `💰 Cenový alert: ${itemName}`
-                : `🎯 Signálový alert: ${itemName}`,
+              alert.kind === "limit_sell"
+                ? `🏷️ Limitní prodej dosažen: ${itemName}`
+                : alert.kind === "price"
+                  ? `💰 Cenový alert: ${itemName}`
+                  : `🎯 Signálový alert: ${itemName}`,
             body: describeAlert(alert, itemName, value),
-            url: `${appUrl}/market/${alert.item_id}`,
+            url: `${appUrl}/portfolio`,
             kind: alert.kind,
           },
           process.env.ALERT_EMAIL_TO ?? null

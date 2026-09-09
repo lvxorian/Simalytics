@@ -406,6 +406,7 @@ export async function createPortfolioHolding(input: {
 
 /**
  * Smaže držbu z portfolia – odstraní otevřené pozice dané položky a kvality.
+ * (Hlídka limitního prodeje se čistí v server akci – viz actions.ts.)
  */
 export async function deletePortfolioHolding(
   itemId: number,
@@ -1021,7 +1022,8 @@ export type AlertRow = {
   id: string;
   item_id: number;
   quality: number;
-  kind: "price" | "score";
+  /** 'limit_sell' = hlídka limitního prodeje z portfolia (notifikace při dosažení). */
+  kind: "price" | "score" | "limit_sell";
   direction: "above" | "below";
   threshold: number;
   note: string | null;
@@ -1148,6 +1150,56 @@ export async function getActiveAlerts(): Promise<AlertRow[]> {
     select * from alerts where active = true order by created_at asc
   `) as unknown as RawAlert[];
   return rows.map(mapAlert);
+}
+
+/**
+ * Hlídka limitního prodeje – jeden alert kind='limit_sell' na aktivum
+ * (item, quality). Zadání nového limitu (nebo změna) přepíše práh;
+ * po odklepnutí prodeje / smazání aktiva se hlídka odstraní.
+ */
+export async function upsertLimitSellAlert(
+  itemId: number,
+  quality: number,
+  limitPrice: number
+): Promise<void> {
+  const db = getDb();
+  await db`
+    insert into alerts
+      (item_id, quality, kind, direction, threshold, note)
+    values
+      (${itemId}, ${quality}, 'limit_sell', 'above', ${limitPrice},
+       'Limitní prodej z portfolia')
+    on conflict (item_id, quality, kind) do update
+      set threshold = ${limitPrice},
+          direction = 'above',
+          active = true,
+          seen_at = null
+  `;
+}
+
+/** Odstraní hlídku limitního prodeje aktiva (po odklepnutí/smazání). */
+export async function deleteLimitSellAlert(
+  itemId: number,
+  quality: number
+): Promise<void> {
+  const db = getDb();
+  await db`
+    delete from alerts
+    where item_id = ${itemId} and quality = ${quality} and kind = 'limit_sell'
+  `;
+}
+
+/** Smaže hlídky limitů pro všechna aktiva (helpers pro cron úklid). */
+export async function getOpenLimitSellTargets(): Promise<
+  { item_id: number; quality: number }[]
+> {
+  const db = getDb();
+  const rows = (await db`
+    select distinct item_id, quality
+    from positions
+    where closed_at is null
+  `) as unknown as { item_id: number; quality: number }[];
+  return rows;
 }
 
 /** Vytvoří alert. */

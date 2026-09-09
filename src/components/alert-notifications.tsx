@@ -10,6 +10,7 @@ import {
   BellOff,
   BellRing,
   Target,
+  Timer,
 } from "lucide-react";
 
 import { markAlertsSeenAction } from "@/app/actions";
@@ -22,7 +23,7 @@ export type HeaderAlert = {
   item_id: number;
   item_name: string;
   image_url: string | null;
-  kind: "price" | "score";
+  kind: "price" | "score" | "limit_sell";
   direction: "above" | "below";
   threshold: number;
   active: boolean;
@@ -33,6 +34,9 @@ export type HeaderAlert = {
 
 /** Popis podmínky alertu (stejná logika jako AlertsTable). */
 function conditionLabel(a: HeaderAlert): string {
+  if (a.kind === "limit_sell") {
+    return `Limit prodeje ≥ ${formatPrice(a.threshold)}`;
+  }
   if (a.kind === "price") {
     return a.direction === "above"
       ? `Cena ≥ ${formatPrice(a.threshold)}`
@@ -255,7 +259,7 @@ export function AlertNotifications({ alerts }: { alerts: HeaderAlert[] }) {
               {alerts.map((a) => {
                 const near =
                   a.current_price !== null &&
-                  a.kind === "price" &&
+                  (a.kind === "price" || a.kind === "limit_sell") &&
                   Math.abs(a.current_price - a.threshold) /
                     Math.max(a.threshold, 1e-9) <=
                     0.02;
@@ -287,12 +291,17 @@ export function AlertNotifications({ alerts }: { alerts: HeaderAlert[] }) {
                           {a.kind === "score" && (
                             <Target className="size-3 shrink-0 text-muted-foreground" />
                           )}
+                          {a.kind === "limit_sell" && (
+                            <Timer className="size-3 shrink-0 text-muted-foreground" />
+                          )}
                           {!a.active && (
                             <BellOff className="size-3 shrink-0 text-muted-foreground" />
                           )}
                         </div>
                         <div className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
-                          {a.kind === "price" ? (
+                          {a.kind === "limit_sell" ? (
+                            <Timer className="size-3 text-primary" />
+                          ) : a.kind === "price" ? (
                             a.direction === "above" ? (
                               <ArrowUpRight className="size-3 text-up" />
                             ) : (
@@ -302,11 +311,12 @@ export function AlertNotifications({ alerts }: { alerts: HeaderAlert[] }) {
                             <Target className="size-3 text-primary" />
                           )}
                           {conditionLabel(a)}
-                          {a.current_price !== null && a.kind === "price" && (
-                            <span className="text-muted-foreground/70">
-                              · teď {formatPrice(a.current_price)}
-                            </span>
-                          )}
+                          {a.current_price !== null &&
+                            (a.kind === "price" || a.kind === "limit_sell") && (
+                              <span className="text-muted-foreground/70">
+                                · teď {formatPrice(a.current_price)}
+                              </span>
+                            )}
                         </div>
                       </div>
                       <div className="shrink-0 text-right">

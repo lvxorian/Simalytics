@@ -16,7 +16,7 @@ export type AlertNotification = {
   title: string; // např. „Cenový alert: Apples"
   body: string; // lidsky čitelný detail
   url: string | null; // odkaz do appky (detail komodity)
-  kind: "price" | "score";
+  kind: "price" | "score" | "limit_sell";
 };
 
 // ── Webhook (Discord / Slack / generický) ──────────────────────────
@@ -39,7 +39,12 @@ export async function sendWebhook(
           {
             title: notification.title,
             description: notification.body,
-            color: notification.kind === "price" ? 0x5b8def : 0x22ab94,
+            color:
+              notification.kind === "limit_sell"
+                ? 0xd4a72c // jantar – limit dosažen
+                : notification.kind === "price"
+                  ? 0x5b8def
+                  : 0x22ab94,
             ...(notification.url ? { url: notification.url } : {}),
           },
         ],

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowUpRight, Timer } from "lucide-react";
+import { ArrowUpRight, BellRing, Timer } from "lucide-react";
 
 import {
   sellPortfolioAssetAction,
@@ -296,6 +296,14 @@ export function PortfolioSellDialog({
                       Např. nahážeš jablka na burze za 2,700, zatímco trh je na
                       2,500 – uloží se badge „limit“ u aktiva, ať víš, co čeká
                       na odklepnutí.
+                    </p>
+                    <p className="flex items-start gap-1.5 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
+                      <BellRing className="mt-0.5 size-3.5 shrink-0 text-primary" />
+                      <span>
+                        Když cena dosáhne limitu, zvonek v hlavičce se rozsvítí,
+                        zazní tón a přijde notifikace (webhook/e-mail, máš-li
+                        nastavené).
+                      </span>
                     </p>
                   </div>
                   {currentPrice !== null && (

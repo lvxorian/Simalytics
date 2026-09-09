@@ -83,6 +83,8 @@ export function ItemAlertsTable({
                         "font-mono text-[11px]",
                         alert.kind === "score" &&
                           "border-primary/30 bg-primary/10 text-primary",
+                        alert.kind === "limit_sell" &&
+                          "border-[#d4a72c]/30 bg-[#d4a72c]/10 text-[#d4a72c]",
                         alert.kind === "price" && reached && "border-up/30 bg-up/10 text-up"
                       )}
                     >
