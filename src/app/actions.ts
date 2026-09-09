@@ -6,7 +6,9 @@ import {
   addConditionNote,
   closePosition,
   createAlert,
+  createPortfolioHolding,
   deleteAlert,
+  deletePortfolioHolding,
   openPosition,
   toggleAlert,
   toggleWatchlist,
@@ -161,6 +163,49 @@ export async function toggleAlertAction(id: string): Promise<boolean> {
 export async function deleteAlertAction(id: string): Promise<void> {
   await deleteAlert(id);
   revalidatePath("/alerts");
+}
+
+/** Přidá držbu do portfolia (ruční záznam vlastnictví). */
+export async function addToPortfolioAction(
+  _prev: ActionState,
+  formData: FormData
+): Promise<ActionState> {
+  try {
+    const item_id = Number(formData.get("item_id"));
+    const quality = Number(formData.get("quality") ?? 0);
+    const quantity = Number(formData.get("quantity"));
+    const buy_price = Number(formData.get("buy_price"));
+    const note = String(formData.get("note") ?? "").trim() || null;
+    const revalidatePortfolio = formData.get("revalidate_portfolio") === "1";
+
+    if (!Number.isInteger(item_id) || item_id <= 0)
+      return { ok: false, error: "Chybí položka." };
+    if (!Number.isFinite(quantity) || quantity <= 0)
+      return { ok: false, error: "Množství musí být kladné číslo." };
+    if (!Number.isFinite(buy_price) || buy_price <= 0)
+      return { ok: false, error: "Pořizovací cena musí být kladné číslo." };
+
+    await createPortfolioHolding({ item_id, quality, quantity, buy_price, note });
+
+    revalidatePath("/portfolio");
+    if (revalidatePortfolio) revalidatePath(`/market/${item_id}`);
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Neznámá chyba.",
+    };
+  }
+}
+
+/** Smaže držbu z portfolia (všechny otevřené pozice dané položky). */
+export async function deletePortfolioHoldingAction(
+  itemId: number,
+  quality: number
+): Promise<void> {
+  await deletePortfolioHolding(itemId, quality);
+  revalidatePath("/portfolio");
+  revalidatePath("/positions");
 }
 
 /** Změní práh alertu (přetažení linky v grafu). */

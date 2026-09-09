@@ -342,7 +342,299 @@ export async function addConditionNote(input: {
   `;
 }
 
-// ── SIGNAL ENGINE: SYNC (fáze 1) ────────────────────────────────
+// ── PORTFOLIO (agregace otevřených pozic na držby) ──────────────────
+
+export type PortfolioHolding = {
+  item_id: number;
+  quality: number;
+  name: string;
+  db_letter: string | null;
+  image_url: string | null;
+  /** Celkem ks napříč pozicemi. */
+  quantity: number;
+  /** Průměrná pořizovací cena (weighted avg). */
+  avg_buy_price: number;
+  /** Poslední tržní cena dané kvality. */
+  current_price: number | null;
+  /** Investováno = avg_buy_price × quantity. */
+  invested: number;
+  /** Tržní hodnota držby. */
+  market_value: number | null;
+  /** Nerealizovaný P/L v $. */
+  unrealized_pl: number | null;
+  /** Nerealizovaný P/L v %. */
+  unrealized_pl_pct: number | null;
+  /** Kolik otevřených pozic držbu tvoří. */
+  position_count: number;
+  /** Nejstarší otevření (od kdy držíme). */
+  first_opened_at: string;
+  /** Okamžik posledního nákupu do držby. */
+  last_bought_at: string;
+};
+
+/**
+ * Přidá držbu do portfolia – založí OPEN pozici v positions (closed_at null).
+ * Portfolio i tabulka pozic čtou ze stejné tabulky, takže se držba hned
+ * objeví v obou pohledech a jde ji ukončit stávajícím tokem uzavření.
+ */
+export async function createPortfolioHolding(input: {
+  item_id: number;
+  quality: number;
+  quantity: number;
+  buy_price: number;
+  note?: string | null;
+}): Promise<void> {
+  const db = getDb();
+  await db`
+    insert into positions (item_id, quality, quantity, buy_price, note)
+    values (${input.item_id}, ${input.quality}, ${input.quantity},
+            ${input.buy_price}, ${input.note ?? null})
+  `;
+  // držba dává smysl jen s ticky – zapni sběr (stejně jako watchlist)
+  await db`update items set track_ticks = true where id = ${input.item_id}`;
+}
+
+/** Smaže držbu z portfolia – odstraní otevřené pozice dané položky a kvality. */
+export async function deletePortfolioHolding(
+  itemId: number,
+  quality: number
+): Promise<void> {
+  const db = getDb();
+  await db`
+    delete from positions
+    where item_id = ${itemId} and quality = ${quality} and closed_at is null
+  `;
+}
+
+/**
+ * Držby portfolia = otevřené pozice agregované na (item_id, quality).
+ * Průměrná cena = vážený průměr nákupů; P/L z poslední ceny price_history.
+ * Pozice bez dostupné ceny (prázdná price_history) mají P/L null.
+ */
+export async function getPortfolioHoldings(
+  quality?: number
+): Promise<PortfolioHolding[]> {
+  const db = getDb();
+
+  const rows = (await db`
+    select p.item_id,
+           p.quality,
+           i.name,
+           i.db_letter,
+           i.image_url,
+           sum(p.quantity)::int                 as quantity,
+           (sum(p.buy_price * p.quantity) / sum(p.quantity))::float8 as avg_buy_price,
+           latest.price                         as current_price,
+           count(p.id)::int                     as position_count,
+           min(p.opened_at)                     as first_opened_at,
+           max(p.opened_at)                     as last_bought_at
+    from positions p
+    join items i on i.id = p.item_id
+    left join lateral (
+      select price
+      from price_history ph
+      where ph.item_id = p.item_id and ph.quality = p.quality
+      order by ph.recorded_at desc
+      limit 1
+    ) latest on true
+    where p.closed_at is null
+      ${quality === undefined ? db`` : db`and p.quality = ${quality}`}
+    group by p.item_id, p.quality, i.name, i.db_letter, i.image_url, latest.price
+    order by (sum(p.buy_price * p.quantity)) desc
+    limit 500
+  `) as unknown as {
+    item_id: number;
+    quality: number;
+    name: string;
+    db_letter: string | null;
+    image_url: string | null;
+    quantity: number;
+    avg_buy_price: number;
+    current_price: string | null;
+    position_count: number;
+    first_opened_at: Date;
+    last_bought_at: Date;
+  }[];
+
+  return rows.map((r) => {
+    const current = r.current_price === null ? null : Number(r.current_price);
+    const invested = r.avg_buy_price * r.quantity;
+    const marketValue = current === null ? null : current * r.quantity;
+    const pl = marketValue === null ? null : marketValue - invested;
+
+    return {
+      item_id: r.item_id,
+      quality: r.quality,
+      name: r.name,
+      db_letter: r.db_letter,
+      image_url: r.image_url,
+      quantity: Number(r.quantity),
+      avg_buy_price: Number(r.avg_buy_price),
+      current_price: current,
+      invested,
+      market_value: marketValue,
+      unrealized_pl: pl,
+      unrealized_pl_pct:
+        pl === null || invested <= 0 ? null : (pl / invested) * 100,
+      position_count: Number(r.position_count),
+      first_opened_at: iso(r.first_opened_at),
+      last_bought_at: iso(r.last_bought_at),
+    };
+  });
+}
+
+/**
+ * Historie hodnoty portfolia v čase – rekonstrukce z denních dat.
+ *
+ * Pro každý den: Σ (množství držby dle stavu positions k tomuto dni)
+ *                 × (denní close dané položky a kvality).
+ * Množství k dni počítá v SQL (opened_at::date <= den) – držba se do
+ * hodnoty započte dnem otevření; prodej (closed_at) už ne. Prázdné dny
+ * se doplní plochým krokem (poslední známá hodnota), ať křivka není
+ * roztříštěná – stejný princip kontinuity jako u svíček.
+ *
+ * Zdroj ceny: market_candles_daily (Simco Tools, ~3 měsíce) pro denní
+ * close; je-li pro den chybí, použije se cena z price_history (naše
+ * ticky) – fallback kryje i dnešek, který v denních svíčkách není.
+ */
+export async function getPortfolioValueHistory(
+  days = 90
+): Promise<{ time: number; value: number }[]> {
+  const db = getDb();
+
+  // 1) Denní close všech potřebných položek (denní svíčky + fallback ticky)
+  const closes = (await db`
+    select resource_id, quality, day::text as day, close from market_candles_daily
+    where quality = 0 and day >= current_date - ${days}::int
+    union all
+    select item_id, quality, recorded_at::date::text as day, max(price) as close
+    from price_history
+    where quality = 0 and recorded_at::date >= current_date - ${days}::int
+    group by item_id, quality, recorded_at::date
+    having max(price) > 0
+  `) as unknown as {
+    resource_id: number;
+    day: string;
+    quality: number;
+    close: string;
+  }[];
+
+  // 2) Změny množství držby (nákupy i prodeje) po dnech
+  const lots = (await db`
+    select opened_at::date::text as day,
+           item_id,
+           quality,
+           sum(quantity)::int as qty
+    from positions
+    where opened_at::date >= current_date - ${days}::int
+    group by opened_at::date, item_id, quality
+    union all
+    select closed_at::date::text as day,
+           item_id,
+           quality,
+           -sum(quantity)::int as qty
+    from positions
+    where closed_at is not null
+      and closed_at::date >= current_date - ${days}::int
+    group by closed_at::date, item_id, quality
+  `) as unknown as {
+    day: string;
+    item_id: number;
+    quality: number;
+    qty: number;
+  }[];
+
+  // 3) Denní ceny: mapa `${itemId}-${quality}` → { den → close }.
+  // UNION už zajistil dedupe po dnech – ticky i svíčky mají stejné sloupce;
+  // nikdy negativní/0 close přeskočíme.
+  const priceMap = new Map<string, Map<string, number>>();
+  for (const c of closes) {
+    const price = Number(c.close);
+    if (!(price > 0)) continue;
+    const itemKey = `${c.resource_id}-${c.quality}`;
+    let byDay = priceMap.get(itemKey);
+    if (!byDay) {
+      byDay = new Map();
+      priceMap.set(itemKey, byDay);
+    }
+    byDay.set(c.day, price);
+  }
+
+  // 4) Per (item,quality) denní změny množství (nákupy +, prodeje −)
+  const qtyChanges = new Map<string, Map<string, number>>();
+  for (const l of lots) {
+    const itemKey = `${l.item_id}-${l.quality}`;
+    let byDay = qtyChanges.get(itemKey);
+    if (!byDay) {
+      byDay = new Map();
+      qtyChanges.set(itemKey, byDay);
+    }
+    byDay.set(l.day, (byDay.get(l.day) ?? 0) + l.qty);
+  }
+
+  // 5) Rekonstrukce hodnoty po dnech (kumulativní množství × close)
+  const dayKeys: string[] = [];
+  {
+    const today = new Date();
+    for (let i = days; i >= 0; i--) {
+      const d = new Date(
+        Date.UTC(
+          today.getUTCFullYear(),
+          today.getUTCMonth(),
+          today.getUTCDate() - i
+        )
+      );
+      dayKeys.push(d.toISOString().slice(0, 10));
+    }
+  }
+
+  const out: { time: number; value: number }[] = [];
+  let lastValue: number | null = null;
+  // Kumulativní množství držby + poslední známá cena k dni
+  const currentQty = new Map<string, number>();
+  const lastKnownPrice = new Map<string, number>();
+
+  for (const day of dayKeys) {
+    let dayValue = 0;
+
+    for (const [itemKey, byDay] of qtyChanges) {
+      // posuň množství o změny tohoto dne
+      const delta = byDay.get(day);
+      if (delta !== undefined) {
+        currentQty.set(itemKey, (currentQty.get(itemKey) ?? 0) + delta);
+      }
+      const qty = currentQty.get(itemKey) ?? 0;
+      if (qty === 0) continue;
+
+      // poslední známá cena k tomuto dni (fallback na starší)
+      const price = priceMap.get(itemKey)?.get(day);
+      if (price !== undefined) lastKnownPrice.set(itemKey, price);
+      const knownPrice = lastKnownPrice.get(itemKey);
+      if (knownPrice === undefined) continue; // zatím žádná cena
+
+      dayValue += qty * knownPrice;
+    }
+
+    // Kontinuita: den bez dat = plochý krok z předchozí hodnoty.
+    // Portfolio prázdné od začátku → bod nezapisujeme (graf začne prvním
+    // nákupem); vyprázdnění na 0 → zapisujeme klesnout na nulu.
+    if (dayValue > 0) {
+      lastValue = dayValue;
+      out.push({
+        time: Math.floor(new Date(`${day}T00:00:00Z`).getTime() / 1000),
+        value: dayValue,
+      });
+    } else if (lastValue !== null) {
+      out.push({
+        time: Math.floor(new Date(`${day}T00:00:00Z`).getTime() / 1000),
+        value: 0,
+      });
+      lastValue = null;
+    }
+  }
+
+  return out;
+}
 
 /**
  * Upsertne denní VWAP pro všechny resource+kvality, které známe

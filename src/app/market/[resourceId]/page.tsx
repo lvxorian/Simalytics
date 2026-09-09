@@ -6,6 +6,7 @@ import { ArrowLeft, Info } from "lucide-react";
 import { PriceChart } from "@/components/price-chart";
 import { ItemAlertsTable } from "@/components/item-alerts-table";
 import { ItemProfile } from "@/components/item-profile";
+import { AddToPortfolioButton } from "@/components/add-to-portfolio-button";
 import { getLatestVwaps } from "@/lib/data";
 import { StarButton } from "@/components/star-button";
 import { AutoRefresh } from "@/components/auto-refresh";
@@ -299,6 +300,7 @@ export default async function MarketItemPage({
               Q0
             </Badge>
             <StarButton itemId={id} watched={watchedIds.has(id)} />
+            <AddToPortfolioButton itemId={id} currentPrice={lastTick} />
             {signal.direction !== "NEUTRAL" && (
               <Badge
                 className={cn(

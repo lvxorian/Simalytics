@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, Radar } from "lucide-react";
+import { Activity, Briefcase, Radar } from "lucide-react";
 
 import { HeaderSearch } from "@/components/header-search";
 import {
@@ -16,6 +16,7 @@ const NAV = [
   { href: "/", label: "Trh" },
   { href: "/skener", label: "Skener" },
   { href: "/watchlist", label: "Watchlist" },
+  { href: "/portfolio", label: "Portfolio", icon: Briefcase },
   { href: "/alerts", label: "Alerty" },
   { href: "/positions", label: "Pozice" },
   { href: "/statistiky", label: "Statistiky" },
@@ -53,17 +54,19 @@ export function SiteHeader({
                 item.href === "/"
                   ? pathname === "/"
                   : pathname.startsWith(item.href);
+              const Icon = "icon" in item ? item.icon : null;
               return (
                 <Link
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
+                    "flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
                     active
                       ? "bg-accent text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
                       : "text-muted-foreground hover:text-foreground"
                   )}
                 >
+                  {Icon && <Icon className="size-3.5" />}
                   {item.label}
                 </Link>
               );
