@@ -3,6 +3,7 @@ import { IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 
 import { SiteHeader } from "@/components/site-header";
 import { TickerTape } from "@/components/ticker-tape";
+import { LiveAlertToaster } from "@/components/live-alert-toaster";
 import { getAlertsWithItems, type AlertWithItem } from "@/lib/data";
 import "./globals.css";
 
@@ -81,6 +82,9 @@ export default async function RootLayout({
         <main className="mx-auto w-full max-w-7xl px-4 pb-20 pt-8">
           {children}
         </main>
+        {/* Live alert toaster – global (Fáze 2): spouští /api/live poller,
+            když je appka otevřená; cron 5 min zůstává jako fallback */}
+        <LiveAlertToaster />
       </body>
     </html>
   );

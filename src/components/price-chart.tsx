@@ -28,7 +28,9 @@ import {
   X,
 } from "lucide-react";
 import type { Candle, LinePoint } from "@/lib/candles";
+import { mergeLiveTick } from "@/lib/candles";
 import type { IntervalKey } from "@/lib/candles";
+import { useLiveTick, impliedBase24h } from "@/lib/live-prices";
 import { ChangeBadge } from "@/components/change-badge";
 import { CandleCountdown } from "@/components/candle-countdown";
 import {
@@ -179,12 +181,68 @@ export function PriceChart({
   alerts,
   intervalSwitches,
   modeSwitches,
+  live,
 }: PriceChartProps) {
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   // Ref na hlavní sérii – pro převod ceny → pixel (volume profile overlay)
   const mainSeriesRef = useRef<ISeriesApi<"Candlestick"> | ISeriesApi<"Area"> | null>(null);
+
+  // ── Live merge (Fáze 1) ─────────────────────────────────────────
+  // Base `candles` přichází ze serveru (router.refresh); živý tick
+  // aplikujeme lokálně bez rekonstrukce grafu. Změna base (refresh /
+  // přepnutí TF) resetuje merge synchronně v renderu (officiální
+  // „adjusting state when props change" vzor), ať graf nikdy nekreslí
+  // stará data z jiného TF.
+  const [merged, setMerged] = useState<Candle[]>(candles);
+  const [prevBase, setPrevBase] = useState(candles);
+  if (prevBase !== candles) {
+    setPrevBase(candles);
+    setMerged(candles);
+  }
+  const mergedRef = useRef(merged);
+  mergedRef.current = merged;
+  const liveTick = useLiveTick(live && itemId ? itemId : null);
+  useEffect(() => {
+    if (!liveTick) return;
+    const res = mergeLiveTick(mergedRef.current, intervalKey ?? "5m", liveTick);
+    if (!res.changed) return;
+    setMerged(res.candles);
+    // Imperativní update série – graf se NEREKONSTRUJE (zoom/nástroje
+    // přežijí), poslední svíčka se jen přemaluje (nebo přibude nová)
+    const series = mainSeriesRef.current;
+    const lastC = res.candles[res.candles.length - 1];
+    if (!series || !lastC) return;
+    try {
+      if (mode === "candles") {
+        (series as ISeriesApi<"Candlestick">).update({
+          time: lastC.time as UTCTimestamp,
+          open: lastC.open,
+          high: lastC.high,
+          low: lastC.low,
+          close: lastC.close,
+        });
+      } else {
+        (series as ISeriesApi<"Area">).update({
+          time: lastC.time as UTCTimestamp,
+          value: lastC.close,
+        });
+      }
+    } catch {
+      // update selže jen při časové nekonzistenci – příští refresh opraví
+    }
+  }, [liveTick, intervalKey, mode]);
+  // Živá cena pro fullscreen hlavičku (fallback na SSR prop)
+  const livePrice = liveTick ? liveTick.price : currentPrice;
+  const liveBase =
+    liveTick && currentPrice != null && currentPrice > 0 && change24h != null
+      ? impliedBase24h(currentPrice, change24h)
+      : null;
+  const liveChange =
+    livePrice != null && liveBase != null && liveBase > 0
+      ? ((livePrice - liveBase) / liveBase) * 100
+      : change24h;
 
   const [visible, setVisible] = useState<Record<OverlayKey, boolean>>({
     volume: true,
@@ -233,7 +291,9 @@ export function PriceChart({
   rulerActiveRef.current = rulerActive;
 
   // Zdroj dat profilu: volumeProfile prop (reálné objemy pro 1D/1W/1M),
-  // jinak samotné svíčky (intraday → proxy objem = 1 tick)
+  // jinak samotné svíčky (intraday → proxy objem = 1 tick). Živé svíčky
+  // se do profilu záměrně nepropagují (VP = nástroj pro historický rozsah,
+  // přepočet na každý tick by blikal).
   const profileSource = useMemo(
     () =>
       (volumeProfile ?? candles).map((c) => ({
@@ -274,31 +334,32 @@ export function PriceChart({
     return typeof price === "number" ? price : null;
   }, []);
 
-  // Snap času na nejbližší svíčku (mřížka bucketů z lib/candles)
+  // Snap času na nejbližší svíčku (mřížka bucketů) – čte MERGED data,
+  // ať snap sedí i na živě přidanou svíčku
   const snapTime = useCallback(
     (t: number): number => {
-      if (candles.length === 0) return t;
+      if (merged.length === 0) return t;
       let lo = 0;
-      let hi = candles.length - 1;
+      let hi = merged.length - 1;
       while (lo < hi) {
         const mid = (lo + hi) >> 1;
-        if (candles[mid].time < t) lo = mid + 1;
+        if (merged[mid].time < t) lo = mid + 1;
         else hi = mid;
       }
-      const cand = candles[lo];
-      const prev = candles[Math.max(0, lo - 1)];
+      const cand = merged[lo];
+      const prev = merged[Math.max(0, lo - 1)];
       return Math.abs(prev.time - t) <= Math.abs(cand.time - t)
         ? prev.time
         : cand.time;
     },
-    [candles]
+    [merged]
   );
 
   // Snap ceny na OHLC svíčky u kliknutého času (± 12 px tolerance)
   const snapPrice = useCallback(
     (t: number, p: number): number => {
       const series = mainSeriesRef.current;
-      const c = candles.find((x) => x.time === t);
+      const c = merged.find((x) => x.time === t);
       if (!series || !c) return p;
       const yP = series.priceToCoordinate(p);
       if (yP == null) return p;
@@ -315,7 +376,7 @@ export function PriceChart({
       }
       return best;
     },
-    [candles]
+    [merged]
   );
 
   const onDragStart = useCallback(
@@ -404,13 +465,13 @@ export function PriceChart({
             : `${s} s`;
     // počet svíček = rozdíl indexů v datech grafu (body jsou snapnuté)
     let count = 0;
-    if (candles.length > 0) {
+    if (merged.length > 0) {
       const idx = (t: number) => {
         let lo = 0;
-        let hi = candles.length - 1;
+        let hi = merged.length - 1;
         while (lo < hi) {
           const mid = (lo + hi) >> 1;
-          if (candles[mid].time < t) lo = mid + 1;
+          if (merged[mid].time < t) lo = mid + 1;
           else hi = mid;
         }
         return lo;
@@ -425,11 +486,11 @@ export function PriceChart({
       count,
       countLabel: `${count} ${candleWord(count)}`,
     };
-  }, [rulerActive, candles]);
+  }, [rulerActive, merged]);
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || candles.length === 0) return;
+    if (!container || merged.length === 0) return;
 
     const hasVolume = visible.volume && !!extras?.volume?.length;
 
@@ -493,7 +554,7 @@ export function PriceChart({
         priceFormat: { type: "price", precision: 3, minMove: 0.001 },
       });
       series.setData(
-        candles.map((c) => ({
+        merged.map((c) => ({
           time: c.time as UTCTimestamp,
           open: c.open,
           high: c.high,
@@ -512,7 +573,7 @@ export function PriceChart({
         priceFormat: { type: "price", precision: 3, minMove: 0.001 },
       });
       series.setData(
-        candles.map((c) => ({
+        merged.map((c) => ({
           time: c.time as UTCTimestamp,
           value: c.close,
         }))
@@ -651,6 +712,9 @@ export function PriceChart({
       chart.remove();
       chartRef.current = null;
     };
+    // merged (base + živé ticky) NESMÍ být v deps – změna by rekonstruovala
+    // graf na každý tick. Živé ticky se na sérii aplikují přes series.update.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candles, mode, extras, visible, intervalKey]);
 
   // Bump při pan/zoom – přepočítá pixelovou geometrii SVG overlayů
@@ -1447,12 +1511,12 @@ export function PriceChart({
                 <span className="rounded-md border border-border px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
                   Q0
                 </span>
-                {currentPrice != null && (
+                {livePrice != null && (
                   <span className="font-mono text-lg font-semibold tabular-nums text-foreground">
-                    {formatPrice(currentPrice)}
+                    {formatPrice(livePrice)}
                   </span>
                 )}
-                <ChangeBadge value={change24h} size="sm" />
+                <ChangeBadge value={liveChange} size="sm" />
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -1544,4 +1608,6 @@ type PriceChartProps = {
   intervalSwitches?: IntervalSwitch[];
   /** Přepínač Svíčky/Linie pro fullscreen (href = router.push). */
   modeSwitches?: { key: "candles" | "area"; label: string; href: string }[];
+  /** Live merge – zapne živé ticky pro tuto položku (market page). */
+  live?: boolean;
 };

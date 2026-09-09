@@ -355,6 +355,115 @@ export function rsi(candles: Candle[], period = 14): LinePoint[] {
   return out;
 }
 
+// ── Live merge (Fáze 1) ─────────────────────────────────────────────
+
+/**
+ * bucketStart pro živý tick dle TF – musí odpovídat agregaci
+ * v buildRawBuckets (intraday: epoch intervaly) i aggregateDaily
+ * (1W: pondělí UTC, 1M: 1. den měsíce UTC).
+ */
+export function liveBucketStart(
+  intervalKey: IntervalKey,
+  timeSec: number
+): number {
+  if (intervalKey === "1w") {
+    const d = new Date(timeSec * 1000);
+    const diffToMonday = (d.getUTCDay() + 6) % 7;
+    const monday = new Date(d);
+    monday.setUTCDate(d.getUTCDate() - diffToMonday);
+    monday.setUTCHours(0, 0, 0, 0);
+    return Math.floor(monday.getTime() / 1000);
+  }
+  if (intervalKey === "1M") {
+    const d = new Date(timeSec * 1000);
+    return Math.floor(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1) / 1000);
+  }
+  const seconds =
+    INTERVAL_OPTIONS.find((o) => o.key === intervalKey)?.seconds ?? 300;
+  return Math.floor(timeSec / seconds) * seconds;
+}
+
+/** Následující bucket (pro dolplení mezery kontinuitou). */
+function nextBucketStart(intervalKey: IntervalKey, bucket: number): number {
+  if (intervalKey === "1w") return bucket + 7 * 86400;
+  if (intervalKey === "1M") {
+    const d = new Date(bucket * 1000);
+    return Math.floor(
+      Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1) / 1000
+    );
+  }
+  const seconds =
+    INTERVAL_OPTIONS.find((o) => o.key === intervalKey)?.seconds ?? 300;
+  return bucket + seconds;
+}
+
+/**
+ * Aplikuje živý tick na svíčky grafu (imutabilně).
+ * Vrací nové pole + flag, zda se něco změnilo. Zachovává kontinuitu:
+ *   - tick v aktuálním bucketu = update high/low/close poslední svíčky,
+ *   - tick v novém bucketu = doplní ploché svíčky přes mezeru a přidá
+ *     novou s open = předchozí close (stejná filozofie jako toCandles).
+ * Starší tick než poslední svíčka se ignoruje (series.update by hodil
+ * chybu na time < last time).
+ */
+export function mergeLiveTick(
+  candles: Candle[],
+  intervalKey: IntervalKey,
+  tick: { price: number; datetime: string }
+): { candles: Candle[]; changed: boolean } {
+  if (candles.length === 0 || !(tick.price > 0)) {
+    return { candles, changed: false };
+  }
+  const tSec = Math.floor(new Date(tick.datetime).getTime() / 1000);
+  const bucket = liveBucketStart(intervalKey, tSec);
+  const last = candles[candles.length - 1];
+
+  if (bucket < last.time) return { candles, changed: false };
+
+  if (bucket === last.time) {
+    if (
+      tick.price === last.close &&
+      tick.price <= last.high &&
+      tick.price >= last.low
+    ) {
+      return { candles, changed: false }; // stejná cena – nic nemění
+    }
+    const next = candles.slice(0, -1);
+    next.push({
+      ...last,
+      high: Math.max(last.high, tick.price),
+      low: Math.min(last.low, tick.price),
+      close: tick.price,
+    });
+    return { candles: next, changed: true };
+  }
+
+  // Nový bucket – dolpněme případnou mezeru plochými svíčkami (kontinuita)
+  const out = candles.slice();
+  let prevClose = last.close;
+  let t = nextBucketStart(intervalKey, last.time);
+  let guard = 0;
+  while (t < bucket && guard < 40) {
+    out.push({
+      time: t,
+      open: prevClose,
+      high: prevClose,
+      low: prevClose,
+      close: prevClose,
+    });
+    t = nextBucketStart(intervalKey, t);
+    guard++;
+  }
+  out.push({
+    time: bucket,
+    open: prevClose,
+    high: Math.max(prevClose, tick.price),
+    low: Math.min(prevClose, tick.price),
+    close: tick.price,
+  });
+  return { candles: out, changed: true };
+}
+
 /**
  * Intervalové volby pro přepínač na stránce grafu.
  * `days` = jak hlubokou historii ticků tahat pro daný TF

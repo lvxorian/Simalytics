@@ -16,6 +16,7 @@ import {
 import { markAlertsSeenAction } from "@/app/actions";
 import { ItemIcon } from "@/components/item-icon";
 import { formatDateTime, formatPrice } from "@/lib/format";
+import { playAlertTone, unlockAlertAudio } from "@/lib/alert-tone";
 import { cn } from "@/lib/utils";
 
 export type HeaderAlert = {
@@ -45,50 +46,6 @@ function conditionLabel(a: HeaderAlert): string {
   return a.direction === "above"
     ? `Skóre ≥ ${a.threshold > 0 ? "+" : ""}${a.threshold}`
     : `Skóre ≤ ${a.threshold}`;
-}
-
-/**
- * Krátký upozorňovací tón (WebAudio, žádná externí závislost).
- * Dva stoupající tóny – „ding“ jako v trading aplikacích.
- * AudioContext se musí vytvořit až po gestu uživatele, proto ho
- * líně initializujeme při prvním kliknutí kamkoliv na stránku.
- */
-function playAlertTone() {
-  try {
-    const Ctx =
-      window.AudioContext ??
-      (window as unknown as { webkitAudioContext?: typeof AudioContext })
-        .webkitAudioContext;
-    if (!Ctx) return;
-    const ctx = new Ctx();
-
-    const beep = (freq: number, startAt: number, duration: number) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = "sine";
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.0001, ctx.currentTime + startAt);
-      gain.gain.exponentialRampToValueAtTime(
-        0.18,
-        ctx.currentTime + startAt + 0.02
-      );
-      gain.gain.exponentialRampToValueAtTime(
-        0.0001,
-        ctx.currentTime + startAt + duration
-      );
-      osc.connect(gain).connect(ctx.destination);
-      osc.start(ctx.currentTime + startAt);
-      osc.stop(ctx.currentTime + startAt + duration + 0.05);
-    };
-
-    // E5 → A5: stoupavé „ding-ding“ = pozitivní upozornění
-    beep(659.25, 0, 0.18);
-    beep(880, 0.16, 0.28);
-
-    setTimeout(() => void ctx.close(), 800);
-  } catch {
-    // zvuk nesmí rozbít UI (autoplay politiky apod.)
-  }
 }
 
 /**
@@ -128,26 +85,11 @@ export function AlertNotifications({ alerts }: { alerts: HeaderAlert[] }) {
   // pro staré, už viděné stavy... ale právě když dorazí NOVÝ trigger,
   // počet nespamatrovaných naroste a tón spustíme).
   const prevUnseenRef = useRef<number | null>(null);
-  const audioCtxRef = useRef<AudioContext | null>(null);
 
-  // Odemčení audia po prvním gestu uživatele (autoplay politika)
+  // Odemčení audia po prvním gestu uživatele (autoplay politika) –
+  // sdílený kontext z lib/alert-tone (toaster i zvonek hrají stejný tón)
   useEffect(() => {
-    const unlock = () => {
-      if (audioCtxRef.current) return;
-      try {
-        const Ctx =
-          window.AudioContext ??
-          (window as unknown as { webkitAudioContext?: typeof AudioContext })
-            .webkitAudioContext;
-        if (Ctx) {
-          const ctx = new Ctx();
-          void ctx.resume();
-          audioCtxRef.current = ctx;
-        }
-      } catch {
-        // bez audia se aplikace normálně používá dál
-      }
-    };
+    const unlock = () => unlockAlertAudio();
     window.addEventListener("pointerdown", unlock, { once: true });
     window.addEventListener("keydown", unlock, { once: true });
     return () => {
@@ -161,34 +103,9 @@ export function AlertNotifications({ alerts }: { alerts: HeaderAlert[] }) {
     prevUnseenRef.current = unseenCount;
 
     if (prev === null || unseenCount <= prev) return;
-    // Dorazil nový trigger → tón (jen pokud máme odemčené audio)
-    const ctx = audioCtxRef.current;
-    if (ctx) {
-      try {
-        const beep = (freq: number, startAt: number, duration: number) => {
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.type = "sine";
-          osc.frequency.value = freq;
-          gain.gain.setValueAtTime(0.0001, ctx.currentTime + startAt);
-          gain.gain.exponentialRampToValueAtTime(
-            0.18,
-            ctx.currentTime + startAt + 0.02
-          );
-          gain.gain.exponentialRampToValueAtTime(
-            0.0001,
-            ctx.currentTime + startAt + duration
-          );
-          osc.connect(gain).connect(ctx.destination);
-          osc.start(ctx.currentTime + startAt);
-          osc.stop(ctx.currentTime + startAt + duration + 0.05);
-        };
-        beep(659.25, 0, 0.18);
-        beep(880, 0.16, 0.28);
-      } catch {
-        // tichý pokus – zvuk není kritický
-      }
-    }
+    // Dorazil nový trigger → tón. Společný playAlertTone má throttle,
+    // takže se nezdupá s live toasterem (ten spouští tentýž tón).
+    playAlertTone();
   }, [unseenCount]);
 
   // Klik na zvonek = otevřít dropdown + označit vše jako seen

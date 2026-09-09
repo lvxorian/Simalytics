@@ -15,7 +15,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { alertLabel } from "@/components/alerts-table";
-import { formatDateTime, formatPrice, plColorClass } from "@/lib/format";
+import { formatDateTime } from "@/lib/format";
+import { LiveCurrentPriceCell } from "@/components/live-alert-table-cell";
 import { cn } from "@/lib/utils";
 import type { AlertWithItem } from "@/lib/data";
 
@@ -97,13 +98,14 @@ export function ItemAlertsTable({
                     )}
                   </TableCell>
 
-                  <TableCell
-                    className={cn(
-                      "text-right font-mono",
-                      reached ? plColorClass(1) : "text-muted-foreground"
-                    )}
-                  >
-                    {formatPrice(alert.current_price)}
+                  <TableCell className="text-right">
+                    <LiveCurrentPriceCell
+                      itemId={alert.item_id}
+                      threshold={alert.threshold}
+                      direction={alert.direction}
+                      kind={alert.kind}
+                      initialPrice={alert.current_price}
+                    />
                   </TableCell>
 
                   <TableCell className="hidden text-right font-mono text-xs text-muted-foreground md:table-cell">

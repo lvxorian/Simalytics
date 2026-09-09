@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { ItemIcon } from "@/components/item-icon";
+import { TickerLiveUpdater } from "@/components/ticker-live-updater";
 import { getLatestPrices, getLatestVwaps, getPricesAround24hAgo } from "@/lib/data";
 import { formatPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -78,6 +79,9 @@ export async function TickerTape() {
       aria-label="Běžící ceny komodit"
     >
       <TickerRow entries={entries} keyPrefix="tk" />
+      {/* Live updater (Fáze 3C): přepisuje čísla v dlaždicích ze SSE store
+          (imperativně – React re-render 300 dlaždic by sekal marquee). */}
+      <TickerLiveUpdater />
     </div>
   );
 }
@@ -123,6 +127,10 @@ function TickerRow({
                   <Link
                     href={`/market/${entry.id}`}
                     tabIndex={copy === 1 ? -1 : undefined}
+                    data-ticker-item={entry.id}
+                    data-ss-price={entry.price}
+                    data-ss-change={entry.change24h ?? ""}
+                    data-ss-vwap={entry.vwap ?? ""}
                     className={cn(
                       "ticker-tile group relative m-1.5 flex items-center gap-2.5 rounded-xl border px-3 py-1.5 transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
                       "hover:z-20 hover:-translate-y-0.5",
@@ -151,7 +159,7 @@ function TickerRow({
                         {(up || down) && <Caret up={up} />}
                       </div>
                       <div className="flex items-center gap-2 font-mono text-xs leading-tight">
-                        <span className="text-foreground/75">
+                        <span className="text-foreground/75" data-ticker-price>
                           {formatPrice(entry.price)}
                         </span>
                         <span
@@ -161,6 +169,7 @@ function TickerRow({
                             down && "text-down",
                             !up && !down && "text-muted-foreground"
                           )}
+                          data-ticker-change
                         >
                           {entry.change24h === null
                             ? "–"
@@ -179,6 +188,7 @@ function TickerRow({
                           "ml-1 hidden shrink-0 rounded-md px-1.5 py-0.5 font-mono text-[10px] sm:block",
                           cheap ? "bg-up/10 text-up" : "bg-down/10 text-down"
                         )}
+                        data-ticker-vwap
                       >
                         VWAP {vwapDiv > 0 ? "+" : "−"}
                         {Math.abs(vwapDiv).toFixed(1)} %

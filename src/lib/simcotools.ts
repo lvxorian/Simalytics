@@ -239,10 +239,14 @@ export async function getCandlesticks(
   return data.candlesticks ?? [];
 }
 
-/** Poslední skutečný obchod pro všechny resource+kvality (1 request!). */
+/** Poslední skutečný obchod pro všechny resource+kvality (1 request!).
+ *  Cache 5 s – /api/live polluje každých 10 s; sdílená cache drží
+ *  součet požadavků (všichni diváci + cron) hluboko pod limitem 2 req/s.
+ */
 export async function getMarketPrices(): Promise<SimcoTradeTick[]> {
   const data = await simcoFetch<{ prices: SimcoTradeTick[] }>(
-    `/v1/realms/${REALM_ID}/market/prices`
+    `/v1/realms/${REALM_ID}/market/prices`,
+    5
   );
   return data.prices ?? [];
 }

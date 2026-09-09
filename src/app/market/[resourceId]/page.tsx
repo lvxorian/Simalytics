@@ -10,7 +10,7 @@ import { AddToPortfolioButton } from "@/components/add-to-portfolio-button";
 import { getLatestVwaps } from "@/lib/data";
 import { StarButton } from "@/components/star-button";
 import { AutoRefresh } from "@/components/auto-refresh";
-import { ChangeBadge } from "@/components/change-badge";
+import { HeroLivePrice } from "@/components/live-price";
 import { ItemIcon } from "@/components/item-icon";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -35,13 +35,10 @@ import {
   isTracked,
 } from "@/lib/data";
 import { getEvents, getMarketSummary } from "@/lib/simcotools";
+import { getLowestAsk } from "@/lib/simco-official";
 import { computeSignal } from "@/lib/signals";
-import {
-  computeLiquidity,
-  gradeDots,
-  volatilityProfile,
-} from "@/lib/metrics";
-import { formatCompact, formatPrice, formatRelativeAge } from "@/lib/format";
+import { computeLiquidity, gradeDots, volatilityProfile } from "@/lib/metrics";
+import { formatCompact, formatPrice } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -269,7 +266,9 @@ export default async function MarketItemPage({
 
   return (
     <div className="space-y-6">
-      <AutoRefresh intervalMs={20_000} />
+      {/* Fallback role jen – ceny dorážejí živě (SSE); refresh doplňuje
+          VWAP, metriky a svíčky po uzavření bucketu. */}
+      <AutoRefresh intervalMs={60_000} />
 
       <Link
         href="/"
@@ -317,19 +316,13 @@ export default async function MarketItemPage({
             )}
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-3">
-            <span className="font-mono text-3xl font-semibold tabular-nums text-foreground">
-              {formatPrice(lastTick)}
-            </span>
-            <ChangeBadge value={change24h} />
-            <span className="text-xs text-muted-foreground">24h změna</span>
-            {lastTradeMs != null && (
-              <span
-                className="text-xs text-muted-foreground"
-                title="Čas posledního obchodu této komodity. Na klidném trhu cena dlouho nezmizí – není to zastaralá data."
-              >
-                · poslední obchod {formatRelativeAge(lastTradeMs)}
-              </span>
-            )}
+            <HeroLivePrice
+              itemId={id}
+              initialPrice={lastTick}
+              initialChange24h={change24h}
+              initialLastTradeMs={lastTradeMs}
+              initialAsk={await getLowestAsk(id, 0).then((r) => r?.price ?? null).catch(() => null)}
+            />
           </div>
         </div>
       </div>
@@ -421,6 +414,7 @@ export default async function MarketItemPage({
               currentPrice={lastTick}
               change24h={change24h}
               itemTicker={item.db_letter}
+              live
               alerts={itemAlerts
                 // Limitní prodeje se hlídají z portfolia (poller),
                 // do grafu na market page nepatří.
