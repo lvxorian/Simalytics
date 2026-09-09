@@ -35,7 +35,7 @@ export function ItemProfile({
   return (
     <div
       className={cn(
-        "flex-1 min-w-[280px] max-w-xl rounded-xl border border-border/80 bg-card px-4 py-3",
+        "rounded-xl border border-border/80 bg-card px-4 py-3",
         className
       )}
     >

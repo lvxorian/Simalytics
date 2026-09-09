@@ -278,7 +278,7 @@ export default async function MarketItemPage({
         Zpět na trh
       </Link>
 
-      {/* ── Hero: ikona + cena + 24h + profil suroviny vpravo ── */}
+      {/* ── Hero: ikona + název + cena + 24h ── */}
       <div className="flex flex-wrap items-start gap-5">
         <ItemIcon
           url={img}
@@ -330,9 +330,6 @@ export default async function MarketItemPage({
             )}
           </div>
         </div>
-
-        {/* „Firemní profil“ suroviny – výroba, receptura, navazující výroba */}
-        <ItemProfile itemId={id} className="ml-auto" />
       </div>
 
       {/* ── Přepínače intervalu a typu grafu ─────────────────── */}
@@ -482,6 +479,9 @@ export default async function MarketItemPage({
           )}
         </CardContent>
       </Card>
+
+      {/* ── „Firemní profil“ suroviny – celá šířka pod grafem ── */}
+      <ItemProfile itemId={id} />
 
       {/* ── Statistiky období + live summary ─────────────────── */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
