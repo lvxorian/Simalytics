@@ -62,7 +62,8 @@ export function NewPositionForm({ items }: { items: ItemOption[] }) {
         <CardHeader>
           <CardTitle>Obchod</CardTitle>
           <CardDescription>
-            Co a za koliko jsi koupil (nebo plánuješ koupit).
+            Zapiš svůj nákup – co jsi koupil, v jakém množství a za jakou
+            cenu. Později tu uvidíš, jak si vede.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -152,49 +153,8 @@ export function NewPositionForm({ items }: { items: ItemOption[] }) {
         </CardContent>
       </Card>
 
-      {/* ── Condition Logging ──────────────────────────────────── */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Podmínky & logika vstupu</CardTitle>
-          <CardDescription>
-            Zachyť, co se na trhu dělo a proč jsi rozhodl obchodovat. Vzájemně
-            si pak budeš moct porovnávat, která logika se vyplácí.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="condition_text">Podmínky na trhu *</Label>
-            <Textarea
-              id="condition_text"
-              name="condition_text"
-              rows={4}
-              required
-              placeholder="např. Cena otestuje 30d support ~12,80 $, klesající nabídka v order booku, ostatní výrobci prodávají pod náklady…"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="trigger_reason">Spouštěč (trigger)</Label>
-            <Input
-              id="trigger_reason"
-              name="trigger_reason"
-              placeholder="např. cena prolamuje 13,00 $ a objem nabídek klesá"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="strategy">Strategie / teze (volitelné)</Label>
-            <Input
-              id="strategy"
-              name="strategy"
-              placeholder="např. mean reversion, sezónní spike, arbitráž…"
-            />
-          </div>
-
-          {/* snapshot ceny pro condition_log */}
-          <input type="hidden" name="market_price_at_log" value={buyPrice} />
-        </CardContent>
-      </Card>
+      {/* snapshot ceny pro condition_log */}
+      <input type="hidden" name="market_price_at_log" value={buyPrice} />
 
       {state.error && (
         <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-red-300">

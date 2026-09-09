@@ -31,7 +31,9 @@ export async function createPositionAction(
     const quantity = Number(formData.get("quantity"));
     const buy_price = Number(formData.get("buy_price"));
     const note = String(formData.get("note") ?? "").trim() || null;
-    const condition_text = String(formData.get("condition_text") ?? "").trim();
+    const condition_text =
+      String(formData.get("condition_text") ?? "").trim() ||
+      "Nákup zaznamenán bez poznámky.";
     const trigger_reason =
       String(formData.get("trigger_reason") ?? "").trim() || null;
     const market_price_at_log = Number(
@@ -44,11 +46,6 @@ export async function createPositionAction(
       return { ok: false, error: "Množství musí být kladné číslo." };
     if (!Number.isFinite(buy_price) || buy_price <= 0)
       return { ok: false, error: "Nákupní cena musí být kladné číslo." };
-    if (!condition_text)
-      return {
-        ok: false,
-        error: "Popiš podmínky obchodu – proč pozici otevíráš?",
-      };
 
     await openPosition({
       item_id,
