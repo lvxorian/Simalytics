@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+import { ItemCombobox } from "@/components/ui/combobox";
 import { formatPrice } from "@/lib/format";
 
 export type ItemOption = { id: number; name: string; price: number };
@@ -69,28 +69,14 @@ export function NewPositionForm({ items }: { items: ItemOption[] }) {
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="item">Položka</Label>
-            <Select
-              name="item_id"
+            {/* Combobox: píšeš a filtruje, šipka otevře kompletní seznam */}
+            <ItemCombobox
+              items={items}
               value={itemId}
-              onValueChange={setItemId}
+              onChange={setItemId}
               required
-            >
-              <SelectTrigger id="item" className="w-full">
-                <SelectValue placeholder="Vyber komoditu…" />
-              </SelectTrigger>
-              <SelectContent className="max-h-72">
-                {items.map((item) => (
-                  <SelectItem key={item.id} value={String(item.id)}>
-                    <span className="flex items-center justify-between gap-4">
-                      <span>{item.name}</span>
-                      <span className="font-mono text-xs text-muted-foreground">
-                        {formatPrice(item.price)}
-                      </span>
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              invalid={state.error != null && !itemId}
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-4">

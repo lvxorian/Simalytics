@@ -144,6 +144,21 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* Interaktivní prvky = „ručička s ukazováčkem“ – všechna tlačítka,
+     odkazy, přepínače i selecty (Tailwind default nechává default
+     šipku, což působí nefunkčně). disabled nechá default kurzor. */
+  button:not(:disabled),
+  [role="button"]:not(:disabled),
+  [role="option"],
+  [role="menuitem"],
+  [role="tab"],
+  select,
+  summary,
+  label:has(> input[type="checkbox"]),
+  label:has(> input[type="radio"]) {
+    cursor: pointer;
+  }
+
   ::selection {
     background: color-mix(in oklab, var(--primary) 30%, transparent);
     color: #fff;
