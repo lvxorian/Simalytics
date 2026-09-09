@@ -45,6 +45,8 @@ export type LiveAsk = {
   price: number;
   quantity: number;
   npc: boolean;
+  /** Jméno prodávající firmy (ofiko orderbook; chybí u NPC). */
+  sellerName?: string;
 };
 
 export type LiveSnapshot = {

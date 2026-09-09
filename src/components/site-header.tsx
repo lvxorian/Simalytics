@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, Briefcase, Radar } from "lucide-react";
+import { Activity, Briefcase, Layers, Radar } from "lucide-react";
 
 import { HeaderSearch } from "@/components/header-search";
 import {
@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 const NAV = [
   { href: "/", label: "Trh" },
   { href: "/skener", label: "Skener" },
+  { href: "/dom", label: "DOM", icon: Layers },
   { href: "/watchlist", label: "Watchlist" },
   { href: "/portfolio", label: "Portfolio", icon: Briefcase },
   { href: "/alerts", label: "Alerty" },
