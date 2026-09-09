@@ -29,6 +29,8 @@ function throttled<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 export type OfficialOrder = {
+  /** Id orderu ze hry – stabilní identita pro animace řádků. */
+  orderId: number;
   price: number;
   quantity: number;
   quality: number;
@@ -51,6 +53,7 @@ export async function getOfficialOrders(
     });
     if (!res.ok) throw new Error(`SimCompanies v3 HTTP ${res.status}`);
     const data = (await res.json()) as Array<{
+      id?: number;
       quantity?: number;
       price?: number;
       quality?: number;
@@ -60,6 +63,7 @@ export async function getOfficialOrders(
     return (Array.isArray(data) ? data : [])
       .filter((o) => Number(o?.quantity) > 0 && Number(o?.price) > 0)
       .map((o) => ({
+        orderId: Number(o.id ?? 0),
         price: Number(o.price),
         quantity: Number(o.quantity),
         quality: Number(o.quality ?? quality),
@@ -88,12 +92,13 @@ export async function getOrderbookAsks(
   resourceId: number,
   quality = 0,
   topN = 5
-): Promise<{ price: number; quantity: number; npc: boolean }[]> {
+): Promise<{ orderId: number; price: number; quantity: number; npc: boolean }[]> {
   const orders = await getOfficialOrders(resourceId, quality);
   return orders
     .sort((a, b) => a.price - b.price)
     .slice(0, topN)
     .map((o) => ({
+      orderId: o.orderId,
       price: o.price,
       quantity: o.quantity,
       npc: o.seller?.npc ?? false,
