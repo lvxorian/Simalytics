@@ -42,8 +42,12 @@ export function LiveAlertToaster() {
           const title =
             e.kind === "limit_sell"
               ? `🏷️ Limitní prodej: ${e.item_name}`
-              : `💰 Cenový alert: ${e.item_name}`;
-          const body = `Cena ${formatPrice(e.price)} (${e.direction === "above" ? "≥" : "≤"} ${formatPrice(e.threshold)})`;
+              : e.direction === "cross"
+                ? `🔄 Crossover: ${e.item_name}`
+                : `💰 Cenový alert: ${e.item_name}`;
+          const condSym =
+            e.direction === "cross" ? "⤨" : e.direction === "above" ? "≥" : "≤";
+          const body = `Cena ${formatPrice(e.price)} (${condSym} ${formatPrice(e.threshold)})${e.oneShot ? " – jednorázový, smazán" : ""}`;
           const n = new Notification(title, { body, tag: e.key });
           n.onclick = () => {
             window.focus();
@@ -75,7 +79,9 @@ export function LiveAlertToaster() {
         const up =
           t.kind === "limit_sell"
             ? true
-            : t.direction === "above";
+            : t.direction === "cross"
+              ? t.price >= t.threshold // crossover směrem vzhůru
+              : t.direction === "above";
         return (
           <div
             key={t.key}
@@ -108,8 +114,17 @@ export function LiveAlertToaster() {
                   {formatPrice(t.price)}
                 </span>
                 <span>
-                  {t.direction === "above" ? "≥" : "≤"}{" "}
+                  {t.direction === "cross"
+                    ? "⤨"
+                    : t.direction === "above"
+                      ? "≥"
+                      : "≤"}{" "}
                   {formatPrice(t.threshold)}
+                  {t.oneShot && (
+                    <span className="ml-1 text-[10px] uppercase tracking-wider">
+                      ×1
+                    </span>
+                  )}
                 </span>
               </div>
               <Link

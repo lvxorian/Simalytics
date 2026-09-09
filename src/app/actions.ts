@@ -131,20 +131,31 @@ export async function createAlertAction(
     const kind = String(formData.get("kind") ?? "price");
     const direction = String(formData.get("direction") ?? "above");
     const threshold = Number(formData.get("threshold"));
+    const oneShot = formData.get("one_shot") === "1";
     const note = String(formData.get("note") ?? "").trim() || null;
 
     if (!Number.isInteger(item_id) || item_id <= 0)
       return { ok: false, error: "Chybí položka alertu." };
     if (kind !== "price" && kind !== "score")
       return { ok: false, error: "Neznámý typ alertu." };
-    if (direction !== "above" && direction !== "below")
+    if (direction !== "above" && direction !== "below" && direction !== "cross")
       return { ok: false, error: "Neznámý směr alertu." };
+    if (direction === "cross" && kind !== "price")
+      return { ok: false, error: "Crossover dává smysl jen u cenového alertu." };
     if (!Number.isFinite(threshold))
       return { ok: false, error: "Práh musí být číslo." };
     if (kind === "score" && (threshold < -100 || threshold > 100))
       return { ok: false, error: "Skóre musí být v rozsahu −100 až +100." };
 
-    await createAlert({ item_id, quality, kind, direction, threshold, note });
+    await createAlert({
+      item_id,
+      quality,
+      kind,
+      direction,
+      threshold,
+      oneShot,
+      note,
+    });
 
     revalidatePath("/alerts");
     revalidatePath(`/market/${item_id}`);
@@ -330,9 +341,14 @@ export async function updateAlertThresholdAction(
 export async function updateAlertRuleAction(
   id: string,
   threshold: number,
-  direction: "above" | "below"
+  direction: "above" | "below" | "cross",
+  oneShot = false
 ): Promise<{ ok: boolean; error?: string }> {
-  const error = await updateAlertRule(id, { threshold, direction });
+  const error = await updateAlertRule(id, {
+    threshold,
+    direction,
+    oneShot,
+  });
   if (error) return { ok: false, error };
   revalidatePath("/alerts");
   return { ok: true };

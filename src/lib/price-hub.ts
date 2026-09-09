@@ -65,6 +65,8 @@ type HubState = {
   subs: Set<Sub>;
   /** Poslední známé Q0 ceny per položka (id → tick). */
   latest: Map<number, HubTick>;
+  /** Předchozí cena per položka (pro CROSS alerty – strana před tickem). */
+  prevPrices: Map<number, number>;
   /** Referenční snapshot pro detekci změn (key = id|price|datetime). */
   seen: Map<number, string>;
   /** Sledované položky (track_ticks) – null = ještě nenahráno. */
@@ -111,6 +113,7 @@ function state(): HubState {
       running: false,
       subs: new Set(),
       latest: new Map(),
+      prevPrices: new Map(),
       seen: new Map(),
       trackedIds: null,
       lastPersistMs: 0,
@@ -269,6 +272,12 @@ async function hubStep(s: HubState) {
     for (const t of ticks) {
       const key = `${t.price}|${t.datetime}`;
       if (s.seen.get(t.id) === key) continue;
+      // CROSS alerty: cena PŘED tímto tickem = aktuální hodnota latest
+      // (pokud existuje). Aktualizace latest proběhne níže.
+      const prevKnown = s.latest.get(t.id);
+      if (prevKnown && prevKnown.price !== t.price) {
+        s.prevPrices.set(t.id, prevKnown.price);
+      }
       s.seen.set(t.id, key);
       s.latest.set(t.id, t);
       changed.push(t);
@@ -290,7 +299,15 @@ async function hubStep(s: HubState) {
         const priceMap = new Map(
           [...s.latest.entries()].map(([id, t]) => [id, t.price])
         );
-        const alerts = await evaluateLiveAlerts(priceMap, s.askWatch);
+        // Předchozí známé ceny (pro CROSS alerty – crossover potřebuje
+        // stranu předchozího obchodu). latest se už aktualizoval na nové
+        // hodnoty; předchozí cena = hodnota PŘED tímto tickem → držíme
+        // ji zvlášť v prevTick snapshotu.
+        const alerts = await evaluateLiveAlerts(
+          priceMap,
+          s.askWatch,
+          s.prevPrices
+        );
         if (alerts.length > 0) publish({ type: "alert", alerts });
       } catch {
         // evaluace nesmí shodit smyčku

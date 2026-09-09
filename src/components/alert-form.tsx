@@ -31,6 +31,7 @@ export function AlertForm({
   );
   const [kind, setKind] = useState<"price" | "score">("price");
   const [threshold, setThreshold] = useState<string>("");
+  const [oneShot, setOneShot] = useState(false);
 
   return (
     <form action={formAction} className="space-y-3">
@@ -65,8 +66,9 @@ export function AlertForm({
             <SelectContent>
               {kind === "price" ? (
                 <>
-                  <SelectItem value="above">Překročí nad</SelectItem>
-                  <SelectItem value="below">Propadne pod</SelectItem>
+                  <SelectItem value="above">Cena nad prahem</SelectItem>
+                  <SelectItem value="below">Cena pod prahem</SelectItem>
+                  <SelectItem value="cross">Při překřížení</SelectItem>
                 </>
               ) : (
                 <>
@@ -78,6 +80,33 @@ export function AlertForm({
           </Select>
         </div>
       </div>
+
+      {kind === "price" && (
+        <label
+          className={cn(
+            "flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 text-xs transition-colors",
+            oneShot
+              ? "border-primary/40 bg-primary/5"
+              : "border-border hover:border-border"
+          )}
+        >
+          <input
+            type="checkbox"
+            name="one_shot"
+            value="1"
+            checked={oneShot}
+            onChange={(e) => setOneShot(e.target.checked)}
+            className="mt-0.5 size-3.5 accent-[var(--primary)]"
+          />
+          <span>
+            <span className="font-medium">Jednorázový (×1)</span>
+            <span className="block text-[11px] text-muted-foreground">
+              Po první aktivaci se alert automaticky smaže. Bez zaškrtnutí
+              zůstane aktivní, dokud ho neodstraníš.
+            </span>
+          </span>
+        </label>
+      )}
 
       <div className="space-y-1.5">
         <Label htmlFor="alert-threshold" className="text-xs text-muted-foreground">

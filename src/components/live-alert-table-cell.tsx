@@ -20,20 +20,23 @@ export function LiveCurrentPriceCell({
 }: {
   itemId: number;
   threshold: number;
-  direction: "above" | "below";
+  direction: "above" | "below" | "cross";
   kind: "price" | "score" | "limit_sell";
   initialPrice: number | null;
 }) {
   const tick = useLiveTick(itemId);
   const price = tick ? tick.price : initialPrice;
 
+  // 'cross' nemá statický stav „za prahem" – zvýrazníme jen těsnou blízkost
   const reached =
     price != null &&
     (kind === "limit_sell"
       ? price >= threshold
-      : direction === "above"
-        ? price >= threshold
-        : price <= threshold);
+      : direction === "cross"
+        ? Math.abs(price - threshold) / threshold < 0.005
+        : direction === "above"
+          ? price >= threshold
+          : price <= threshold);
 
   return (
     <span

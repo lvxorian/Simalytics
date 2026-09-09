@@ -20,10 +20,11 @@ import { cn } from "@/lib/utils";
 import type { AlertWithItem } from "@/lib/data";
 
 /**
- * Editovatelná podmínka alertu (tužka): badge „Cena ≥/≤ X" + tužka, po
- * kliknutí inline editor (směr + práh). Jen pro kind='price' – limitní
- * prodeje se řídí z portfolia, skóre generuje Signal Engine. Uložení přes
- * server action + router.refresh (tabulky i alert linie v grafu).
+ * Editovatelná podmínka alertu (tužka): badge „Cena ≥/≤/⤨ X" + tužka, po
+ * kliknutí inline editor (směr nad/pod/cross + práh + jednorázovost).
+ * Jen pro kind='price' – limitní prodeje se řídí z portfolia, skóre
+ * generuje Signal Engine. Uložení přes server action + router.refresh
+ * (tabulky i alert linie v grafu).
  */
 export function EditableAlertRule({
   alert,
@@ -36,9 +37,10 @@ export function EditableAlertRule({
   const [editing, setEditing] = useState(false);
   const [pending, startTransition] = useTransition();
   const [threshold, setThreshold] = useState("");
-  const [direction, setDirection] = useState<"above" | "below">(
+  const [direction, setDirection] = useState<"above" | "below" | "cross">(
     alert.direction
   );
+  const [oneShot, setOneShot] = useState(alert.one_shot);
   const [error, setError] = useState<string | null>(null);
 
   const badgeClasses = cn(
@@ -50,7 +52,10 @@ export function EditableAlertRule({
       alert.current_price != null &&
       (alert.direction === "above"
         ? alert.current_price >= alert.threshold
-        : alert.current_price <= alert.threshold) &&
+        : alert.direction === "cross"
+          ? Math.abs(alert.current_price - alert.threshold) / alert.threshold <
+            0.005 // u crossu "dosaženo" = cena těsně u prahu
+          : alert.current_price <= alert.threshold) &&
       "border-up/30 bg-up/10 text-up"
   );
 
@@ -72,10 +77,11 @@ export function EditableAlertRule({
         <button
           type="button"
           aria-label="Upravit alert"
-          title="Upravit práh a směr alertu"
+          title="Upravit práh, směr a jednorázovost alertu"
           onClick={() => {
             setThreshold(String(alert.threshold));
             setDirection(alert.direction);
+            setOneShot(alert.one_shot);
             setError(null);
             setEditing(true);
           }}
@@ -94,7 +100,12 @@ export function EditableAlertRule({
       return;
     }
     startTransition(async () => {
-      const res = await updateAlertRuleAction(alert.id, value, direction);
+      const res = await updateAlertRuleAction(
+        alert.id,
+        value,
+        direction,
+        oneShot
+      );
       if (res.ok) {
         setEditing(false);
         router.refresh();
@@ -110,18 +121,19 @@ export function EditableAlertRule({
         e.preventDefault();
         save();
       }}
-      className={cn("inline-flex items-center gap-1", className)}
+      className="inline-flex flex-wrap items-center gap-1"
     >
       <Select
         value={direction}
-        onValueChange={(v) => setDirection(v as "above" | "below")}
+        onValueChange={(v) => setDirection(v as "above" | "below" | "cross")}
       >
-        <SelectTrigger className="h-7 w-[74px] px-2 text-[11px]">
+        <SelectTrigger className="h-7 w-[86px] px-2 text-[11px]">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="above">Nad</SelectItem>
           <SelectItem value="below">Pod</SelectItem>
+          <SelectItem value="cross">Při překřížení</SelectItem>
         </SelectContent>
       </Select>
       <Input
@@ -135,6 +147,23 @@ export function EditableAlertRule({
         className="h-7 w-24 font-mono text-[11px]"
         aria-label="Práh alertu"
       />
+      <label
+        className={cn(
+          "flex cursor-pointer items-center gap-1 rounded border px-1.5 py-1 text-[10px] transition-colors",
+          oneShot
+            ? "border-primary/40 bg-primary/10 text-primary"
+            : "border-border text-muted-foreground hover:text-foreground"
+        )}
+        title="Jednorázový alert – po první aktivaci se automaticky smaže"
+      >
+        <input
+          type="checkbox"
+          checked={oneShot}
+          onChange={(e) => setOneShot(e.target.checked)}
+          className="size-3 accent-[var(--primary)]"
+        />
+        ×1
+      </label>
       <Button
         type="submit"
         variant="ghost"
@@ -156,9 +185,7 @@ export function EditableAlertRule({
       >
         <X className="size-3.5" />
       </Button>
-      {error && (
-        <span className="text-[11px] text-down">{error}</span>
-      )}
+      {error && <span className="text-[11px] text-down">{error}</span>}
     </form>
   );
 }

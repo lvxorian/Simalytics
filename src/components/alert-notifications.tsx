@@ -25,7 +25,7 @@ export type HeaderAlert = {
   item_name: string;
   image_url: string | null;
   kind: "price" | "score" | "limit_sell";
-  direction: "above" | "below";
+  direction: "above" | "below" | "cross";
   threshold: number;
   active: boolean;
   last_triggered_at: string | null;
@@ -39,6 +39,7 @@ function conditionLabel(a: HeaderAlert): string {
     return `Limit prodeje ≥ ${formatPrice(a.threshold)}`;
   }
   if (a.kind === "price") {
+    if (a.direction === "cross") return `Cena ⤨ ${formatPrice(a.threshold)}`;
     return a.direction === "above"
       ? `Cena ≥ ${formatPrice(a.threshold)}`
       : `Cena ≤ ${formatPrice(a.threshold)}`;

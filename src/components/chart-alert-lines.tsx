@@ -22,7 +22,7 @@ import { Check } from "lucide-react";
 export type AlertLineAlert = {
   id: string;
   kind: "price" | "score" | "limit_sell";
-  direction: "above" | "below";
+  direction: "above" | "below" | "cross";
   threshold: number;
   active: boolean;
 };
@@ -50,7 +50,7 @@ type Props = {
   onUpdateRule?: (
     alertId: string,
     threshold: number,
-    direction: "above" | "below"
+    direction: "above" | "below" | "cross"
   ) => Promise<void>;
 };
 

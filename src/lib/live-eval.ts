@@ -17,8 +17,9 @@ export type LiveAlertRow = {
   item_id: number;
   quality: number;
   kind: "price" | "limit_sell";
-  direction: "above" | "below";
+  direction: "above" | "below" | "cross";
   threshold: number;
+  one_shot: boolean;
   item_name: string;
   image_url: string | null;
 };
@@ -28,12 +29,14 @@ export type LiveTrigger = {
   item_id: number;
   item_name: string;
   kind: "price" | "limit_sell";
-  direction: "above" | "below";
+  direction: "above" | "below" | "cross";
   threshold: number;
   price: number;
   image_url: string | null;
   /** True = trigger přes AKTIVNÍ NABÍDKU (ask), ne přes poslední obchod. */
   viaAsk?: boolean;
+  /** True = alert byl jednorázový a po triggeru se smazal. */
+  oneShot?: boolean;
 };
 
 /**
@@ -50,14 +53,15 @@ export type LiveTrigger = {
  */
 export async function evaluateLiveAlerts(
   priceByItem: Map<number, number>,
-  askByItem?: Map<number, number>
+  askByItem?: Map<number, number>,
+  prevPriceByItem?: Map<number, number>
 ): Promise<LiveTrigger[]> {
   const triggered: LiveTrigger[] = [];
 
   const db = getDb();
   const alerts = (await db`
     select a.id, a.item_id, a.quality, a.kind, a.direction, a.threshold,
-           i.name as item_name, i.image_url
+           a.one_shot, i.name as item_name, i.image_url
     from alerts a
     join items i on i.id = a.item_id
     where a.active = true and a.kind in ('price', 'limit_sell')
@@ -73,10 +77,19 @@ export async function evaluateLiveAlerts(
     // limit_sell je vždy 'above'; price alert dle direction.
     // BUY podmínky ('below' price): trigger i přes ask – nabídka na úrovni
     // prahu = příležitost k nákupu už existuje.
+    // 'cross': aktivace při Crossoveru – předchozí známá cena byla na
+    // DRUHÉ straně prahu (hub drží poslední ticky, poller čte price_history).
     let met = false;
     let viaAsk = false;
     if (a.kind === "limit_sell") {
       met = price >= a.threshold;
+    } else if (a.direction === "cross") {
+      const prev = prevPriceByItem?.get(a.item_id);
+      if (prev !== undefined && prev > 0) {
+        met =
+          (prev < a.threshold && price >= a.threshold) ||
+          (prev > a.threshold && price <= a.threshold);
+      }
     } else if (a.direction === "above") {
       met = price >= a.threshold;
     } else {
@@ -109,18 +122,23 @@ export async function evaluateLiveAlerts(
     if (ok.length === 0) continue; // v cooldownu – už notifikováno
 
     const url = appUrl ? `${appUrl}/market/${a.item_id}` : null;
+    const oneShotSuffix = a.one_shot ? " (jednorázový alert – po této aktivaci se maže)" : "";
     const title =
       a.kind === "limit_sell"
         ? `🏷️ Limitní prodej dosažen: ${a.item_name}`
         : viaAsk
           ? `🛒 Nákupní příležitost: ${a.item_name}`
-          : `💰 Cenový alert: ${a.item_name}`;
+          : a.direction === "cross"
+            ? `🔄 Crossover: ${a.item_name}`
+            : `💰 Cenový alert: ${a.item_name}`;
     const body =
       a.kind === "limit_sell"
         ? `Limitní prodej ${a.item_name} Q${a.quality}: cena je teď ${formatPrice(price)} – dosáhla tvého limitu ${formatPrice(a.threshold)}. Prodáváš-li ve hře, odklepni to v portfoliu.`
         : viaAsk
           ? `Na burze je aktivní nabídka ${a.item_name} Q${a.quality} za ${formatPrice(ask!)} – pod tvým prahem ${formatPrice(a.threshold)}. Poslední obchod ${formatPrice(price)}. Můžeš jít koupit.`
-          : `Cena ${a.item_name} je teď ${formatPrice(price)} – ${a.direction === "above" ? "překročila" : "propadla pod"} práh ${formatPrice(a.threshold)}.`;
+          : a.direction === "cross"
+            ? `Cena ${a.item_name} PŘEKŘÍCILA práh ${formatPrice(a.threshold)} – teď je ${formatPrice(price)}${oneShotSuffix}.`
+            : `Cena ${a.item_name} je teď ${formatPrice(price)} – ${a.direction === "above" ? "překročila" : "propadla pod"} práh ${formatPrice(a.threshold)}.${oneShotSuffix}`;
 
     const notification: AlertNotification = {
       title,
@@ -134,6 +152,14 @@ export async function evaluateLiveAlerts(
       () => {}
     );
 
+    // One-shot: po první aktivaci se alert SMAŽE (atomicky po cooldown
+    // guardu – tedy jen když tenhle běh notifikaci skutečně dostal).
+    let oneShot = false;
+    if (a.one_shot) {
+      await db`delete from alerts where id = ${a.id}::uuid`;
+      oneShot = true;
+    }
+
     triggered.push({
       id: a.id,
       item_id: a.item_id,
@@ -144,6 +170,7 @@ export async function evaluateLiveAlerts(
       price: viaAsk ? ask! : price,
       image_url: a.image_url,
       viaAsk,
+      oneShot,
     });
   }
 

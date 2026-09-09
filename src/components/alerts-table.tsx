@@ -27,9 +27,14 @@ export function alertLabel(alert: AlertWithItem): string {
     return `Limit prodeje ≥ ${formatPrice(alert.threshold)}`;
   }
   if (alert.kind === "price") {
-    return alert.direction === "above"
-      ? `Cena ≥ ${formatPrice(alert.threshold)}`
-      : `Cena ≤ ${formatPrice(alert.threshold)}`;
+    if (alert.direction === "cross") {
+      return `Cena ⤨ ${formatPrice(alert.threshold)}${alert.one_shot ? " ×1" : ""}`;
+    }
+    const base =
+      alert.direction === "above"
+        ? `Cena ≥ ${formatPrice(alert.threshold)}`
+        : `Cena ≤ ${formatPrice(alert.threshold)}`;
+    return alert.one_shot ? `${base} ×1` : base;
   }
   return alert.direction === "above"
     ? `Skóre ≥ ${alert.threshold > 0 ? "+" : ""}${alert.threshold}`

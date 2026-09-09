@@ -58,7 +58,7 @@ export type IntervalSwitch = {
 export type AlertLineAlert = {
   id: string;
   kind: "price" | "score" | "limit_sell";
-  direction: "above" | "below";
+  direction: "above" | "below" | "cross";
   threshold: number;
   active: boolean;
 };

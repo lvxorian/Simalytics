@@ -30,10 +30,12 @@ export type LiveAlertEvent = {
   item_id: number;
   item_name: string;
   kind: "price" | "limit_sell";
-  direction: "above" | "below";
+  direction: "above" | "below" | "cross";
   threshold: number;
   price: number;
   image_url: string | null;
+  /** True = alert byl jednorázový a po triggeru se smazal. */
+  oneShot?: boolean;
   /** Client čas přijetí (pro potlačení dvojitých zvuků ze zvonku). */
   atMs: number;
 };
@@ -75,10 +77,11 @@ type ApiAlert = {
   item_id: number;
   item_name: string;
   kind: "price" | "limit_sell";
-  direction: "above" | "below";
+  direction: "above" | "below" | "cross";
   threshold: number;
   price: number;
   image_url: string | null;
+  oneShot?: boolean;
 };
 
 class LiveStore {
@@ -324,6 +327,7 @@ class LiveStore {
       threshold: a.threshold,
       price: a.price,
       image_url: a.image_url,
+      oneShot: a.oneShot,
       atMs,
     }));
     this.set({

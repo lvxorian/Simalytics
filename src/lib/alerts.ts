@@ -11,6 +11,7 @@
  */
 
 import {
+  deleteAlert,
   getActiveAlerts,
   markAlertTriggered,
   type AlertRow,
@@ -90,11 +91,22 @@ async function getScores(
   return scores;
 }
 
-/** Podmínka splněná? */
+/**
+ * Podmínka splněná? Pro 'cross' je potřeba PŘEDCHOZÍ hodnota (crossover =
+ * přechod přes práh) – volající ji dodá pro kind='price' z price_history.
+ */
 function conditionMet(
   alert: AlertRow,
-  value: number
+  value: number,
+  prevValue: number | null
 ): boolean {
+  if (alert.direction === "cross") {
+    if (prevValue === null) return false;
+    return (
+      (prevValue < alert.threshold && value >= alert.threshold) ||
+      (prevValue > alert.threshold && value <= alert.threshold)
+    );
+  }
   return alert.direction === "above"
     ? value >= alert.threshold
     : value <= alert.threshold;
@@ -106,7 +118,10 @@ function describeAlert(alert: AlertRow, itemName: string, value: number): string
     return `Limitní prodej ${itemName} Q${alert.quality}: cena je teď ${formatPrice(value)} – dosáhla tvého limitu ${formatPrice(alert.threshold)}. Prodáváš-li ve hře, odklepni to v portfoliu.`;
   }
   if (alert.kind === "price") {
-    return `Cena ${itemName} je teď ${formatPrice(value)} – ${alert.direction === "above" ? "překročila" : "propadla pod"} práh ${formatPrice(alert.threshold)}.`;
+    if (alert.direction === "cross") {
+      return `Cena ${itemName} PŘEKŘÍCILA práh ${formatPrice(alert.threshold)} – teď je ${formatPrice(value)}${alert.one_shot ? " (jednorázový alert – po této aktivaci se maže)" : ""}.`;
+    }
+    return `Cena ${itemName} je teď ${formatPrice(value)} – ${alert.direction === "above" ? "překročila" : "propadla pod"} práh ${formatPrice(alert.threshold)}${alert.one_shot ? " (jednorázový)" : ""}.`;
   }
   return `Signal Engine skóre ${itemName} je ${value > 0 ? "+" : ""}${value} – ${alert.direction === "above" ? "dosáhlo" : "kleslo pod"} práh ${alert.direction === "above" ? "+" : ""}${alert.threshold}.`;
 }
@@ -141,25 +156,34 @@ export async function evaluateAlerts(appUrl: string): Promise<AlertRunResult> {
     for (const alert of alerts) {
       try {
         let value: number | null = null;
+        let prevValue: number | null = null;
 
         if (alert.kind === "price") {
           const rows = (await db`
             select price from price_history
             where item_id = ${alert.item_id} and quality = ${alert.quality}
-            order by recorded_at desc limit 1
+            order by recorded_at desc limit 2
           `) as unknown as { price: string }[];
           value = rows[0] ? Number(rows[0].price) : null;
+          // předchozí cena pro CROSS (druhý nejnovější záznam)
+          prevValue = rows[1] ? Number(rows[1].price) : null;
         } else {
           value = scores.get(alert.item_id) ?? null;
         }
 
         if (value === null) continue;
-        if (!conditionMet(alert, value)) continue;
+        if (!conditionMet(alert, value, prevValue)) continue;
 
         // Cooldown guard – atomický update, vrátí true jen při prvním
         // triggeru v rámci cooldownu (anti-spam)
         const shouldNotify = await markAlertTriggered(alert.id);
         if (!shouldNotify) continue;
+
+        // One-shot: po první aktivaci se alert SMAŽE (jen když tenhle běh
+        // notifikaci skutečně dostal)
+        if (alert.one_shot) {
+          await deleteAlert(alert.id);
+        }
 
         result.triggered++;
 

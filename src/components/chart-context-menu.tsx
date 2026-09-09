@@ -179,7 +179,6 @@ export function ChartContextMenu({
           <input type="hidden" name="item_id" value={itemId ?? ""} />
           <input type="hidden" name="quality" value="0" />
           <input type="hidden" name="kind" value="price" />
-          <input type="hidden" name="direction" value="above" />
 
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium">Cenový alert</span>
@@ -191,6 +190,25 @@ export function ChartContextMenu({
             >
               <X className="size-3.5" />
             </button>
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor="ctx-alert-direction" className="text-[11px] text-muted-foreground">
+              Aktivovat, když cena je…
+            </Label>
+            <Select
+              name="direction"
+              defaultValue={"above"}
+            >
+              <SelectTrigger id="ctx-alert-direction" className="h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="above">Nad prahem</SelectItem>
+                <SelectItem value="below">Pod prahem</SelectItem>
+                <SelectItem value="cross">Při překřížení (⤨)</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-1">
@@ -212,9 +230,25 @@ export function ChartContextMenu({
             />
           </div>
 
+          <label
+            className="flex cursor-pointer items-start gap-2 rounded-md border border-border px-2.5 py-2 text-[11px] transition-colors hover:border-border"
+            title="Po první aktivaci se alert automaticky smaže"
+          >
+            <input
+              type="checkbox"
+              name="one_shot"
+              value="1"
+              className="mt-0.5 size-3 accent-[var(--primary)]"
+            />
+            <span>
+              Jednorázový (×1) – po první aktivaci se smaže; bez toho zůstane
+              aktivní, dokud ho neodstraníš.
+            </span>
+          </label>
+
           <p className="text-[11px] text-muted-foreground">
-            Podmínku (nad/pod) nebo skóre signálu upravíš v tabulce níže /
-            na stránce Alerty.
+            Podmínku nebo skóre signálu upravíš v tabulce níže / na stránce
+            Alerty.
           </p>
 
           {state.error && (

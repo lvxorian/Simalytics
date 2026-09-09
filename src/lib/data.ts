@@ -1013,8 +1013,11 @@ export type AlertRow = {
   quality: number;
   /** 'limit_sell' = hlídka limitního prodeje z portfolia (notifikace při dosažení). */
   kind: "price" | "score" | "limit_sell";
-  direction: "above" | "below";
+  /** 'cross' = aktivuje se při Crossoveru prahu (jen kind='price'). */
+  direction: "above" | "below" | "cross";
   threshold: number;
+  /** true = po první aktivaci se alert automaticky smaže. */
+  one_shot: boolean;
   note: string | null;
   active: boolean;
   last_triggered_at: string | null;
@@ -1037,6 +1040,7 @@ type RawAlert = {
   kind: AlertRow["kind"];
   direction: AlertRow["direction"];
   threshold: string;
+  one_shot: boolean;
   note: string | null;
   active: boolean;
   last_triggered_at: Date | null;
@@ -1053,6 +1057,7 @@ function mapAlert(r: RawAlert): AlertRow {
     kind: r.kind,
     direction: r.direction,
     threshold: Number(r.threshold),
+    one_shot: r.one_shot,
     note: r.note,
     active: r.active,
     last_triggered_at: r.last_triggered_at === null ? null : iso(r.last_triggered_at),
@@ -1193,15 +1198,16 @@ export async function createAlert(input: {
   item_id: number;
   quality: number;
   kind: "price" | "score";
-  direction: "above" | "below";
+  direction: "above" | "below" | "cross";
   threshold: number;
+  oneShot?: boolean;
   note?: string | null;
 }): Promise<void> {
   const db = getDb();
   await db`
-    insert into alerts (item_id, quality, kind, direction, threshold, note)
+    insert into alerts (item_id, quality, kind, direction, threshold, one_shot, note)
     values (${input.item_id}, ${input.quality}, ${input.kind},
-            ${input.direction}, ${input.threshold}, ${input.note ?? null})
+            ${input.direction}, ${input.threshold}, ${input.oneShot ?? false}, ${input.note ?? null})
   `;
   // sledovaná položka má smysl jen s ticky – zapni sběr (jako watchlist)
   await db`update items set track_ticks = true where id = ${input.item_id}`;
@@ -1236,22 +1242,25 @@ export async function updateAlertThreshold(
 }
 
 /**
- * Upraví cenový alert: práh i směr (nad/pod). Jen pro kind='price' –
- * limitní prodeje se řídí z portfolia (setLimitSellAction), skóre
- * generuje Signal Engine. Vrací chybovou zprávu nebo null.
+ * Upraví cenový alert: práh, směr (nad/pod/cross) i one_shot. Jen pro
+ * kind='price' – limitní prodeje se řídí z portfolia (setLimitSellAction),
+ * skóre generuje Signal Engine. Vrací chybovou zprávu nebo null.
  */
 export async function updateAlertRule(
   id: string,
-  input: { threshold: number; direction: "above" | "below" }
+  input: { threshold: number; direction: "above" | "below" | "cross"; oneShot?: boolean }
 ): Promise<string | null> {
   if (!Number.isFinite(input.threshold) || input.threshold <= 0)
     return "Práh musí být kladné číslo.";
-  if (input.direction !== "above" && input.direction !== "below")
+  if (!"above below cross".split(" ").includes(input.direction))
     return "Neznámý směr alertu.";
 
   const db = getDb();
   const rows = (await db`
-    update alerts set threshold = ${input.threshold}, direction = ${input.direction}
+    update alerts
+    set threshold = ${input.threshold},
+        direction = ${input.direction},
+        one_shot = ${input.oneShot ?? false}
     where id = ${id} and kind = 'price'
     returning id
   `) as unknown as { id: string }[];
