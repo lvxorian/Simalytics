@@ -13,12 +13,19 @@ Simco Tools API ──(cron-job.org · 5 min)──▶ /api/cron/ticks ──▶
 SimCompanies API ─(GitHub Actions · 15 min)── fetch-market.mjs ───┘
 Simco Tools API ──(backfill skript)── denní svíčky + objem + VWAP ──┘
 
+LIVE (Fáze 3) – cena a alerty do ~2 s od obchodu:
+price hub (server smyčka · 2 s: followed patičky + prices)
+  ├─▶ SSE /api/live/stream ──▶ klienti (graf, hero, ticker, tabulky, watchlist)
+  ├─▶ evaluace alertů (≤ 2 s po obchodě, max 10 s na mrtvém trhu) → webhook/e-mail
+  └─▶ orderbook hlídka (ofiko v3 · round-robin) – buy alerty triggeruje i ASK
+REST /api/live = fallback (10 s polling), když SSE nejde
+
 Next.js (server components)
-├─ /                Trh: KPI, top gainers/losers, fulltext, řazení
-├─ /watchlist       Sledované komodity (karty se sparklinami)
-├─ /market/[id]     Grafy 5m–1M, overlaye (objem/VWAP/průměr/max-min), live summary
+├─ /                Trh: KPI, top gainers/losers, fulltext, řazení (live ceny)
+├─ /watchlist       Sledované komodity (karty se sparklinami, live ceny)
+├─ /market/[id]     Grafy 5m–1M, overlaye, live summary, hero ask + mini orderbook
 ├─ /positions       Pozice + P/L + condition logging
-├─ /alerts          Cenové a signálové alerty (webhook/e-mail)
+├─ /alerts          Cenové a signálové alerty (webhook/e-mail, live zvonek)
 ├─ /statistiky      Fáze ekonomiky, eventy, zakázky, makro, budovy, žebříček firem
 └─ /positions/new   Otevřít pozici + podmínky
 ```
@@ -45,7 +52,11 @@ src/
     db.ts                 # postgres.js klient (Neon pooled)
     data.ts               # všechny SQL dotazy
     simcotools.ts         # klient api.simcotools.com
-    candles.ts            # OHLC agregace + indikátory
+    simco-official.ts     # ofiko v3 orderbook (throttle 1 req/s)
+    price-hub.ts          # LIVE hub: smyčka 2 s, publish, evaluace, orderbook hlídka
+    live-eval.ts          # sdílená evaluace alertů (ask-aware) + persist ticků
+    live-prices.ts        # client store: SSE + REST fallback, useLiveTick
+    candles.ts            # OHLC agregace + indikátory + mergeLiveTick
     format.ts             # cs-CZ formátování
 public/icons/             # 151 ikon komodit {id}.png
 ```
@@ -81,8 +92,41 @@ Lokální test: `npm run fetch:market`.
 
 - Endpoint: `GET /api/v3/market/{quality}/{resourceId}/` – pole nabídek;
   bereme nejlevnější.
-- Oficiální pravidla: pouze GET, žádné automatizované akce. Skript jede
-  1 request / 5 s, celkově jednou za 15 minut.
+- Oficiální pravidla: pouze GET, žádné automatizované akce. Backfill skript
+  jede 1 request / 5 s, celkově jednou za 15 minut; live orderbook hlídka
+  1 request / 2 s (throttle v `simco-official.ts`).
+
+## Live ceny a alerty (Fáze 3)
+
+Cena v UI a alerty dorazí do **~2 s od obchodu** (dříve 60–90 s).
+
+- **Price hub** (`lib/price-hub.ts`) – jedna serverová smyčka per Vercel
+  instance (Fluid Compute): každé 2 s střídavě `market/followed`
+  (intra-bar patičky 5m svíček = rychlý tick) a `market/prices`
+  (autorita). Detekce obchodu = změna ceny NEBO datetime. Bez otevřené
+  appky se smyčka vypne (SSR dodá data z DB).
+- **SSE push** (`/api/live/stream`) – jedno EventSource spojení na celou
+  appku; eventy `hello` (snapshot), `tick` (jen změněné položky), `alert`,
+  `stale`. REST `/api/live` = fallback (10 s polling), když SSE nejde.
+- **Alerty** – evaluace v hubu hned po obchodě (≤ ~2 s) + každých max 10 s
+  i bez ticků. Cooldown guard (60 min) je atomický UPDATE v DB sdílený
+  s 5min cronem → nikdy dvojitá notifikace. Zvonek v hlavičce + toast +
+  zvuk + browser Notification + webhook/e-mail.
+- **Buy alerty hlídají i ASK** – cena aktiva = poslední obchod; ask = za
+  kolik lze koupit hned. „Cena spadla“ na burze znamená, že někdo položil
+  NABÍDKU – hub hlídá orderbook položek s aktivními buy alerty
+  (round-robin 1 req / 2 s přes ofiko v3 API) a alert spustí už při
+  `ask ≤ práh` (🛒 nákupní příležitost). Sell strana (limitní prodeje)
+  zůstává na posledním obchodě.
+- **Mini orderbook** – top 5 nejnižších nabídek s objemy a tagem NPC/hráč
+  na market page (`OrderbookPanel`), hero ukazuje ask se spreadem vs.
+  poslední obchod.
+- **Kde jsou živé ceny**: graf (přemalování poslední svíčky přes
+  `series.update`), hero, ticker tape, market table, top movers,
+  watchlist karty, tabulka alertů, čas posledního obchodu.
+
+Test po deployi: `node scripts/test-live-alert.mjs https://simalytics.vercel.app`
+(latence end-to-end), `diag-live-alert.mjs` (diagnostika multi-instance).
 
 ## Simco Tools API – zdroj historie a ticků
 
@@ -138,8 +182,16 @@ Dokumentace: <https://api.simcotools.com/docs/simcotools.yaml> (limit 2 req/s).
 ## Alerty (fáze 4)
 
 Cenové alerty (target/stop) i signálové alerty (Signal Engine skóre −100…+100).
-Evaluace běží v polleru `/api/cron/ticks` po uložení ticků (5 min), cooldown
-60 min proti spamu. Notifikace (volitelné, obě najednou):
+Evaluace běží na třech místech se sdíleným cooldownem 60 min (atomický UPDATE
+v DB → notifikace nikdy neodejde dvakrát):
+
+- **Live hub** – hned po obchodě (≤ ~2 s) + každých max 10 s; buy alerty
+  navíc hlídají AKTIVNÍ NABÍDKU (ask) přes ofiko orderbook
+- **Poller** `/api/cron/ticks` – po uložení ticků (5 min, fallback když
+  appku nikdo nemá otevřenou)
+- **REST fallback** `/api/live` – throttle 30 s per instance
+
+Notifikace (volitelné, obě najednou):
 
 - **Webhook** – `ALERT_WEBHOOK_URL` (Discord i Slack formát rozpoznán automaticky)
 - **E-mail** – `ALERT_RESEND_API_KEY` + `ALERT_EMAIL_FROM` + `ALERT_EMAIL_TO`
@@ -153,3 +205,4 @@ Migrace: `npm run db:upgrade` (tabulka `alerts` v db/upgrades/003_alerts.sql).
 - **Auth** (Auth.js/Clerk) pro multi-user přístup k pozicím a alertům
 - **Quality** 1–7 (env `SIMCOMPANIES_QUALITIES=0,1,2`)
 - **Neon branching** – testovací větev DB pro vývoj
+- **Orderbook přes SSE** – live refresh mini orderbooku místo 6 s pollingu

@@ -37,13 +37,20 @@ db/schema.sql              # items, price_history, positions, condition_log, wat
 #           003_alerts (alerts s cooldownem), 005_alert_seen (seen_at), 006_limit_sell_alerts (kind 'limit_sell')
 src/lib/
   metrics.ts               # likvidita (obchody/24h + obrat) a volatilita (annualizovaná σ log-výnosů) – karty na market page
-  alerts.ts                # evaluace alertů (cena + skóre + limitní prodeje, cooldown)
+  alerts.ts                # evaluace alertů (cena + skóre + limitní prodeje, cooldown) – 5min cron
   notifier.ts              # webhook (Discord/Slack) + e-mail přes Resend REST API
+  price-hub.ts             # LIVE cenový hub (Fáze 3): smyčka 2 s (followed/prices střídavě),
+                           # detekce obchodů, evaluace alertů, orderbook hlídka buy alertů
+  live-eval.ts             # sdílená evaluace alertů (ask-aware) + persist ticků (hub i REST)
+  live-prices.ts           # client store: SSE /api/live/stream + REST fallback;
+                           # useLiveTick (stabilní reference), useLivePriceOverride
+  simco-official.ts        # ofiko v3 orderbook (throttle 1,1 s): nejnižší ask, top N nabídek
+  alert-tone.ts            # sdílený zvuk alertů (WebAudio, unlock po prvním gestu)
 src/lib/
   db.ts                    # postgres.js klient (Neon pooled, prepare: false pro PgBouncer)
   data.ts                  # VŠECHNY SQL dotazy (server-only, nikdy do client komponent)
   simcotools.ts            # klient api.simcotools.com (limit 2 req/s, realm 0 = Magnates)
-  candles.ts               # agregace ticků na OHLC + weekly/monthly + indikátory
+  candles.ts               # agregace ticků na OHLC + weekly/monthly + indikátory + mergeLiveTick
   format.ts                # cs-CZ formátování ($ = narrowSymbol!, %, data, plColorClass)
 src/app/
   page.tsx                 # dashboard: market pulse KPI, top gainers/losers, market table
@@ -63,6 +70,9 @@ src/app/
   api/cron/ticks/          # poller ticků (cron-job.org, 5 min, Bearer CRON_SECRET)
   api/cron/daily/          # denní sync VWAP/contests/cert kinds (Bearer CRON_SECRET)
   # poller ticků navíc evaluuje alerty (lib/alerts) – jen když je NEXT_PUBLIC_APP_URL
+  api/live/                # REST fallback živých cen (ticky + evaluace alertů, throttle 30 s)
+  api/live/stream/         # SSE push (hello/tick/alert/stale + heartbeat 15 s, maxDuration 300)
+  api/live/ask/            # orderbook položky (ask + top 5 nabídek, cache 3 s)
   api/search/              # hledání instrumentů pro header
   actions.ts               # server actions (open/close position, notes, watchlist)
 src/components/            # vizní komponenty (viz níže)
@@ -126,6 +136,9 @@ src/components/            # vizní komponenty (viz níže)
   chce POMALÉ tempo — nezrychlovat. Skleněný gradient design: `.ticker-tape`
   (gradientní pás + duhová top linka) a `.ticker-tile` / `-up` / `-down`
   (tónované dlaždice) — barvy jen přes tyto třídy, ne ad-hoc bg.
+  LIVE čísla přepisuje imperativní `ticker-live-updater.tsx` (data-*
+  atributy; React re-render stovek dlaždic by sekal marquee) – pořadí
+  dlaždic zůstává ze serveru.
 - **Countdown svíčky** (`components/candle-countdown.tsx` + prop
   `intervalKey` v `price-chart.tsx`): odpočet do zavření aktuálního TF
   v hlavičce grafu; hranice bucketů musí odpovídat agregaci v
@@ -177,8 +190,37 @@ src/components/            # vizní komponenty (viz níže)
   měření, pak zavři fullscreen. `containerRef` musí zůstat uvnitř
   `chartHostRef`
   (autoSize přepočítá sám; geometrii overlayů bumpne vpEpoch).
+- **LIVE ceny a alerty (Fáze 3)** – architektura, kterou NESMÍ rozbít:
+  - **Price hub** (`lib/price-hub.ts`): jediná serverová smyčka per instance
+    (Fluid Compute drží funkci živou, dokud je otevřené SSE), každé 2 s
+    střídavě `market/followed` (intra-bar patičky = rychlý tick) a
+    `market/prices` (autorita pro datetime). Detekce obchodu = změna ceny
+    NEBO datetime → publish. Bez odběratelů se smyčka vypne.
+  - **SSE** (`/api/live/stream`): eventy hello (snapshot hned po připojení),
+    tick (jen ZMĚNĚné položky), alert, stale. Client store
+    (`lib/live-prices.ts`) má REST fallback (8 s timeout → 10 s polling).
+  - **Alerty**: hub evaluuje po ticku hned (≤ ~2 s) + pravidelně max 10 s
+    (mrtvý trh). Cooldown guard je atomický UPDATE sdílený s 5min cronem
+    a REST fallbackem → notifikace nikdy neodejde dvakrát.
+  - **Orderbook hlídka**: položky s aktivními BUY alerty ('price' +
+    'below') se round-robin pollují (1 req / 2 s, ofiko v3 API limit
+    1 req/s → throttle v simco-official; seznam refresh 60 s). Buy alert
+    triggeruje i ASK ≤ práh (nabídka na úrovni = příležitost koupit hned,
+    nemusí čekat na obchod). Sell strana zůstává na posledním obchodě
+    (prodej se řídí bidem, který API nevidí).
+  - **Cena vs. ask**: velká cena v hero = POSLEDNÍ OBCHOD (kanonická,
+    konzistentní s grafem/VWAP/P/L); ask = za kolik lze koupit HNED
+    (orderbook). Nezaměňovat – ask nemá historii a je křehký (1 prodávající).
+  - **Graf**: živý tick se aplikuje přes `series.update()` (NE rekonstrukce)
+    pomocí `mergeLiveTick()` z lib/candles – kontinuita bucketů zachována
+    (nový bucket = doplnit ploché svíčky, open = předchozí close).
+  - **AutoRefresh** je jen fallback (market page 60 s) pro VWAP/metriky –
+    ceny dorážejí přes SSE; nezvyšovat frekvenci.
+  - Test: `node scripts/test-live-alert.mjs [url]` (latence end-to-end),
+    `diag-live-alert.mjs` (rozliší „evaluace neproběhla" vs. „event šel
+    na jinou Vercel instanci" – multi-instance je správné chování).
 - **Auto-refresh dat**: `AutoRefresh` (router.refresh()) na market page
-  každých 20 s + okamžitý refresh při návratu na kartu (visibilitychange –
+  každých 60 s + okamžitý refresh při návratu na kartu (visibilitychange –
   intervaly na pozadí throttluje prohlížeč, bez toho po přepnutí zpět
   zůstanou staré ceny až do F5). `CandleCountdown` po zavření svíčky
   refreshuje hned + retry v +15/30/45/60 s – poller zapisuje ticky se
@@ -212,19 +254,36 @@ src/components/            # vizní komponenty (viz níže)
   (medián ~100 min). Intraday graf proto protahuje plochou rozpracovanou
   svíčku až do aktuálního bucketu (market page) a hero ukazuje „poslední
   obchod před X min“ (`formatRelativeAge`). Není to zastaralá data.
+- **Live komponenty v UI**: `HeroLivePrice` (market page hero: cena +
+  ask se spreadem + LIVE badge), `LivePrice`/`LiveChangeBadge`
+  (`live-price-text.tsx` – watchlist karty, market table, movers),
+  `LiveUpdatedCell` (čas posledního obchodu v market table),
+  `LiveCurrentPriceCell` (tabulka alertů), `OrderbookPanel` (top 5 asků
+  s objemy, vedle ItemProfile), `LiveAlertToaster` (global v layoutu –
+  toast + zvuk + browser Notification), `TickerLiveUpdater` (imperativní
+  přepis dlaždic). Re-render jen u položek s novým obchodem (stabilní
+  reference v useLiveTick) – jeden obchod = jedna buňka, ne celá tabulka.
 - **DB numeric**: postgres.js vrací numeric jako string — v `data.ts` se
   vždy konvertuje na Number na hranici. Timestamptz → ISO string.
 - **Simco Tools**: fetch vždy server-side s `next: { revalidate }` kvůli
   ratelimitu (2 req/s). `Accept-Language: cs` pro české názvy.
+- **Ofiko v3 API**: fetch jen přes `simco-official.ts` (serializovaný
+  throttle 1,1 s). Nikdy nevolat přímo z komponent/rout – limity by
+  spadly.
 
 ## Externí API
 
-1. **SimCompanies** (`api.simcompanies.com`) — oficiální, jen GET, 1 req/5 s;
-   GitHub Actions cron `*/15 * * * *` (`fetch-market.mjs`).
+1. **SimCompanies** (`www.simcompanies.com/api/v3`) — oficiální, jen GET;
+   limit 1 req/s (throttle 1,1 s v `simco-official.ts`). Používá se pro
+   ORDERBOOK (aktivní nabídky): `market/{quality}/{id}/` → nejnižší ask
+   + top N nabídek (hero, mini orderbook, buy-alert hlídka). Dále
+   GitHub Actions cron `*/15 * * * *` (`fetch-market.mjs`, 1 req/5 s).
 2. **Simco Tools** (`api.simcotools.com`) —OpenAPI spec:
    `https://api.simcotools.com/docs/simcotools.yaml`. Používané endpointy:
-   candlesticks, prices, market summary, events, government-orders, phases,
-   resources, realm summaries, stats/buildings.
+   candlesticks, prices (fetch cache 5 s – sdílí všichni diváci),
+   market/followed (intra-bar patičky 5m svíček = rychlý tick pro hub),
+   market summary, events, government-orders, phases, resources,
+   realm summaries, stats/buildings.
 
 ## Deployment
 
