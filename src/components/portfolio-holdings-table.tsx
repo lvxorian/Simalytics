@@ -2,11 +2,15 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { Pencil, Trash2 } from "lucide-react";
+import { ArrowUpRight, Pencil, Trash2 } from "lucide-react";
 
 import {
   deletePortfolioHoldingAction,
 } from "@/app/actions";
+import { Badge } from "@/components/ui/badge";
+import {
+  PortfolioSellDialog,
+} from "@/components/portfolio-sell-dialog";
 import {
   PortfolioEditLotsDialog,
   type EditableLot,
@@ -111,6 +115,15 @@ export function PortfolioHoldingsTable({
 
                 <TableCell className="text-right font-mono tabular-nums">
                   {formatPrice(h.current_price)}
+                  {h.limit_price !== null && (
+                    <Badge
+                      variant="outline"
+                      className="mt-0.5 border-primary/30 bg-primary/10 font-mono text-[9px] text-primary"
+                      title={`Zadaný limitní prodej ve hře @ ${formatPrice(h.limit_price)} – po realizaci odklepni tlačítkem Prodat`}
+                    >
+                      limit {formatPrice(h.limit_price)}
+                    </Badge>
+                  )}
                 </TableCell>
 
                 <TableCell className="text-right font-mono tabular-nums">
@@ -147,6 +160,26 @@ export function PortfolioHoldingsTable({
 
                 <TableCell className="pr-4 text-right">
                   <div className="flex items-center justify-end gap-1">
+                    <PortfolioSellDialog
+                      itemId={h.item_id}
+                      quality={h.quality}
+                      itemName={h.name}
+                      quantity={h.quantity}
+                      avgBuyPrice={h.avg_buy_price}
+                      currentPrice={h.current_price}
+                      limitPrice={h.limit_price}
+                      trigger={
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="text-muted-foreground hover:text-up"
+                          title="Odklepnout prodej / zadat limit"
+                        >
+                          <ArrowUpRight className="size-4" />
+                          <span className="sr-only">Prodat aktivum</span>
+                        </Button>
+                      }
+                    />
                     <PortfolioEditLotsDialog
                       holdingLabel={h.name}
                       qualityLabel={`Q${h.quality}`}

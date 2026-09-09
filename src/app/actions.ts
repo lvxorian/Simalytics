@@ -12,6 +12,8 @@ import {
   deletePositionLot,
   markAlertsSeen,
   openPosition,
+  sellPortfolioAsset,
+  setLimitSellNote,
   toggleAlert,
   toggleWatchlist,
   updateAlertThreshold,
@@ -214,6 +216,52 @@ export async function deletePortfolioHoldingAction(
 ): Promise<void> {
   await deletePortfolioHolding(itemId, quality);
   revalidatePath("/portfolio");
+}
+
+/**
+ * Odklepne prodej aktiva (celý nebo část) – uzavře lots FIFO, zaznamená
+ * realized P/L do historie. Volá se z dialogu Prodat v portfoliu.
+ */
+export async function sellPortfolioAssetAction(input: {
+  itemId: number;
+  quality: number;
+  quantity: number;
+  sellPrice: number;
+}): Promise<{ ok: boolean; error?: string; realizedPl?: number }> {
+  try {
+    const res = await sellPortfolioAsset(input);
+    revalidatePath("/portfolio");
+    revalidatePath("/");
+    return { ok: true, realizedPl: res.realizedPl };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Neznámá chyba.",
+    };
+  }
+}
+
+/**
+ * Zadá limitní prodej – jen poznámka v UI (badge „limit X“ u aktiva),
+ * finance se nezmění, dokud uživatel prodej neodklepne dialogem Prodat.
+ */
+export async function setLimitSellAction(input: {
+  itemId: number;
+  quality: number;
+  limitPrice: number;
+}): Promise<{ ok: boolean; error?: string }> {
+  try {
+    if (!Number.isFinite(input.limitPrice) || input.limitPrice <= 0)
+      return { ok: false, error: "Limitní cena musí být kladné číslo." };
+    await setLimitSellNote(input.itemId, input.quality, input.limitPrice);
+    revalidatePath("/portfolio");
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Neznámá chyba.",
+    };
+  }
 }
 
 /**

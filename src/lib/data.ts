@@ -378,6 +378,8 @@ export type PortfolioHolding = {
   first_opened_at: string;
   /** Okamžik posledního nákupu do držby. */
   last_bought_at: string;
+  /** Zadaný limitní prodej (z note otevřených pozic), null bez limitu. */
+  limit_price: number | null;
 };
 
 /**
@@ -481,6 +483,134 @@ export async function deletePositionLot(positionId: string): Promise<void> {
 }
 
 /**
+ * Prodej z portfolia – uzavře otevřené pozice (lots) daného aktiva.
+ *
+ * Model: aktivum = otevřené pozice (item, quality). Prodej X ks uzavírá
+ * lots FIFO (nejstarší nákupy nejdřív – odpovídá daňové/účetní logice),
+ * poslední dotčený lot se při částečném prodeji jen zmenší (update
+ * quantity). Vše v transakci – buď se uzavře vše, nebo nic.
+ *
+ * `limitPrice` (volitelné) = „limitní prodej zadán“ – uloží se do note
+ * otevřené pozice (trace v UI, badge „limit X,XXX“), finančně se nic
+ * nemění, dokud uživatel prodej neodklepne. Po odklepnutí se volá s
+ * sellPrice a limitPrice se ignoruje.
+ */
+export async function sellPortfolioAsset(input: {
+  itemId: number;
+  quality: number;
+  quantity: number;
+  sellPrice: number;
+}): Promise<{ closedLots: number; partialLot: boolean; realizedPl: number }> {
+  const db = getDb();
+
+  if (!Number.isFinite(input.quantity) || input.quantity <= 0) {
+    throw new Error("Množství prodeje musí být kladné číslo.");
+  }
+  if (!Number.isFinite(input.sellPrice) || input.sellPrice <= 0) {
+    throw new Error("Prodejní cena musí být kladné číslo.");
+  }
+
+  const available = (await db`
+    select coalesce(sum(quantity), 0)::int as qty
+    from positions
+    where item_id = ${input.itemId} and quality = ${input.quality}
+      and closed_at is null
+  `) as unknown as { qty: number }[];
+
+  const openQty = Number(available[0]?.qty ?? 0);
+  if (input.quantity > openQty) {
+    throw new Error(
+      `V portfoliu je jen ${openQty.toLocaleString("cs-CZ")} ks – nelze prodat ${input.quantity.toLocaleString("cs-CZ")} ks.`
+    );
+  }
+
+  return db.begin(async (sql) => {
+    // lots od nejstaršího (FIFO)
+    const lots = (await sql`
+      select id, quantity, buy_price
+      from positions
+      where item_id = ${input.itemId} and quality = ${input.quality}
+        and closed_at is null
+      order by opened_at asc
+      for update
+    `) as unknown as { id: string; quantity: number; buy_price: string }[];
+
+    let remaining = input.quantity;
+    let closedLots = 0;
+    let partialLot = false;
+    let costBasis = 0;
+
+    for (const lot of lots) {
+      if (remaining <= 0) break;
+      const take = Math.min(lot.quantity, remaining);
+      const buyPrice = Number(lot.buy_price);
+      costBasis += take * buyPrice;
+
+      if (take === lot.quantity) {
+        // celý lot uzavřeme
+        await sql`
+          update positions
+          set sell_price = ${input.sellPrice}, closed_at = now()
+          where id = ${lot.id}
+        `;
+        await sql`
+          insert into condition_log
+            (position_id, event_type, market_price_at_log, condition_text)
+          values
+            (${lot.id}, 'CLOSED', ${input.sellPrice},
+             ${`Prodej ${lot.quantity.toLocaleString("cs-CZ")} ks @ ${input.sellPrice.toFixed(3)} $ (FIFO, hromadný prodej z portfolia).`})
+        `;
+        closedLots++;
+      } else {
+        // částečný prodej – lot zmenšíme a založíme „dceřinou“ uzavřenou
+        // pozici pro správnou historii realized P/L (originál zůstává otevřený)
+        await sql`
+          update positions set quantity = quantity - ${take} where id = ${lot.id}
+        `;
+        const [closedPart] = (await sql`
+          insert into positions
+            (item_id, quality, quantity, buy_price, sell_price, opened_at, closed_at)
+          values
+            (${input.itemId}, ${input.quality}, ${take}, ${buyPrice},
+             ${input.sellPrice}, (select opened_at from positions where id = ${lot.id}), now())
+          returning id
+        `) as unknown as { id: string }[];
+        await sql`
+          insert into condition_log
+            (position_id, event_type, market_price_at_log, condition_text)
+          values
+            (${closedPart.id}, 'CLOSED', ${input.sellPrice},
+             ${`Částečný prodej ${take.toLocaleString("cs-CZ")} ks @ ${input.sellPrice.toFixed(3)} $ (FIFO z novějšího lotu).`})
+        `;
+        partialLot = true;
+      }
+      remaining -= take;
+    }
+
+    const realizedPl = input.sellPrice * input.quantity - costBasis;
+    return { closedLots, partialLot, realizedPl };
+  });
+}
+
+/**
+ * Zaznamená zadaný limitní prodej („čeká na odklepnutí“) – jen poznámka
+ * na otevřených pozicích aktiva, ať se v tabulce zobrazí badge.
+ * Finanční data se nezmění.
+ */
+export async function setLimitSellNote(
+  itemId: number,
+  quality: number,
+  limitPrice: number
+): Promise<void> {
+  const db = getDb();
+  await db`
+    update positions
+    set note = ${`limit ${limitPrice.toFixed(3)} $`}
+    where item_id = ${itemId} and quality = ${quality} and closed_at is null
+  `;
+}
+
+/**
  * Držby portfolia = otevřené pozice agregované na (item_id, quality).
  * Průměrná cena = vážený průměr nákupů; P/L z poslední ceny price_history.
  * Pozice bez dostupné ceny (prázdná price_history) mají P/L null.
@@ -501,7 +631,8 @@ export async function getPortfolioHoldings(
            latest.price                         as current_price,
            count(p.id)::int                     as position_count,
            min(p.opened_at)                     as first_opened_at,
-           max(p.opened_at)                     as last_bought_at
+           max(p.opened_at)                     as last_bought_at,
+           (array_agg(p.note) filter (where p.note like 'limit %'))[1] as limit_note
     from positions p
     join items i on i.id = p.item_id
     left join lateral (
@@ -528,6 +659,7 @@ export async function getPortfolioHoldings(
     position_count: number;
     first_opened_at: Date;
     last_bought_at: Date;
+    limit_note: string | null;
   }[];
 
   return rows.map((r) => {
@@ -553,6 +685,10 @@ export async function getPortfolioHoldings(
       position_count: Number(r.position_count),
       first_opened_at: iso(r.first_opened_at),
       last_bought_at: iso(r.last_bought_at),
+      limit_price:
+        r.limit_note !== null
+          ? Number(r.limit_note.replace("limit ", "").replace(" $", ""))
+          : null,
     };
   });
 }
