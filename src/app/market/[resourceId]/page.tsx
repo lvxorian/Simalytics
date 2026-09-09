@@ -11,6 +11,7 @@ import { getLatestVwaps } from "@/lib/data";
 import { StarButton } from "@/components/star-button";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { HeroLivePrice } from "@/components/live-price";
+import { OrderbookPanel } from "@/components/orderbook-panel";
 import { ItemIcon } from "@/components/item-icon";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -480,8 +481,11 @@ export default async function MarketItemPage({
         </CardContent>
       </Card>
 
-      {/* ── „Firemní profil“ suroviny – celá šířka pod grafem ── */}
-      <ItemProfile itemId={id} />
+      {/* ── Mini orderbook + „Firemní profil“ ────────────────── */}
+      <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
+        <OrderbookPanel itemId={id} />
+        <ItemProfile itemId={id} />
+      </div>
 
       {/* ── Statistiky období + live summary ─────────────────── */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

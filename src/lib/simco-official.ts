@@ -79,3 +79,23 @@ export async function getLowestAsk(
   const best = orders.reduce((a, b) => (b.price < a.price ? b : a));
   return { price: best.price, quantity: best.quantity };
 }
+
+/**
+ * Top N nejnižších nabídek (ask strana orderbooku) seřazené vzestupně –
+ * hloubka trhu na straně nákupu (Fáze 3C: mini orderbook).
+ */
+export async function getOrderbookAsks(
+  resourceId: number,
+  quality = 0,
+  topN = 5
+): Promise<{ price: number; quantity: number; npc: boolean }[]> {
+  const orders = await getOfficialOrders(resourceId, quality);
+  return orders
+    .sort((a, b) => a.price - b.price)
+    .slice(0, topN)
+    .map((o) => ({
+      price: o.price,
+      quantity: o.quantity,
+      npc: o.seller?.npc ?? false,
+    }));
+}

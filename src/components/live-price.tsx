@@ -113,12 +113,24 @@ export function HeroLivePrice({
             askFlash === "down" && "text-up", // ask dolů = levnější nákup (zeleně)
             !askFlash && "text-foreground"
           )}
-          title="Nejnižší aktivní nabídka na burze (orderbook) – za kolik lze koupit hned. Aktualizováno živě."
+          title="Nejnižší aktivní nabídka na burze (orderbook) – za kolik lze koupit hned. Liší se od posledního obchodu: nabídka je ještě nerealizovaná, obchod už ano."
         >
           <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
             ask
           </span>
           <span className="font-semibold tabular-nums">{formatPrice(ask)}</span>
+          {price != null && price > 0 && (
+            <span
+              className={cn(
+                "text-[10px] font-medium",
+                ask < price ? "text-up" : ask > price ? "text-down" : "text-muted-foreground"
+              )}
+              title="Spread asku proti poslednímu obchodu – záporný = koupíš levněji než poslední obchod"
+            >
+              ({ask < price ? "" : "+"}
+              {(((ask - price) / price) * 100).toFixed(1)} %)
+            </span>
+          )}
           {askMs !== null && (
             <span className="text-[10px] text-muted-foreground">
               · {formatRelativeAgeFromMs(askMs, nowMs)}

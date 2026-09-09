@@ -1,5 +1,6 @@
 import { getDb } from "@/lib/db";
 import { getFollowedSummaries, getMarketPrices } from "@/lib/simcotools";
+import { getLowestAsk } from "@/lib/simco-official";
 import {
   evaluateLiveAlerts,
   persistTicks,
@@ -35,6 +36,12 @@ const HUB_STEP_MS = 2_000; // střídavě A/B → každý endpoint dotazován 1�
 const PERSIST_INTERVAL_MS = 30_000;
 const EVAL_INTERVAL_MS = 10_000; // evaluace alertů i bez ticků (mrtvý trh)
 const MAX_SUBS = 50; // pojistka: nic nejsou spam-boti
+/**
+ * Orderbook hlídka (Fáze 3): položky s aktivními BUY alerty se pollují
+ * round-robin – 1 request / cyklus (2 s), limit ofiko API 1 req/s drží
+ * simco-official throttle. Při N položkách je ask čerstvý max ~2·N s.
+ */
+const ORDERBOOK_STEP_MS = 2_000;
 
 type Sub = (ev: {
   type: "tick" | "alert" | "stale";
@@ -54,6 +61,13 @@ type HubState = {
   lastPersistMs: number;
   /** Poslední evaluace alertů (i bez ticků běží podle EVAL_INTERVAL_MS). */
   lastEvalMs: number;
+  /** Nejnižší asky hlídaných položek (buy alert watch). */
+  askWatch: Map<number, number>;
+  askWatchIds: number[];
+  askWatchCursor: number;
+  lastOrderbookMs: number;
+  askWatchLoaded: boolean;
+  lastOrderbookStepMs: number;
   toggle: boolean;
   stale: boolean;
 };
@@ -73,6 +87,12 @@ function state(): HubState {
       trackedIds: null,
       lastPersistMs: 0,
       lastEvalMs: 0,
+      askWatch: new Map(),
+      askWatchIds: [],
+      askWatchCursor: 0,
+      lastOrderbookMs: 0,
+      askWatchLoaded: false,
+      lastOrderbookStepMs: 0,
       toggle: false,
       stale: false,
     };
@@ -164,7 +184,7 @@ async function hubStep(s: HubState) {
         const priceMap = new Map(
           [...s.latest.entries()].map(([id, t]) => [id, t.price])
         );
-        const alerts = await evaluateLiveAlerts(priceMap);
+        const alerts = await evaluateLiveAlerts(priceMap, s.askWatch);
         if (alerts.length > 0) publish({ type: "alert", alerts });
       } catch {
         // evaluace nesmí shodit smyčku
@@ -197,6 +217,48 @@ async function hubStep(s: HubState) {
   }
 }
 
+/**
+ * Orderbook hlídka (Fáze 3): načte seznam položek s aktivními BUY alerty
+ * ('price' + 'below') a round-robin polluje jejich nejnižší asky (1 request
+ * / cyklus). Výsledek jde do evaluace alertů (ask ≤ práh = nákupní
+ * příležitost i bez obchodu). Refresh seznamu max 1× / 60 s.
+ */
+async function orderbookStep(s: HubState) {
+  const now = Date.now();
+  if (s.askWatchIds.length === 0 || now - s.lastOrderbookMs >= 60_000) {
+    if (now - s.lastOrderbookMs >= 60_000 || !s.askWatchLoaded) {
+      try {
+        const db = getDb();
+        const rows = (await db`
+          select distinct item_id from alerts
+          where active = true and kind = 'price' and direction = 'below'
+        `) as unknown as { item_id: number }[];
+        s.askWatchIds = rows.map((r) => r.item_id);
+        s.askWatchCursor = 0;
+        s.askWatchLoaded = true;
+      } catch {
+        // DB nedostupná – zkusíme příště
+      }
+      s.lastOrderbookMs = now;
+    }
+  }
+  if (s.askWatchIds.length === 0) return;
+
+  const id = s.askWatchIds[s.askWatchCursor % s.askWatchIds.length];
+  s.askWatchCursor = (s.askWatchCursor + 1) % Math.max(1, s.askWatchIds.length);
+
+  try {
+    const ask = await getLowestAsk(id, 0);
+    if (ask && ask.price > 0) {
+      s.askWatch.set(id, ask.price);
+    } else {
+      s.askWatch.delete(id);
+    }
+  } catch {
+    // orderbook selhání – neblokuje smyčku
+  }
+}
+
 async function loop(s: HubState) {
   // Eager: seznam sledovaných položek nahrajeme hned (používá i větev B)
   await loadTrackedIds(s);
@@ -204,6 +266,11 @@ async function loop(s: HubState) {
   while (s.running) {
     if (s.subs.size > 0) {
       await hubStep(s);
+      // Orderbook hlídka – nezávislý krok (round-robin, 1 req)
+      if (Date.now() - s.lastOrderbookStepMs >= ORDERBOOK_STEP_MS) {
+        s.lastOrderbookStepMs = Date.now();
+        await orderbookStep(s);
+      }
       await new Promise((r) => setTimeout(r, HUB_STEP_MS));
     } else {
       // Žádní odběratelé – smyčka se vypne; první subscribe ji restartuje.

@@ -32,14 +32,25 @@ export type LiveTrigger = {
   threshold: number;
   price: number;
   image_url: string | null;
+  /** True = trigger přes AKTIVNÍ NABÍDKU (ask), ne přes poslední obchod. */
+  viaAsk?: boolean;
 };
 
 /**
  * Rychlá evaluace cenových + limitních alertů proti čerstvým tickům.
+ *
+ * Ask-aware (Fáze 3): pro BUY podmínky (price 'below') se kromě posledního
+ * obchodu porovnává i NEJNIŽŠÍ AKTIVNÍ NABÍDKA (askByItem) – když někdo
+ * položí nabídku na úroveň prahu, alert spustí hned ("můžeš jít koupit"),
+ * nemusí čekat, až obchod proběhne (a někdo jiný příležitost sebere).
+ * Sell strana (limitní prodeje, 'above') zůstává na posledním obchodě –
+ * prodej se řídí bidem, který API nevidí.
+ *
  * Notifikace (webhook/e-mail) jde přes notifyAlert fire-and-forget.
  */
 export async function evaluateLiveAlerts(
-  priceByItem: Map<number, number>
+  priceByItem: Map<number, number>,
+  askByItem?: Map<number, number>
 ): Promise<LiveTrigger[]> {
   const triggered: LiveTrigger[] = [];
 
@@ -57,13 +68,30 @@ export async function evaluateLiveAlerts(
   for (const a of alerts) {
     const price = priceByItem.get(a.item_id);
     if (price === undefined || price <= 0) continue;
-    // limit_sell je vždy 'above'; price alert dle direction
-    const met =
-      a.kind === "limit_sell"
-        ? price >= a.threshold
-        : a.direction === "above"
-          ? price >= a.threshold
-          : price <= a.threshold;
+    const ask = askByItem?.get(a.item_id) ?? null;
+
+    // limit_sell je vždy 'above'; price alert dle direction.
+    // BUY podmínky ('below' price): trigger i přes ask – nabídka na úrovni
+    // prahu = příležitost k nákupu už existuje.
+    let met = false;
+    let viaAsk = false;
+    if (a.kind === "limit_sell") {
+      met = price >= a.threshold;
+    } else if (a.direction === "above") {
+      met = price >= a.threshold;
+    } else {
+      met = price <= a.threshold;
+      if (
+        !met &&
+        ask !== null &&
+        ask > 0 &&
+        ask <= a.threshold &&
+        ask < price
+      ) {
+        met = true;
+        viaAsk = true;
+      }
+    }
     if (!met) continue;
 
     // Cooldown guard – atomický update (anti-spam + anti-duplicita
@@ -84,11 +112,15 @@ export async function evaluateLiveAlerts(
     const title =
       a.kind === "limit_sell"
         ? `🏷️ Limitní prodej dosažen: ${a.item_name}`
-        : `💰 Cenový alert: ${a.item_name}`;
+        : viaAsk
+          ? `🛒 Nákupní příležitost: ${a.item_name}`
+          : `💰 Cenový alert: ${a.item_name}`;
     const body =
       a.kind === "limit_sell"
         ? `Limitní prodej ${a.item_name} Q${a.quality}: cena je teď ${formatPrice(price)} – dosáhla tvého limitu ${formatPrice(a.threshold)}. Prodáváš-li ve hře, odklepni to v portfoliu.`
-        : `Cena ${a.item_name} je teď ${formatPrice(price)} – ${a.direction === "above" ? "překročila" : "propadla pod"} práh ${formatPrice(a.threshold)}.`;
+        : viaAsk
+          ? `Na burze je aktivní nabídka ${a.item_name} Q${a.quality} za ${formatPrice(ask!)} – pod tvým prahem ${formatPrice(a.threshold)}. Poslední obchod ${formatPrice(price)}. Můžeš jít koupit.`
+          : `Cena ${a.item_name} je teď ${formatPrice(price)} – ${a.direction === "above" ? "překročila" : "propadla pod"} práh ${formatPrice(a.threshold)}.`;
 
     const notification: AlertNotification = {
       title,
@@ -109,8 +141,9 @@ export async function evaluateLiveAlerts(
       kind: a.kind,
       direction: a.direction,
       threshold: a.threshold,
-      price,
+      price: viaAsk ? ask! : price,
       image_url: a.image_url,
+      viaAsk,
     });
   }
 
