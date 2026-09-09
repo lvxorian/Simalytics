@@ -1,7 +1,8 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-/* Aplikace je dark-only – investiční tool: tlumená navy/ink paleta */
+/* Aplikace je dark-first – investiční tool: tlumená navy/ink paleta.
+   Light mode přepíná <html class="light"> (theme-toggle v hlavičce). */
 @custom-variant dark (&:is(.dark *));
 
 :root {
@@ -43,6 +44,48 @@
   --chart-3: #5b8def;
   --chart-4: #d4a72c;
   --chart-5: #9d7bde;
+}
+
+/* ── LIGHT MODE – papírově světlý „kancelářský" režim ────────────
+   Stejná sémantika (up/down/primary), jen invertovaná luminance:
+   světlé pozadí, tmavý text, stíny místo světel (inset highlight
+   dává smysl jen na tmavém skle). Tržní barvy trochu ztmaveny, ať
+   mají dostatečný kontrast na bílé. */
+.light {
+  --background: #f7f8fa;
+  --foreground: #171b26;
+
+  --card: #ffffff;
+  --card-foreground: #171b26;
+  --popover: #ffffff;
+  --popover-foreground: #171b26;
+
+  --primary: #3d6ad6;
+  --primary-foreground: #ffffff;
+
+  --secondary: #eef1f6;
+  --secondary-foreground: #171b26;
+  --muted: #f0f2f7;
+  --muted-foreground: #5c6577;
+  --accent: #e8ecf5;
+  --accent-foreground: #171b26;
+
+  --destructive: #d33b40;
+  --destructive-foreground: #ffffff;
+
+  --border: #dfe3ec;
+  --input: #dfe3ec;
+  --ring: #3d6ad6;
+
+  /* Tržní barvy: ztmavené verze dark palety pro kontrast na bílé */
+  --up: #12866f;
+  --down: #d63a4e;
+
+  --chart-1: #12866f;
+  --chart-2: #d63a4e;
+  --chart-3: #3d6ad6;
+  --chart-4: #a67c14;
+  --chart-5: #7c5cc4;
 }
 
 @theme inline {
@@ -92,6 +135,10 @@
     color-scheme: dark;
   }
 
+  html.light {
+    color-scheme: light;
+  }
+
   body {
     @apply bg-background text-foreground antialiased;
     font-variant-numeric: tabular-nums;
@@ -110,6 +157,13 @@
     radial-gradient(46rem 28rem at 85% -8%, rgb(34 171 148 / 0.04), transparent 60%);
 }
 
+/* Light mode: nádech jemnější, ale viditelný na bílé */
+html.light .bg-mesh {
+  background:
+    radial-gradient(52rem 30rem at 15% -10%, rgb(61 106 214 / 0.06), transparent 60%),
+    radial-gradient(46rem 28rem at 85% -8%, rgb(18 134 111 / 0.05), transparent 60%);
+}
+
 /* ── Ticker tape – skleněný gradientní pás ───────────────────── */
 .ticker-tape {
   background:
@@ -122,6 +176,13 @@
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.05),
     0 8px 24px -12px rgb(0 0 0 / 0.6);
+}
+
+/* Light mode: pás s jemným stínem dolů (místo světla nahoru) */
+html.light .ticker-tape {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    0 6px 18px -12px rgb(23 27 38 / 0.18);
 }
 
 /* Jemný duhový přeliv nahoře – „burzovní“ linka oddělující hlavičku */
@@ -154,6 +215,13 @@
     0 1px 2px rgb(0 0 0 / 0.35);
 }
 
+/* Light mode: dlaždice jen s jemným spodním stínem */
+html.light .ticker-tile {
+  background: var(--card);
+  box-shadow:
+    0 1px 2px rgb(23 27 38 / 0.08);
+}
+
 .ticker-tile:hover {
   background:
     linear-gradient(
@@ -165,6 +233,12 @@
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.09),
     0 6px 18px -6px rgb(0 0 0 / 0.55);
+}
+
+html.light .ticker-tile:hover {
+  background: var(--accent);
+  box-shadow:
+    0 4px 12px -4px rgb(23 27 38 / 0.18);
 }
 
 /* Barevné varianty dlaždic dle směru (tónované gradientní sklo) */
@@ -206,6 +280,17 @@
       color-mix(in oklab, var(--down) 5%, transparent) 100%
     ),
     var(--accent);
+}
+
+/* Light mode: tónování dlaždic dle směru funguje i světle (tokeny
+   --up/--down jsou ztmavené, takže tint zůstane čitelný) */
+html.light .ticker-tile-up,
+html.light .ticker-tile-up:hover,
+html.light .ticker-tile-down,
+html.light .ticker-tile-down:hover {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    0 1px 2px rgb(23 27 38 / 0.08);
 }
 
 @keyframes marquee {
@@ -254,6 +339,13 @@
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #2e3745;
+}
+
+html.light ::-webkit-scrollbar-thumb {
+  background: #c9d0dd;
+}
+html.light ::-webkit-scrollbar-thumb:hover {
+  background: #b3bccc;
 }
 
 .no-scrollbar {

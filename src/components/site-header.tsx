@@ -2,9 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, Bell, Radar } from "lucide-react";
+import { Activity, Radar } from "lucide-react";
 
 import { HeaderSearch } from "@/components/header-search";
+import {
+  AlertNotifications,
+  type HeaderAlert,
+} from "@/components/alert-notifications";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -16,7 +21,11 @@ const NAV = [
   { href: "/statistiky", label: "Statistiky" },
 ] as const;
 
-export function SiteHeader() {
+export function SiteHeader({
+  alerts,
+}: {
+  alerts: HeaderAlert[];
+}) {
   const pathname = usePathname();
 
   return (
@@ -62,6 +71,12 @@ export function SiteHeader() {
           </nav>
 
           <HeaderSearch />
+
+          {/* Zvonek – přehled nastavených alertů + přepínač režimu */}
+          <div className="ml-auto flex shrink-0 items-center gap-2 md:ml-0">
+            <AlertNotifications alerts={alerts} />
+            <ThemeToggle />
+          </div>
 
           <div className="hidden shrink-0 items-center gap-2 rounded-full border border-up/20 bg-up/5 px-3 py-1.5 font-mono text-[10px] font-medium tracking-wider text-up md:flex">
             <span className="relative flex size-1.5">
