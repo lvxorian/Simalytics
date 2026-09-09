@@ -9,6 +9,7 @@ import {
   createPortfolioHolding,
   deleteAlert,
   deletePortfolioHolding,
+  markAlertsSeen,
   openPosition,
   toggleAlert,
   toggleWatchlist,
@@ -157,6 +158,15 @@ export async function toggleAlertAction(id: string): Promise<boolean> {
   const active = await toggleAlert(id);
   revalidatePath("/alerts");
   return active;
+}
+
+/**
+ * Označí spuštěné alerty jako prohlédnuté (klik na zvonek).
+ * Revaliduje layout, aby badge v hlavičce zmizel hned.
+ */
+export async function markAlertsSeenAction(): Promise<void> {
+  await markAlertsSeen();
+  revalidatePath("/", "layout");
 }
 
 /** Smaže alert. */

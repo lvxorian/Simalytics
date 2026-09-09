@@ -819,6 +819,8 @@ export type AlertRow = {
   last_triggered_at: string | null;
   trigger_count: number;
   created_at: string;
+  /** Kdy uživatel trigger označil za prohlédnutý (zvonek → seen). */
+  seen_at: string | null;
 };
 
 export type AlertWithItem = AlertRow & {
@@ -839,6 +841,7 @@ type RawAlert = {
   last_triggered_at: Date | null;
   trigger_count: number;
   created_at: Date;
+  seen_at: Date | null;
 };
 
 function mapAlert(r: RawAlert): AlertRow {
@@ -854,6 +857,7 @@ function mapAlert(r: RawAlert): AlertRow {
     last_triggered_at: r.last_triggered_at === null ? null : iso(r.last_triggered_at),
     trigger_count: r.trigger_count,
     created_at: iso(r.created_at),
+    seen_at: r.seen_at === null || r.seen_at === undefined ? null : iso(r.seen_at),
   };
 }
 
@@ -995,7 +999,8 @@ export async function markAlertTriggered(
   const rows = (await db`
     update alerts
     set last_triggered_at = now(),
-        trigger_count = trigger_count + 1
+        trigger_count = trigger_count + 1,
+        seen_at = null
     where id = ${id}
       and (last_triggered_at is null
            or last_triggered_at < now() - ${cooldownMinutes} * interval '1 minute')
@@ -1003,6 +1008,23 @@ export async function markAlertTriggered(
   `) as unknown as { id: string }[];
 
   return rows.length > 0;
+}
+
+/**
+ * Označí spuštěné alerty jako prohlédnuté (zvonek v hlavičce → seen).
+ * Čistí seen_at jen u alertů s nastaveným last_triggered_at; badge pak
+ * zmizí, dokud se alert znovu nespustí (trigger seen_at resetuje).
+ */
+export async function markAlertsSeen(): Promise<number> {
+  const db = getDb();
+  const rows = (await db`
+    update alerts
+    set seen_at = now()
+    where last_triggered_at is not null
+      and seen_at is null
+    returning id
+  `) as unknown as { id: string }[];
+  return rows.length;
 }
 
 // ── KATALOG / POMOCNÉ DOTAZY ────────────────────────────────────────

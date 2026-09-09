@@ -61,6 +61,7 @@ export default async function RootLayout({
     threshold: a.threshold,
     active: a.active,
     last_triggered_at: a.last_triggered_at,
+    seen_at: a.seen_at,
     current_price: a.current_price,
   }));
 

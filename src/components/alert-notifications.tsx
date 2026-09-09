@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowDownRight,
@@ -11,6 +12,7 @@ import {
   Target,
 } from "lucide-react";
 
+import { markAlertsSeenAction } from "@/app/actions";
 import { ItemIcon } from "@/components/item-icon";
 import { formatDateTime, formatPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -25,6 +27,7 @@ export type HeaderAlert = {
   threshold: number;
   active: boolean;
   last_triggered_at: string | null;
+  seen_at: string | null;
   current_price: number | null;
 };
 
@@ -41,14 +44,60 @@ function conditionLabel(a: HeaderAlert): string {
 }
 
 /**
+ * Krátký upozorňovací tón (WebAudio, žádná externí závislost).
+ * Dva stoupající tóny – „ding“ jako v trading aplikacích.
+ * AudioContext se musí vytvořit až po gestu uživatele, proto ho
+ * líně initializujeme při prvním kliknutí kamkoliv na stránku.
+ */
+function playAlertTone() {
+  try {
+    const Ctx =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+
+    const beep = (freq: number, startAt: number, duration: number) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime + startAt);
+      gain.gain.exponentialRampToValueAtTime(
+        0.18,
+        ctx.currentTime + startAt + 0.02
+      );
+      gain.gain.exponentialRampToValueAtTime(
+        0.0001,
+        ctx.currentTime + startAt + duration
+      );
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(ctx.currentTime + startAt);
+      osc.stop(ctx.currentTime + startAt + duration + 0.05);
+    };
+
+    // E5 → A5: stoupavé „ding-ding“ = pozitivní upozornění
+    beep(659.25, 0, 0.18);
+    beep(880, 0.16, 0.28);
+
+    setTimeout(() => void ctx.close(), 800);
+  } catch {
+    // zvuk nesmí rozbít UI (autoplay politiky apod.)
+  }
+}
+
+/**
  * Zvonek v hlavičce – dropdown s přehledem nastavených alertů.
- * Data dostává hotová ze serveru (site-header je server component data
- * nemá, proto props z layoutu); poslední spuštění zvýrazní badge.
- * Klik mimo zavře, aktivní/pozastavené rozlišeny ikonou a průhledností.
+ * Badge = počet NESPAMATROVANÝCH spuštění (trigger novější než seen_at).
+ * Klik na zvonek označí vše jako seen → badge zmizí (trigger už je
+ * „doručený“). Nový trigger navíc přehraje zvukový tón (jednou per
+ * událost; Server Actions revalidují layout, takže props se aktualizují).
  */
 export function AlertNotifications({ alerts }: { alerts: HeaderAlert[] }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const router = useRouter();
 
   // klik mimo = zavřít (stejný vzor jako HeaderSearch)
   useEffect(() => {
@@ -59,21 +108,102 @@ export function AlertNotifications({ alerts }: { alerts: HeaderAlert[] }) {
     return () => document.removeEventListener("mousedown", onClick);
   }, []);
 
+  // Nové (nespamatrované) triggery – badge i zvuk
+  const unseen = alerts.filter((a) => {
+    if (a.last_triggered_at === null) return false;
+    if (a.seen_at === null) return true;
+    return (
+      new Date(a.last_triggered_at).getTime() >
+      new Date(a.seen_at).getTime()
+    );
+  });
+  const unseenCount = unseen.length;
+
+  // Ref na poslední známý „nový trigger“ – zvuk jen při změně na víc,
+  // ne při prvním renderu (aby reload stránky nezpůsobil falešný tón
+  // pro staré, už viděné stavy... ale právě když dorazí NOVÝ trigger,
+  // počet nespamatrovaných naroste a tón spustíme).
+  const prevUnseenRef = useRef<number | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
+  // Odemčení audia po prvním gestu uživatele (autoplay politika)
+  useEffect(() => {
+    const unlock = () => {
+      if (audioCtxRef.current) return;
+      try {
+        const Ctx =
+          window.AudioContext ??
+          (window as unknown as { webkitAudioContext?: typeof AudioContext })
+            .webkitAudioContext;
+        if (Ctx) {
+          const ctx = new Ctx();
+          void ctx.resume();
+          audioCtxRef.current = ctx;
+        }
+      } catch {
+        // bez audia se aplikace normálně používá dál
+      }
+    };
+    window.addEventListener("pointerdown", unlock, { once: true });
+    window.addEventListener("keydown", unlock, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, []);
+
+  useEffect(() => {
+    const prev = prevUnseenRef.current;
+    prevUnseenRef.current = unseenCount;
+
+    if (prev === null || unseenCount <= prev) return;
+    // Dorazil nový trigger → tón (jen pokud máme odemčené audio)
+    const ctx = audioCtxRef.current;
+    if (ctx) {
+      try {
+        const beep = (freq: number, startAt: number, duration: number) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = "sine";
+          osc.frequency.value = freq;
+          gain.gain.setValueAtTime(0.0001, ctx.currentTime + startAt);
+          gain.gain.exponentialRampToValueAtTime(
+            0.18,
+            ctx.currentTime + startAt + 0.02
+          );
+          gain.gain.exponentialRampToValueAtTime(
+            0.0001,
+            ctx.currentTime + startAt + duration
+          );
+          osc.connect(gain).connect(ctx.destination);
+          osc.start(ctx.currentTime + startAt);
+          osc.stop(ctx.currentTime + startAt + duration + 0.05);
+        };
+        beep(659.25, 0, 0.18);
+        beep(880, 0.16, 0.28);
+      } catch {
+        // tichý pokus – zvuk není kritický
+      }
+    }
+  }, [unseenCount]);
+
+  // Klik na zvonek = otevřít dropdown + označit vše jako seen
+  const handleBellClick = () => {
+    const wasClosed = !open;
+    setOpen((o) => !o);
+    if (wasClosed && unseenCount > 0) {
+      void markAlertsSeenAction().then(() => router.refresh());
+    }
+  };
+
   const activeCount = alerts.filter((a) => a.active).length;
-  // Badge = alerty spuštěné během posledních 24 h (poslední trigger)
-  const dayAgoMs = Date.now() - 24 * 60 * 60 * 1000;
-  const recentTriggers = alerts.filter(
-    (a) =>
-      a.last_triggered_at !== null &&
-      new Date(a.last_triggered_at).getTime() >= dayAgoMs
-  ).length;
 
   return (
     <div ref={rootRef} className="relative shrink-0">
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-label={`Alerty (${activeCount} aktivních)`}
+        onClick={handleBellClick}
+        aria-label={`Alerty (${activeCount} aktivních, ${unseenCount} nových)`}
         aria-expanded={open}
         title="Alerty"
         className={cn(
@@ -87,9 +217,9 @@ export function AlertNotifications({ alerts }: { alerts: HeaderAlert[] }) {
         ) : (
           <Bell className="size-4" />
         )}
-        {recentTriggers > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-up font-mono text-[9px] font-bold text-white">
-            {recentTriggers > 9 ? "9+" : recentTriggers}
+        {unseenCount > 0 && (
+          <span className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-primary font-mono text-[9px] font-bold text-white">
+            {unseenCount > 9 ? "9+" : unseenCount}
           </span>
         )}
       </button>
@@ -129,9 +259,11 @@ export function AlertNotifications({ alerts }: { alerts: HeaderAlert[] }) {
                   Math.abs(a.current_price - a.threshold) /
                     Math.max(a.threshold, 1e-9) <=
                     0.02;
-                const triggeredRecently =
+                const isUnseen =
                   a.last_triggered_at !== null &&
-                  new Date(a.last_triggered_at).getTime() >= dayAgoMs;
+                  (a.seen_at === null ||
+                    new Date(a.last_triggered_at).getTime() >
+                      new Date(a.seen_at).getTime());
                 return (
                   <li key={a.id}>
                     <Link
@@ -178,8 +310,14 @@ export function AlertNotifications({ alerts }: { alerts: HeaderAlert[] }) {
                         </div>
                       </div>
                       <div className="shrink-0 text-right">
-                        {triggeredRecently ? (
+                        {isUnseen ? (
                           <span className="inline-flex items-center gap-1 rounded-full border border-up/25 bg-up/10 px-1.5 py-0.5 text-[10px] font-medium text-up">
+                            nové
+                          </span>
+                        ) : a.last_triggered_at &&
+                          Date.now() - new Date(a.last_triggered_at).getTime() <
+                            24 * 60 * 60 * 1000 ? (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-secondary/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">
                             spuštěno
                           </span>
                         ) : near ? (

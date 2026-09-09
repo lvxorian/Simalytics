@@ -48,8 +48,10 @@ export function ChartContextMenu({
     createAlertAction,
     INITIAL
   );
+  // Hra počítá ceny s přesností 3 desetinná místa (343,355) – stejné
+  // kroky používá i formulář alertu i pozic.
   const [threshold, setThreshold] = useState<string>(
-    price != null ? price.toFixed(4) : ""
+    price != null ? price.toFixed(3) : ""
   );
   const boxRef = useRef<HTMLDivElement | null>(null);
 
@@ -144,6 +146,7 @@ export function ChartContextMenu({
               type="number"
               step="0.001"
               min="0"
+              max="999999.999"
               value={threshold}
               onChange={(e) => setThreshold(e.target.value)}
               required
