@@ -65,7 +65,7 @@ export function EditableAlertRule({
 
   if (!editing) {
     return (
-      <span className={cn("group inline-flex items-center gap-1", className)}>
+      <span className={cn("inline-flex items-center gap-1", className)}>
         <Badge variant="outline" className={badgeClasses}>
           {alertLabel(alert)}
         </Badge>
@@ -79,9 +79,9 @@ export function EditableAlertRule({
             setError(null);
             setEditing(true);
           }}
-          className="rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+          className="cursor-pointer rounded p-1 text-muted-foreground/80 transition-colors hover:bg-secondary hover:text-foreground"
         >
-          <Pencil className="size-3" />
+          <Pencil className="size-3.5" />
         </button>
       </span>
     );
