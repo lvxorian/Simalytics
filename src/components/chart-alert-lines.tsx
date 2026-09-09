@@ -24,6 +24,8 @@ export type AlertLineAlert = {
 
 type Props = {
   alerts: AlertLineAlert[];
+  /** Šířka cenové osy v px (chart.width()). Null = ještě není k dispozici. */
+  axisWidth: number | null;
   /** Převod ceny → Y pixel v containeru. */
   priceToY: (price: number) => number | null;
   /** Převod Y pixelu → cena. */
@@ -46,12 +48,13 @@ type DragState = {
 
 const LABEL_W = 84;
 const LABEL_H = 20;
-// Mezera mezi koncem linky/popisku a cenovou osou (osa je vpravo a
-// nesmí se překrývat – popisek proto končí PRED osou, ne nad ní).
-const PRICE_AXIS_GAP = 68;
+// Mezera mezi koncem linky/popisku a cenovou osou. Popisek končí PŘÍMO
+// na oddělovací čáře osy (žádná zvláštní mezera) – jen se přidá 1 px,
+// ať čára není překrytá a box na ni „nalepený“.
 
 export function ChartAlertLines({
   alerts,
+  axisWidth,
   priceToY,
   yToPrice,
   registerDraw,
@@ -80,6 +83,10 @@ export function ChartAlertLines({
     const canvas = canvasRef.current;
     const container = containerRef.current;
     if (!canvas || !container) return;
+    // Šířka cenové osy – popisek se má nalepit PŘÍMO na oddělovací čáru
+    // osy. Znám-li šířku osy (chart.width()), spočítám ji přesně;
+    // fallback = 62 px (typická šířka osy s cenami ~2,505).
+    const axisPx = axisWidth ?? 62;
     const rect = container.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
     if (
@@ -97,8 +104,8 @@ export function ChartAlertLines({
     // pozice koše – jen u tažené linky
     let trashXY: { x: number; y: number } | null = null;
 
-    /** Pravý okraj popisku – mezera před cenovou osou (nechat vidět osu). */
-    const labelX = (width: number) => width - LABEL_W - PRICE_AXIS_GAP;
+    /** Levý okraj popisku – box končí PŘÍMO na oddělovací čáře osy. */
+    const labelX = (width: number) => width - axisPx - LABEL_W - 1;
 
     for (const a of priceAlerts) {
       const y = priceToY(getThreshold(a));
@@ -165,7 +172,7 @@ export function ChartAlertLines({
         trash.style.display = "none";
       }
     }
-  }, [priceAlerts, priceToY, getThreshold]);
+  }, [priceAlerts, priceToY, getThreshold, axisWidth]);
 
   // aktuální draw pro registraci (zoom/pan rodiče) i lokální volání
   const drawRef = useRef(draw);

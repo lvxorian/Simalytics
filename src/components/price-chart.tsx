@@ -656,6 +656,10 @@ export function PriceChart({
   // Bump při pan/zoom – přepočítá pixelovou geometrii SVG overlayů
   // (pravítko); VP canvas se kreslí imperativně přes vpDrawRef
   const [vpEpoch, setVpEpoch] = useState(0);
+  // Šířka containeru grafu v px – pro výpočet šířky cenové osy (alert
+  // popisek se má nalepit přesně na oddělovací čáru osy). ResizeObserver
+  // ji aktualizuje i při fullscreen přepnutí.
+  const [containerWidth, setContainerWidth] = useState<number | null>(null);
   const vpDrawRef = useRef<() => void>(() => {});
   // Imperativní draw alert linek – registruje ChartAlertLines, volá
   // onRangeChange při zoom/pan (linka drží cenu, ne pixel)
@@ -956,10 +960,14 @@ export function PriceChart({
   ]);
 
   // Změna velikosti containeru (fullscreen, okno) – překreslit canvas
+  // a aktualizovat šířku pro výpočet cenové osy (alert popisky)
   useEffect(() => {
     const container = containerRef.current;
     if (!container || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(() => drawVp());
+    const ro = new ResizeObserver(() => {
+      setContainerWidth(container.getBoundingClientRect().width);
+      drawVp();
+    });
     ro.observe(container);
     return () => ro.disconnect();
   }, [drawVp]);
@@ -1302,6 +1310,12 @@ export function PriceChart({
           <ChartAlertLines
             alerts={alerts}
             epoch={vpEpoch}
+            axisWidth={
+              // Šířka cenové osy = celková šířka − šířka pane (bez os)
+              containerWidth != null && chartRef.current != null
+                ? containerWidth - chartRef.current.paneSize().width
+                : null
+            }
             priceToY={(p) => mainSeriesRef.current?.priceToCoordinate(p) ?? null}
             yToPrice={(y) =>
               mainSeriesRef.current?.coordinateToPrice(y) ?? null
