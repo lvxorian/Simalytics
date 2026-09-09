@@ -62,7 +62,7 @@ export default async function PortfolioPage({
 
   // Lots (jednotlivé nákupy) pro každé aktivum – paralelně
   const lotsPerAsset = await Promise.all(
-    holdings.map((h) => getPositionLots(h.item_id, h.quality).catch(() => []))
+    holdings.map((h) => getPositionLots(h.item_id).catch(() => []))
   );
   const assets: AssetRow[] = holdings.map((h, i) => ({
     ...h,
@@ -103,7 +103,7 @@ export default async function PortfolioPage({
   const slices: DonutSlice[] = assets
     .filter((h) => h.market_value !== null)
     .map((h) => ({
-      key: `${h.item_id}-${h.quality}`,
+      key: `${h.item_id}`,
       label: h.name,
       value: h.market_value ?? 0,
       href: `/market/${h.item_id}`,
@@ -272,7 +272,7 @@ export default async function PortfolioPage({
                     positions={assets.flatMap((a) =>
                       a.lots.map((lot) => ({
                         id: lot.id,
-                        label: `${a.name} (Q${a.quality}) – ${lot.quantity.toLocaleString("cs-CZ")} ks @ ${formatPrice(lot.buy_price)}`,
+                        label: `${a.name} – ${lot.quantity.toLocaleString("cs-CZ")} ks @ ${formatPrice(lot.buy_price)}`,
                       }))
                     )}
                   />
@@ -311,9 +311,6 @@ function ClosedRow({ p }: { p: PositionWithPnl }) {
           <span className="font-medium group-hover:text-primary">
             {p.item_name}
           </span>
-          <Badge variant="outline" className="font-mono text-[10px]">
-            Q{p.quality}
-          </Badge>
         </Link>
       </TableCell>
       <TableCell className="text-right font-mono tabular-nums">

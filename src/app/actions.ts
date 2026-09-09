@@ -185,7 +185,6 @@ export async function addToPortfolioAction(
 ): Promise<ActionState> {
   try {
     const item_id = Number(formData.get("item_id"));
-    const quality = Number(formData.get("quality") ?? 0);
     const quantity = Number(formData.get("quantity"));
     const buy_price = Number(formData.get("buy_price"));
     const note = String(formData.get("note") ?? "").trim() || null;
@@ -198,7 +197,14 @@ export async function addToPortfolioAction(
     if (!Number.isFinite(buy_price) || buy_price <= 0)
       return { ok: false, error: "Pořizovací cena musí být kladné číslo." };
 
-    await createPortfolioHolding({ item_id, quality, quantity, buy_price, note });
+    // Kvality se v portfoliu nerozlišují – pozice se zakládá s quality 0
+    await createPortfolioHolding({
+      item_id,
+      quality: 0,
+      quantity,
+      buy_price,
+      note,
+    });
 
     revalidatePath("/portfolio");
     if (revalidatePortfolio) revalidatePath(`/market/${item_id}`);
@@ -213,11 +219,10 @@ export async function addToPortfolioAction(
 
 /** Smaže držbu z portfolia (všechny otevřené pozice dané položky). */
 export async function deletePortfolioHoldingAction(
-  itemId: number,
-  quality: number
+  itemId: number
 ): Promise<void> {
-  await deletePortfolioHolding(itemId, quality);
-  await deleteLimitSellAlert(itemId, quality);
+  await deletePortfolioHolding(itemId);
+  await deleteLimitSellAlert(itemId);
   revalidatePath("/portfolio");
 }
 
@@ -227,7 +232,6 @@ export async function deletePortfolioHoldingAction(
  */
 export async function sellPortfolioAssetAction(input: {
   itemId: number;
-  quality: number;
   quantity: number;
   sellPrice: number;
 }): Promise<{ ok: boolean; error?: string; realizedPl?: number }> {
@@ -235,7 +239,7 @@ export async function sellPortfolioAssetAction(input: {
     const res = await sellPortfolioAsset(input);
     // Hlídka limitu už není potřeba – prodej je odklepnutý (ať to byl
     // celý aktivum, nebo jen část).
-    await deleteLimitSellAlert(input.itemId, input.quality);
+    await deleteLimitSellAlert(input.itemId);
     revalidatePath("/portfolio");
     revalidatePath("/");
     return { ok: true, realizedPl: res.realizedPl };
@@ -255,14 +259,13 @@ export async function sellPortfolioAssetAction(input: {
  */
 export async function setLimitSellAction(input: {
   itemId: number;
-  quality: number;
   limitPrice: number;
 }): Promise<{ ok: boolean; error?: string }> {
   try {
     if (!Number.isFinite(input.limitPrice) || input.limitPrice <= 0)
       return { ok: false, error: "Limitní cena musí být kladné číslo." };
-    await setLimitSellNote(input.itemId, input.quality, input.limitPrice);
-    await upsertLimitSellAlert(input.itemId, input.quality, input.limitPrice);
+    await setLimitSellNote(input.itemId, input.limitPrice);
+    await upsertLimitSellAlert(input.itemId, input.limitPrice);
     revalidatePath("/portfolio");
     revalidatePath("/alerts");
     return { ok: true };

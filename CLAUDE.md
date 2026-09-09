@@ -51,10 +51,11 @@ src/app/
   positions/               # pozice + P/L + condition logging (držba z portfolio
                            # page se ukládá jako otevřená pozice do positions)
   watchlist/               # karty se sparklinami
-  portfolio/               # aktiva = agregace otevřených pozic (per item+quality;
-                           # víc nákupů = 1 aktivum s váženým průměrem); koláč alokace,
-                           # vývoj hodnoty v čase, P/L, editace nákupů (lots) tužkou,
-                           # prodej (FIFO odklepnutí) + limitní prodej = alert kind
+  portfolio/               # aktiva = agregace otevřených pozic na POLOŽKU
+                           # (kvality se nerozlišují; víc nákupů = 1 aktivum
+                           # s váženým průměrem); koláč alokace, vývoj hodnoty
+                           # v čase, P/L, editace nákupů (lots) tužkou, prodej
+                           # (FIFO odklepnutí) + limitní prodej = alert kind
                            # 'limit_sell' (poller notifikuje při dosažení limitu)
   skener/                  # Signal Engine skener příležitostí (BUY/SELL skóre)
   alerts/                  # přehled alertů + stav notifikačních kanálů
@@ -150,10 +151,13 @@ src/components/            # vizní komponenty (viz níže)
   cenu. Jen pro `mode === "area"` – u svíček stačí crosshair label na ose.
 - **Alerty z grafu**: pravé tlačítko do grafu (`onContextMenu` v
   `price-chart.tsx`) → kontextové menu (`chart-context-menu.tsx`) s
-  „Nastavit alert“ – cena předvyplněná z místa kliknutí (snap na OHLC).
-  Cenové alerty se navíc kreslí do grafu jako přetahovací linky
-  (`chart-alert-lines.tsx`, à la TV): drag mění práh přes
-  `updateAlertThresholdAction`, koš maže. Alerty jedné komodity pak
+  „Nastavit alert“ – cena předvyplněná z místa kliknutí (snap na OHLC,
+  3 desetinná místa). Cenové alerty se navíc kreslí do grafu jako
+  přetahovací linky (`chart-alert-lines.tsx`, à la TV): drag mění práh
+  přes `updateAlertThresholdAction`, koš maže; popisek končí PŘÍMO na
+  oddělovací čáře cenové osy (šířka osy = container − paneSize().width).
+  Limitní prodeje z portfolia se do grafu Nekreslí (jen zvonek, /alerts).
+  Alerty jedné komodity pak
   leží v tabulce pod grafem (`item-alerts-table.tsx`, data
   `getAlertsForItem`) – přepínač aktivní/vypnutý + mazání; celkový
   přehled zůstává na /alerts. Pravé tlačítko nesmí spustit drag
@@ -188,14 +192,17 @@ src/components/            # vizní komponenty (viz níže)
   Denní svíčky pro obrat se u intraday TF dotahují zvlášť
   (`getDailyCandles`).
 - **Portfolio** (`app/portfolio`, `lib/data.ts`): aktivum = otevřené pozice
-  agregované na (item, quality) – víc nákupů (lots) tvoří JEDNO aktivum
-  s váženým průměrem; Q0 a Q1 jsou dvě aktiva. Uložení: dialog
-  „Přidat do portfolia“ z market page (action `addToPortfolioAction`).
-  Editace: tužka v tabulce → `PortfolioEditLotsDialog` upraví množství/
-  cenu per lot (`updatePortfolioLotsAction`). `getPortfolioHoldings()`
-  agreguje, `getPositionLots()` vrací nákupy aktiva,
+  agregované na POLOŽKU (kvality se NEROZLIŠUJÍ – Q0 i Q1 je jedno aktivum;
+  aktuální cena = tick kvality 0, prodej i limit běží FIFO přes všechny
+  nákupy). Uložení: dialog „Přidat do portfolia“ z market page (action
+  `addToPortfolioAction`, nové pozice s quality 0). Editace: tužka v
+  tabulce → `PortfolioEditLotsDialog` upraví množství/cenu per lot
+  (`updatePortfolioLotsAction`). `getPortfolioHoldings()` agreguje,
+  `getPositionLots(itemId)` vrací nákupy aktiva,
   `getPortfolioValueHistory()` rekonstruuje denní hodnotu (kumulativní
   množství k dni × close z market_candles_daily, fallback ticky).
+  Limitní prodej: `upsertLimitSellAlert`/`deleteLimitSellAlert` udržují
+  hlídku alerts kind='limit_sell' (poller notifikuje při dosažení limitu).
   Terminologie v UI: „aktivum/aktiva“ (ne držba), nákup = „lot“.
 - **Fáze ekonomiky**: dle hry `recession` = „Recese 📉", `normal` =
   „Stabilní ⚖️", `boom` = „Růst 📈" (PHASE_LABELS v statistiky/page.tsx).

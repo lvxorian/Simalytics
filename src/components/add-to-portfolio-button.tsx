@@ -20,18 +20,9 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { formatPrice } from "@/lib/format";
 
 const INITIAL: ActionState = { ok: false };
-
-const QUALITIES = ["0", "1", "2", "3", "4", "5", "6", "7"] as const;
 
 /**
  * Tlačítko „Přidat do portfolia“ – dialog s množstvím, kvalitou a
@@ -76,7 +67,8 @@ export function AddToPortfolioButton({
         <DialogHeader>
           <DialogTitle>Přidat do portfolia</DialogTitle>
           <DialogDescription>
-            Zaznamenej, kolik kusů vlastníš a za jakou pořizovací cenu. Držba
+            Zaznamenej, kolik kusů vlastníš a za jakou pořizovací cenu.
+            Kvality se nerozlišují – eviduje se celkový počet kusů. Držba
             se objeví v Portfoliu i mezi pozicemi.
           </DialogDescription>
         </DialogHeader>
@@ -85,36 +77,18 @@ export function AddToPortfolioButton({
           <input type="hidden" name="item_id" value={itemId} />
           <input type="hidden" name="revalidate_portfolio" value="1" />
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="pf-quantity">Množství (ks)</Label>
-              <Input
-                id="pf-quantity"
-                name="quantity"
-                type="number"
-                min={1}
-                step={1}
-                placeholder="např. 500"
-                required
-                autoFocus
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="pf-quality">Kvalita</Label>
-              <Select name="quality" defaultValue="0">
-                <SelectTrigger id="pf-quality" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {QUALITIES.map((q) => (
-                    <SelectItem key={q} value={q}>
-                      Q{q}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="pf-quantity">Množství (ks)</Label>
+            <Input
+              id="pf-quantity"
+              name="quantity"
+              type="number"
+              min={1}
+              step={1}
+              placeholder="např. 500"
+              required
+              autoFocus
+            />
           </div>
 
           <div className="space-y-2">

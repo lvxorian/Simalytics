@@ -35,19 +35,16 @@ type Draft = {
 
 /**
  * Dialog „Upravit aktivum“ – rozbalí držbu na jednotlivé nákupy (lots),
- * kde jde upravit množství i pořizovací cena, a lot smazat. Když mají
- * obě kvality stejnou tržní cenu, edituje se každá zvlášť (držba je
- * per item+quality) – pole kvality se měnit nedá (nový nákup = jiné
- * aktivum, přes „Přidat držbu“).
+ * kde jde upravit množství i pořizovací cena, a lot smazat. Držba je
+ * per položka (kvality se nerozlišují) – loty všech kvalit tvoří
+ * společný průměr.
  */
 export function PortfolioEditLotsDialog({
   holdingLabel,
-  qualityLabel,
   lots,
   trigger,
 }: {
   holdingLabel: string;
-  qualityLabel: string;
   lots: EditableLot[];
   trigger?: React.ReactNode;
 }) {
@@ -139,7 +136,7 @@ export function PortfolioEditLotsDialog({
         <DialogHeader>
           <DialogTitle>Upravit aktivum – {holdingLabel}</DialogTitle>
           <DialogDescription>
-            {qualityLabel} · {lots.length}{" "}
+            {lots.length}{" "}
             {lots.length === 1 ? "nákup" : lots.length < 5 ? "nákupy" : "nákupů"}{" "}
             v tomto aktivu. Uprav množství či pořizovací cenu každého nákupu,
             nebo konkrétní nákup smaž.

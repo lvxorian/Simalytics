@@ -39,6 +39,16 @@ UI v češtině. Produkce: simalytics.vercel.app (Vercel, deploy z main).
   realm 0 = Magnates). Spec: api.simcotools.com/docs/simcotools.yaml.
 - SimCompanies API: jen GET, 1 req/5 s (GitHub Actions 15 min).
 
+## Portfolio (sem se píš i nové funkce)
+
+- Aktivum = otevřené pozice agregované na POLOŽKU – kvality se
+  NEROZLIŠUJÍ (Q0 i Q1 = jedno aktivum, aktuální cena z ticku Q0).
+  Neskoušet zpět per-quality agregaci – uživatel to explicitně zrušil.
+- Prodej = FIFO odklepnutí (`sellPortfolioAsset`), limitní prodej =
+  hlídka alerts kind='limit_sell' (poller notifikuje, zvonek + tón).
+- Interaktivita koláče alokace: hover resetuje i `onMouseLeave` na
+  legendě i segmentech (jinak zůstává zvýraznění viset).
+
 ## Git
 
 - Commit messages v češtině, footer „🤖 Generated with Codebuff /

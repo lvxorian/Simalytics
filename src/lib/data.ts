@@ -354,15 +354,14 @@ export type EditableLot = {
 
 export type PortfolioHolding = {
   item_id: number;
-  quality: number;
   name: string;
   db_letter: string | null;
   image_url: string | null;
-  /** Celkem ks napříč pozicemi. */
+  /** Celkem ks napříč pozicemi (všechny kvality dohromady). */
   quantity: number;
-  /** Průměrná pořizovací cena (weighted avg). */
+  /** Průměrná pořizovací cena (weighted avg napříč kvalitami). */
   avg_buy_price: number;
-  /** Poslední tržní cena dané kvality. */
+  /** Poslední tržní cena položky (tick kvality 0). */
   current_price: number | null;
   /** Investováno = avg_buy_price × quantity. */
   invested: number;
@@ -405,32 +404,29 @@ export async function createPortfolioHolding(input: {
 }
 
 /**
- * Smaže držbu z portfolia – odstraní otevřené pozice dané položky a kvality.
- * (Hlídka limitního prodeje se čistí v server akci – viz actions.ts.)
+ * Smaže držbu z portfolia – odstraní otevřené pozice položky (všechny
+ * kvality). Hlídka limitního prodeje se čistí v server akci (actions.ts).
  */
-export async function deletePortfolioHolding(
-  itemId: number,
-  quality: number
-): Promise<void> {
+export async function deletePortfolioHolding(itemId: number): Promise<void> {
   const db = getDb();
   await db`
     delete from positions
-    where item_id = ${itemId} and quality = ${quality} and closed_at is null
+    where item_id = ${itemId} and closed_at is null
   `;
 }
 
 /**
- * Jednotlivé nákupy (lots) jedné držby – pro dialog úpravy aktiva.
+ * Jednotlivé nákupy (lots) aktiva jedné položky – pro dialog úpravy.
+ * Sbírá otevřené pozice VŠECHNYCH kvalit (portfolio neeviduje kvality).
  */
 export async function getPositionLots(
-  itemId: number,
-  quality: number
+  itemId: number
 ): Promise<EditableLot[]> {
   const db = getDb();
   const rows = (await db`
     select id, quantity, buy_price, opened_at
     from positions
-    where item_id = ${itemId} and quality = ${quality} and closed_at is null
+    where item_id = ${itemId} and closed_at is null
     order by opened_at asc
   `) as unknown as {
     id: string;
@@ -498,7 +494,6 @@ export async function deletePositionLot(positionId: string): Promise<void> {
  */
 export async function sellPortfolioAsset(input: {
   itemId: number;
-  quality: number;
   quantity: number;
   sellPrice: number;
 }): Promise<{ closedLots: number; partialLot: boolean; realizedPl: number }> {
@@ -514,7 +509,7 @@ export async function sellPortfolioAsset(input: {
   const available = (await db`
     select coalesce(sum(quantity), 0)::int as qty
     from positions
-    where item_id = ${input.itemId} and quality = ${input.quality}
+    where item_id = ${input.itemId}
       and closed_at is null
   `) as unknown as { qty: number }[];
 
@@ -526,11 +521,11 @@ export async function sellPortfolioAsset(input: {
   }
 
   return db.begin(async (sql) => {
-    // lots od nejstaršího (FIFO)
+    // lots od nejstaršího (FIFO) – napříč všemi kvalitami
     const lots = (await sql`
       select id, quantity, buy_price
       from positions
-      where item_id = ${input.itemId} and quality = ${input.quality}
+      where item_id = ${input.itemId}
         and closed_at is null
       order by opened_at asc
       for update
@@ -572,7 +567,7 @@ export async function sellPortfolioAsset(input: {
           insert into positions
             (item_id, quality, quantity, buy_price, sell_price, opened_at, closed_at)
           values
-            (${input.itemId}, ${input.quality}, ${take}, ${buyPrice},
+            (${input.itemId}, (select quality from positions where id = ${lot.id}), ${take}, ${buyPrice},
              ${input.sellPrice}, (select opened_at from positions where id = ${lot.id}), now())
           returning id
         `) as unknown as { id: string }[];
@@ -595,35 +590,32 @@ export async function sellPortfolioAsset(input: {
 
 /**
  * Zaznamená zadaný limitní prodej („čeká na odklepnutí“) – jen poznámka
- * na otevřených pozicích aktiva, ať se v tabulce zobrazí badge.
- * Finanční data se nezmění.
+ * na otevřených pozicích položky (všechny kvality), ať se v tabulce
+ * zobrazí badge. Finanční data se nezmění.
  */
 export async function setLimitSellNote(
   itemId: number,
-  quality: number,
   limitPrice: number
 ): Promise<void> {
   const db = getDb();
   await db`
     update positions
     set note = ${`limit ${limitPrice.toFixed(3)} $`}
-    where item_id = ${itemId} and quality = ${quality} and closed_at is null
+    where item_id = ${itemId} and closed_at is null
   `;
 }
 
 /**
- * Držby portfolia = otevřené pozice agregované na (item_id, quality).
- * Průměrná cena = vážený průměr nákupů; P/L z poslední ceny price_history.
- * Pozice bez dostupné ceny (prázdná price_history) mají P/L null.
+ * Držby portfolia = otevřené pozice agregované na POLOŽKU (bez rozlišení
+ * kvalit) – evidujeme kompletní počet ks napříč Q0/Q1/…, průměrná cena
+ * je vážený průměr přes všechny nákupy, aktuální cena = poslední tick
+ * kvality 0 (tržní cena položky). Pozice bez dostupné ceny mají P/L null.
  */
-export async function getPortfolioHoldings(
-  quality?: number
-): Promise<PortfolioHolding[]> {
+export async function getPortfolioHoldings(): Promise<PortfolioHolding[]> {
   const db = getDb();
 
   const rows = (await db`
     select p.item_id,
-           p.quality,
            i.name,
            i.db_letter,
            i.image_url,
@@ -639,18 +631,16 @@ export async function getPortfolioHoldings(
     left join lateral (
       select price
       from price_history ph
-      where ph.item_id = p.item_id and ph.quality = p.quality
+      where ph.item_id = p.item_id and ph.quality = 0
       order by ph.recorded_at desc
       limit 1
     ) latest on true
     where p.closed_at is null
-      ${quality === undefined ? db`` : db`and p.quality = ${quality}`}
-    group by p.item_id, p.quality, i.name, i.db_letter, i.image_url, latest.price
+    group by p.item_id, i.name, i.db_letter, i.image_url, latest.price
     order by (sum(p.buy_price * p.quantity)) desc
     limit 500
   `) as unknown as {
     item_id: number;
-    quality: number;
     name: string;
     db_letter: string | null;
     image_url: string | null;
@@ -671,7 +661,6 @@ export async function getPortfolioHoldings(
 
     return {
       item_id: r.item_id,
-      quality: r.quality,
       name: r.name,
       db_letter: r.db_letter,
       image_url: r.image_url,
@@ -1153,13 +1142,13 @@ export async function getActiveAlerts(): Promise<AlertRow[]> {
 }
 
 /**
- * Hlídka limitního prodeje – jeden alert kind='limit_sell' na aktivum
- * (item, quality). Zadání nového limitu (nebo změna) přepíše práh;
- * po odklepnutí prodeje / smazání aktiva se hlídka odstraní.
+ * Hlídka limitního prodeje – jeden alert kind='limit_sell' na položku
+ * (quality 0, portfolio neeviduje kvality). Zadání nového limitu (nebo
+ * změna) přepíše práh; po odklepnutí prodeje / smazání aktiva se hlídka
+ * odstraní.
  */
 export async function upsertLimitSellAlert(
   itemId: number,
-  quality: number,
   limitPrice: number
 ): Promise<void> {
   const db = getDb();
@@ -1167,7 +1156,7 @@ export async function upsertLimitSellAlert(
     insert into alerts
       (item_id, quality, kind, direction, threshold, note)
     values
-      (${itemId}, ${quality}, 'limit_sell', 'above', ${limitPrice},
+      (${itemId}, 0, 'limit_sell', 'above', ${limitPrice},
        'Limitní prodej z portfolia')
     on conflict (item_id, quality, kind) do update
       set threshold = ${limitPrice},
@@ -1178,14 +1167,11 @@ export async function upsertLimitSellAlert(
 }
 
 /** Odstraní hlídku limitního prodeje aktiva (po odklepnutí/smazání). */
-export async function deleteLimitSellAlert(
-  itemId: number,
-  quality: number
-): Promise<void> {
+export async function deleteLimitSellAlert(itemId: number): Promise<void> {
   const db = getDb();
   await db`
     delete from alerts
-    where item_id = ${itemId} and quality = ${quality} and kind = 'limit_sell'
+    where item_id = ${itemId} and kind = 'limit_sell'
   `;
 }
 

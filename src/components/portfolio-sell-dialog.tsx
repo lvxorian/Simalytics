@@ -37,7 +37,6 @@ import { cn } from "@/lib/utils";
  */
 export function PortfolioSellDialog({
   itemId,
-  quality,
   itemName,
   quantity,
   avgBuyPrice,
@@ -46,7 +45,6 @@ export function PortfolioSellDialog({
   trigger,
 }: {
   itemId: number;
-  quality: number;
   itemName: string;
   quantity: number;
   avgBuyPrice: number;
@@ -115,7 +113,6 @@ export function PortfolioSellDialog({
     setPending(true);
     const res = await sellPortfolioAssetAction({
       itemId,
-      quality,
       quantity: qtyNum,
       sellPrice: priceNum,
     });
@@ -139,7 +136,6 @@ export function PortfolioSellDialog({
     setPending(true);
     const res = await setLimitSellAction({
       itemId,
-      quality,
       limitPrice: priceNum,
     });
     setPending(false);
@@ -156,9 +152,7 @@ export function PortfolioSellDialog({
       {trigger}
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>
-            Prodat – {itemName} <span className="font-mono text-xs">Q{quality}</span>
-          </DialogTitle>
+          <DialogTitle>Prodat – {itemName}</DialogTitle>
           <DialogDescription>
             Na burze ve hře prodané kusy tu jen odklepni – lots se uzavřou a
             profit se započte do historie.
