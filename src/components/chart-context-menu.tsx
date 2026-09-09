@@ -142,7 +142,7 @@ export function ChartContextMenu({
               id="ctx-alert-threshold"
               name="threshold"
               type="number"
-              step="0.0001"
+              step="0.001"
               min="0"
               value={threshold}
               onChange={(e) => setThreshold(e.target.value)}

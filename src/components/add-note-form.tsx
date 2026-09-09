@@ -64,8 +64,8 @@ export function AddNoteForm({
           <Input
             name="market_price_at_log"
             type="number"
-            min={0.01}
-            step={0.01}
+            min={0.001}
+            step={0.001}
             placeholder="volitelné"
           />
         </div>
