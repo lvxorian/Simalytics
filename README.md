@@ -24,7 +24,6 @@ Next.js (server components)
 ├─ /                Trh: KPI, top gainers/losers, fulltext, řazení (live ceny)
 ├─ /watchlist       Sledované komodity (karty se sparklinami, live ceny)
 ├─ /market/[id]     Grafy 5m–1M, overlaye, live summary, hero ask + mini orderbook
-├─ /dom             DOM – hloubka trhu: aktivní nabídky celé burzy (objem, nejnižší nabídka)
 ├─ /positions       Pozice + P/L + condition logging
 ├─ /alerts          Cenové a signálové alerty (webhook/e-mail, live zvonek)
 ├─ /statistiky      Fáze ekonomiky, eventy, zakázky, makro, budovy, žebříček firem
@@ -54,8 +53,7 @@ src/
     data.ts               # všechny SQL dotazy
     simcotools.ts         # klient api.simcotools.com
     simco-official.ts     # ofiko v3 orderbook (throttle 1 req/s)
-    price-hub.ts          # LIVE hub: smyčka 2 s, publish, evaluace, orderbook + DOM hlídka
-    dom.ts                # DOM index: market_offers (writer jen hub) + agregace pro /dom
+    price-hub.ts          # LIVE hub: smyčka 2 s, publish, evaluace, orderbook hlídka
     live-eval.ts          # sdílená evaluace alertů (ask-aware) + persist ticků
     live-prices.ts        # client store: SSE + REST fallback, useLiveTick
     candles.ts            # OHLC agregace + indikátory + mergeLiveTick
@@ -96,19 +94,7 @@ Lokální test: `npm run fetch:market`.
   bereme nejlevnější.
 - Oficiální pravidla: pouze GET, žádné automatizované akce. Backfill skript
   jede 1 request / 5 s, celkově jednou za 15 minut; live orderbook hlídka
-  1 request / 2 s (throttle v `simco-official.ts`); DOM sken navíc 4 položky
-  / 2 s kolo (celý trh ~2,5–3 min, stejné throttlování).
-
-## DOM – hloubka trhu (/dom)
-
-Trvalý index aktivních nabídek celé burzy: hub skenuje orderbooky (4
-položky / kolo, ~2,5–3 min celý trh) a ukládá je do `market_offers`
-(upgrade 007). Tabulka na /dom ukazuje per položku počet nabídek, celkový
-objem na burze, nejnižší nabídku a 24h objem obchodů; detail aktiva
-(market page) má mini orderbook s jmény prodávajících firem.
-Kontrakty mezi uživateli ani history obchodů API nikde nepublikuje
-(ofiko v3 i Simco Tools ověřeno) – DOM index je nejbližší „nahled do
-trhu", jaký lze z veřejných dat sestavit.
+  1 request / 2 s (throttle v `simco-official.ts`).
 
 ## Live ceny a alerty (Fáze 3)
 

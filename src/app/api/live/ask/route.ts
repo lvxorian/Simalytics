@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
 
 // Per-instance cache: klíč `${item}:${quality}` → { ask, asks, atMs }
 const CACHE_TTL_MS = 3_000;
-type AskEntry = { price: number; quantity: number; npc: boolean; sellerName?: string };
+type AskEntry = { price: number; quantity: number; npc: boolean };
 const cache = new Map<
   string,
   { ask: number | null; asks: AskEntry[]; atMs: number }
@@ -51,7 +51,7 @@ export async function GET(req: Request) {
   }
 
   try {
-    const asks = await getOrderbookAsks(item, quality, depth, true);
+    const asks = await getOrderbookAsks(item, quality, depth);
     const ask = asks.length > 0 ? asks[0].price : null;
     cache.set(key, { ask, asks, atMs: now });
     // Pojistka proti neomezenému růstu

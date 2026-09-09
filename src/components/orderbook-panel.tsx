@@ -8,8 +8,6 @@ type AskRow = {
   price: number;
   quantity: number;
   npc: boolean;
-  /** Jméno prodávající firmy (ofiko orderbook; chybí u NPC). */
-  sellerName?: string;
 };
 
 /**
@@ -83,13 +81,6 @@ export function OrderbookPanel({ itemId }: { itemId: number }) {
                     title="Nabídka od NPC – obvykle stabilní část trhu"
                   >
                     NPC
-                  </span>
-                ) : a.sellerName ? (
-                  <span
-                    className="max-w-[140px] truncate rounded border border-primary/30 bg-primary/10 px-1 text-[9px] uppercase tracking-wider text-primary"
-                    title={`Nabídka od hráče: ${a.sellerName}`}
-                  >
-                    {a.sellerName}
                   </span>
                 ) : (
                   <span

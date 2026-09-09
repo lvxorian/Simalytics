@@ -2,11 +2,6 @@ import { getDb } from "@/lib/db";
 import { getFollowedSummaries, getMarketPrices } from "@/lib/simcotools";
 import { getLowestAsk, getOrderbookAsks } from "@/lib/simco-official";
 import {
-  fetchDomOffers,
-  upsertDomOffers,
-  touchDomCovered,
-} from "@/lib/dom";
-import {
   evaluateLiveAlerts,
   persistTicks,
   type LiveTrigger,
@@ -42,8 +37,6 @@ export type HubAsk = {
   price: number;
   quantity: number;
   npc: boolean;
-  /** Jméno prodávající firmy (jen pro detail aktiva; NPC nemá). */
-  sellerName?: string;
 };
 
 const HUB_STEP_MS = 2_000; // střídavě A/B → každý endpoint dotazován 1× za 4 s
@@ -56,13 +49,6 @@ const MAX_SUBS = 50; // pojistka: nic nejsou spam-boti
  * simco-official throttle. Při N položkách je ask čerstvý max ~2·N s.
  */
 const ORDERBOOK_STEP_MS = 2_000;
-/**
- * DOM hlídka: počet položek skenovaných v jednom kole (uživatel: celý trh
- * ~1 min při 2s cyklu). 1 request na položku – throttle simco-official
- * (1,1 s) drží limit 1 req/s i při více krocích za sebou.
- */
-const DOM_ITEMS_PER_STEP = 4;
-const DOM_STEP_MS = 2_000; // každý cyklus smyčky
 
 type Sub = (ev: {
   type: "tick" | "alert" | "stale" | "orderbook";
@@ -110,10 +96,6 @@ type HubState = {
   lastOrderbookMs: number;
   askWatchLoaded: boolean;
   lastOrderbookStepMs: number;
-  // ── DOM hlídka (index aktivních nabídek celého trhu) ──────────────
-  /** DOM kolo právě běží? (fire-and-forget – nesmí se překrývat) */
-  domBusy: boolean;
-  lastDomStepMs: number;
   toggle: boolean;
   stale: boolean;
 };
@@ -145,8 +127,6 @@ function state(): HubState {
       lastOrderbookMs: 0,
       askWatchLoaded: false,
       lastOrderbookStepMs: 0,
-      domBusy: false,
-      lastDomStepMs: 0,
       toggle: false,
       stale: false,
     };
@@ -380,7 +360,7 @@ async function orderbookStep(s: HubState) {
     const id = ids[s.orderbookCursor % ids.length];
     s.orderbookCursor = (s.orderbookCursor + 1) % ids.length;
     try {
-      const asks = await getOrderbookAsks(id, 0, 5, true);
+      const asks = await getOrderbookAsks(id, 0, 5);
       const prev = s.orderbook.get(id);
       const next = asks.length > 0 ? asks : null;
       if (next === null) {
@@ -418,45 +398,6 @@ async function orderbookStep(s: HubState) {
   }
 }
 
-/**
- * DOM hlídka: skenuje 4 položky / kolo (celý trh ~1 min), round-robin
- * od nejstaršího pokrytí (items.dom_covered_at). Každý request = plný
- * orderbook (~96 nabídek) → upsert do market_offers. Jsme JEDINÝ writer;
- * /api/dom jen čte. Throttle simco-official drží 1 req/s.
- *
- * Requestů navíc: DOM krok = 4 req / 2 s → throttle je rozloží (1,1 s
- * odstup), hlavní smyčka pokračuje hned po jejich completutí (~4,4 s).
- */
-/**
- * DOM hlídka: skenuje 4 položky / kolo, vždy ty nejdéle neskenované
- * (items.dom_covered_at asc nulls first). Každý request = plný orderbook
- * (~96 nabídek) → upsert do market_offers. Jsme JEDINÝ writer; /api/dom
- * jen čte.
- */
-async function domStep(s: HubState) {
-  let batch: { id: number }[] = [];
-  try {
-    const db = getDb();
-    batch = (await db`
-      select id from items
-      order by dom_covered_at asc nulls first
-      limit ${DOM_ITEMS_PER_STEP}
-    `) as unknown as { id: number }[];
-  } catch {
-    return; // DB nedostupná – zkusíme příští kolo
-  }
-
-  for (const { id } of batch) {
-    try {
-      const offers = await fetchDomOffers(id, 0);
-      await upsertDomOffers(offers);
-      await touchDomCovered(id);
-    } catch {
-      // jedna položka nesmí shodit kolo (prázdný orderbook / upstream chyba)
-    }
-  }
-}
-
 async function loop(s: HubState) {
   // Eager: seznam sledovaných položek nahrajeme hned (používá i větev B)
   await loadTrackedIds(s);
@@ -468,15 +409,6 @@ async function loop(s: HubState) {
       if (Date.now() - s.lastOrderbookStepMs >= ORDERBOOK_STEP_MS) {
         s.lastOrderbookStepMs = Date.now();
         await orderbookStep(s);
-      }
-      // DOM hlídka – index aktivních nabídek celého trhu. FIRE-AND-FORGET:
-      // 4 throttlované requesty (~4,4 s) nesmí blokovat smyčku ticků.
-      if (!s.domBusy && Date.now() - s.lastDomStepMs >= DOM_STEP_MS) {
-        s.lastDomStepMs = Date.now();
-        s.domBusy = true;
-        void domStep(s).finally(() => {
-          s.domBusy = false;
-        });
       }
       await new Promise((r) => setTimeout(r, HUB_STEP_MS));
     } else {

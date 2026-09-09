@@ -34,16 +34,13 @@ Testy nejsou — ověření = `npm run typecheck` + `npm run build`.
 ```
 db/schema.sql              # items, price_history, positions, condition_log, watchlist
 # upgrades: 001_terminal (candles, watchlist), 002_signal_engine (vwap_daily, contests, cert_kinds),
-#           003_alerts (alerts s cooldownem), 005_alert_seen (seen_at), 006_limit_sell_alerts (kind 'limit_sell'),
-#           007_dom (market_offers, items.dom_covered_at – DOM index)
+#           003_alerts (alerts s cooldownem), 005_alert_seen (seen_at), 006_limit_sell_alerts (kind 'limit_sell')
 src/lib/
   metrics.ts               # likvidita (obchody/24h + obrat) a volatilita (annualizovaná σ log-výnosů) – karty na market page
   alerts.ts                # evaluace alertů (cena + skóre + limitní prodeje, cooldown) – 5min cron
   notifier.ts              # webhook (Discord/Slack) + e-mail přes Resend REST API
   price-hub.ts             # LIVE cenový hub (Fáze 3): smyčka 2 s (followed/prices střídavě),
-                           # detekce obchodů, evaluace alertů, orderbook hlídka buy alertů,
-                           # DOM hlídka (4 položky/kolo → market_offers)
-  dom.ts                   # DOM index: fetch/upsert nabídek (writer jen hub) + getDomRows
+                           # detekce obchodů, evaluace alertů, orderbook hlídka buy alertů
   live-eval.ts             # sdílená evaluace alertů (ask-aware) + persist ticků (hub i REST)
   live-prices.ts           # client store: SSE /api/live/stream + REST fallback;
                            # useLiveTick (stabilní reference), useLivePriceOverride
@@ -76,7 +73,6 @@ src/app/
   api/live/                # REST fallback živých cen (ticky + evaluace alertů, throttle 30 s)
   api/live/stream/         # SSE push (hello/tick/alert/stale + heartbeat 15 s, maxDuration 300)
   api/live/ask/            # orderbook položky (ask + top 5 nabídek, cache 3 s)
-  api/dom/                 # DOM index – agregované nabídky celého trhu (read-only)
   api/search/              # hledání instrumentů pro header
   actions.ts               # server actions (open/close position, notes, watchlist)
 src/components/            # vizní komponenty (viz níže)
@@ -212,14 +208,6 @@ src/components/            # vizní komponenty (viz níže)
     triggeruje i ASK ≤ práh (nabídka na úrovni = příležitost koupit hned,
     nemusí čekat na obchod). Sell strana zůstává na posledním obchodě
     (prodej se řídí bidem, který API nevidí).
-  - **DOM hlídka** (`domStep` + `lib/dom.ts`, upgrade 007): sken orderbooků
-    4 položky / kolo, vždy nejdéle neskenované (`items.dom_covered_at asc
-    nulls first`), FIRE-AND-FORGET (4 throttlované requesty ~4,4 s nesmí
-    blokovat smyčku ticků) → upsert do `market_offers` (offer_id = id
-    orderu ze hry, last_seen_at = stále visí; zmizelé řádky = koupil/stáhl).
-    Hub je JEDINÝ writer, `/api/dom` jen čte; DOM page (/dom) polluje
-    10 s (záměrně ne SSE – 151 řádků se řadí na clientu, 10 s stačí).
-    Celý trh projde za ~2,5–3 min (limit ofiko API 1 req/s).
   - **Cena vs. ask**: velká cena v hero = POSLEDNÍ OBCHOD (kanonická,
     konzistentní s grafem/VWAP/P/L); ask = za kolik lze koupit HNED
     (orderbook). Nezaměňovat – ask nemá historii a je křehký (1 prodávající).
