@@ -35,7 +35,8 @@ Testy nejsou — ověření = `npm run typecheck` + `npm run build`.
 db/schema.sql              # items, price_history, positions, condition_log, watchlist
 # upgrades: 001_terminal (candles, watchlist), 002_signal_engine (vwap_daily, contests, cert_kinds),
 #           003_alerts (alerts s cooldownem), 005_alert_seen (seen_at), 006_limit_sell_alerts (kind 'limit_sell'),
-#           008_alert_v2 (direction 'cross', one_shot)
+#           008_alert_v2 (direction 'cross', one_shot), 009_game_sync (game_imports,
+#           game_warehouse, positions.source)
 src/lib/
   metrics.ts               # likvidita (obchody/24h + obrat) a volatilita (annualizovaná σ log-výnosů) – karty na market page
   alerts.ts                # evaluace alertů (cena nad/pod/cross + skóre + limitní prodeje,
@@ -46,6 +47,8 @@ src/lib/
   live-eval.ts             # sdílená evaluace alertů (ask-aware) + persist ticků (hub i REST)
   live-prices.ts           # client store: SSE /api/live/stream + REST fallback;
                            # useLiveTick (stabilní reference), useLivePriceOverride
+  game-sync (v data.ts)    # reconcile skladu ze hry → portfolio (source='game',
+                           # FIFO, cena odhadnuta z posledního ticku; manuál nesahá)
   simco-official.ts        # ofiko v3 orderbook (throttle 1,1 s): nejnižší ask, top N nabídek
   alert-tone.ts            # sdílený zvuk alertů (WebAudio, unlock po prvním gestu)
 src/lib/
@@ -75,6 +78,8 @@ src/app/
   api/live/                # REST fallback živých cen (ticky + evaluace alertů, throttle 30 s)
   api/live/stream/         # SSE push (hello/tick/alert/stale + heartbeat 15 s, maxDuration 300)
   api/live/ask/            # orderbook položky (ask + top 5 nabídek, cache 3 s)
+  api/import/sync/         # import dat ze hry (userscript, Bearer GAME_SYNC_SECRET):
+                           # source 'warehouse' = snapshot skladu + reconcile portfolia
   api/search/              # hledání instrumentů pro header
   actions.ts               # server actions (open/close position, notes, watchlist)
 src/components/            # vizní komponenty (viz níže)
@@ -289,6 +294,21 @@ src/components/            # vizní komponenty (viz níže)
 - **Ofiko v3 API**: fetch jen přes `simco-official.ts` (serializovaný
   throttle 1,1 s). Nikdy nevolat přímo z komponent/rout – limity by
   spadly.
+- **Sync ze hry (userscript)**: `public/simalytics-sync.user.js`
+  hookuje fetch/XHR ve hře a posílá sklad na `/api/import/sync` (Bearer
+  GAME_SYNC_SECRET). HERNÍ SERVERY SE NEVOLAJÍ – skript jen čte odpovědi,
+  které prohlížeč stejně dostal. Zjištěný formát (reálný dump 2026-09-09):
+  sklad = GET `/api/v3/resources/{companyId}/` → pole šarží
+  `{ id, amount, quality, kind, cost: {workers, admin, material1..5, market} }`,
+  kde **kind = ID komodity** a **Σ cost.* / amount = skutečná pořizovací
+  cena/ks** (unit_cost). Cashflow = `/api/v2/companies/me/cashflow/recent/`
+  (category 'm' nákup se skutečnou cenou, 's' maloobchodní prodej, 'p'
+  produkce, 'g' mimořádné). Reconcile (`reconcileGameWarehouse`):
+  rozdíl sklad vs. otevřené pozice source='game' per (položka, kvalita) =
+  nový lot (buy_price = unit_cost ze hry) nebo FIFO prodej (sell_price
+  odhad z posledního ticku Q0); položka zmizelá ze skladu = prodej vše;
+  manuální pozice se NESAHAJÍ. Payloady se ukládají raw do `game_imports`
+  (audit), snapshot s unit_cost do `game_warehouse`.
 
 ## Externí API
 

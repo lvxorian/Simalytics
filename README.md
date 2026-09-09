@@ -204,6 +204,24 @@ Notifikace (volitelné, obě najednou):
 Migrace: `npm run db:upgrade` (tabulka `alerts` v db/upgrades/003_alerts.sql,
 směr `cross` + `one_shot` v db/upgrades/008_alert_v2.sql).
 
+## Sync ze hry (userscript)
+
+**Simalytics Sync** – Tampermonkey skript (`scripts/userscript/simalytics-sync.user.js`) čte data otevřené hry přímo v prohlížeči a synchronizuje je do portfolia. HERNÍ SERVERY SE NEVOLAJÍ ANI JEDNOU – skript jen čte odpovědi, které prohlížeč stejně dostal, takže odpovídá ofiko pravidlům API (jen GET, žádná automatizace vůči hře).
+
+**Co umí (v0.3):** sklad → portfolio s **reálnými pořizovacími cenami** ze hry (Σ cost šarže / ks), reconcile per (položka, kvalita), FIFO prodeje, kompletní prodej detekován ze zmizení položky. Raw importy auditované v `game_imports`.
+
+**Zjištěné herní endpointy** (reálný dump, neoficiální): sklad = `/api/v3/resources/{companyId}/` (šarže `{id, amount, quality, kind, cost}` — kind = ID komodity, Σcost/amount = pořizovací cena); cashflow = `/api/v2/companies/me/cashflow/recent/` (nákupy 'm' se skutečnou cenou, prodeje 's', produkce 'p').
+
+**Instalace:**
+1. Nainstaluj [Tampermonkey](https://www.tampermonkey.net/) a v něm skript `https://simalytics.vercel.app/simalytics-sync.user.js` (otevři URL → nabídne instalaci).
+2. Ve Vercelu nastav `GAME_SYNC_SECRET` (dlouhý náhodný řetězec) a redeploy.
+3. V Tampermonkey menu: nastav URL (https://simalytics.vercel.app) a token (= GAME_SYNC_SECRET).
+4. Otevři hru → sklad (Warehouse). Sync proběhne sám (debounce 3 s, dedupe 60 s); „Simalytics: debug dump“ v menu ukáže nasbíraná data.
+
+**Jak to funguje:** hook na `fetch`/XHR v kontextu hry → extrakce `{ id, quality, amount }` → POST `/api/import/sync` (Bearer GAME_SYNC_SECRET). Server porovná sklad s otevřenými pozicemi `source='game'`: sklad > pozice = nový lot (cena odhadnuta z posledního tržního ticku), sklad < pozice = FIFO prodej (cena odhadnuta). Manuální pozice nesahá.
+
+**Důležité:** cena u syncovaných pozic je zatím odhad z trhu – doladit jde editací lots v portfoliu. Skript je heuristický (hra nemá ofiko API dokumentaci) – „debug dump“ pomůže doladit parser, když formát herních odpovědí neodpovídá.
+
 ## Editace alertů
 
 - **Tužka** vedle badge podmínky (tabulka pod grafem i /alerts) – inline

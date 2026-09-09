@@ -1629,3 +1629,271 @@ export async function toggleWatchlist(
   await db`update items set track_ticks = true where id = ${itemId}`;
   return true;
 }
+
+// ── GAME SYNC (import dat ze hry přes userscript) ───────────────────
+
+export type GameSyncResult = {
+  warehouse_rows: number;
+  positions_created: number;
+  positions_closed: number;
+  positions_adjusted: number;
+};
+
+/**
+ * Šarže skladu ze hry (formát z reálného dumpu, upgrade 009):
+ * { kind = ID komodity, quality, amount, unit_cost = Σ cost.* / amount }.
+ * unit_cost je SKUTEČNÁ pořizovací cena šarže (pracovní + materiál +
+ * tržní nákup), ne odhad – díky ní má portfolio reálné buy_price.
+ */
+export type GameWarehouseEntry = {
+  item_id: number;
+  quality: number;
+  quantity: number;
+  unit_cost: number | null;
+};
+
+/** Uloží raw payload ze hry (audit / pozdější analýza cashflow). */
+export async function recordGameImport(
+  source: string,
+  payload: unknown
+): Promise<void> {
+  const db = getDb();
+  await db`
+    insert into game_imports (source, payload)
+    values (${source}, ${JSON.stringify(payload)}::jsonb)
+  `;
+}
+
+/**
+ * Reconcile skladu ze hry proti portfoliu.
+ *
+ * Model: sklad ze hry = pravda o MNOŽSTVÍ (a díky cost i o CENĚ).
+ * Otevřené pozice se source='game' se srovnají per (položka, kvalita):
+ * – sklad > pozice  → nový nákup (lot) s buy_price = unit_cost ze hry
+ *   (fallback: poslední tržní tick Q0),
+ * – sklad < pozice  → FIFO prodej v rámci dané kvality (částečný =
+ *   zmenšení lotu + dceřiná uzavřená pozice, jako sellPortfolioAsset),
+ *   sell_price = odhad z posledního ticku (kvalita 0).
+ * Manuální pozice (source='manual') se nesahají.
+ * Vše v transakci; snapshot s unit_cost se ukládá do game_warehouse.
+ */
+export async function reconcileGameWarehouse(
+  entries: GameWarehouseEntry[]
+): Promise<GameSyncResult> {
+  const db = getDb();
+
+  const known = new Set(
+    (await db`select id from items`).map((r) => r.id as number)
+  );
+
+  // 0) Agregace šarží na (položka, kvalita): suma ks + vážený průměr cost
+  type Agg = { quantity: number; costSum: number; costQty: number };
+  const agg = new Map<string, Agg>();
+  for (const e of entries) {
+    if (!known.has(e.item_id)) continue;
+    if (!Number.isFinite(e.quantity) || e.quantity < 0) continue;
+    const key = `${e.item_id}#${e.quality}`;
+    const cur = agg.get(key) ?? { quantity: 0, costSum: 0, costQty: 0 };
+    cur.quantity += e.quantity;
+    if (e.unit_cost !== null && e.unit_cost > 0) {
+      cur.costSum += e.unit_cost * e.quantity;
+      cur.costQty += e.quantity;
+    }
+    agg.set(key, cur);
+  }
+
+  const valid: GameWarehouseEntry[] = [...agg.entries()].map(
+    ([key, a]) => ({
+      item_id: Number(key.split("#")[0]),
+      quality: Number(key.split("#")[1]),
+      quantity: a.quantity,
+      unit_cost: a.costQty > 0 ? a.costSum / a.costQty : null,
+    })
+  );
+
+  // 1) Kompletní prodej: co bylo ve skladu dřív a teď chybí = prodáno vše
+  const previous = (await db`
+    select item_id, quality from game_warehouse where quantity > 0
+  `) as unknown as { item_id: number; quality: number }[];
+  const presentKeys = new Set(
+    valid.map((e) => `${e.item_id}#${e.quality}`)
+  );
+  for (const p of previous) {
+    const key = `${p.item_id}#${p.quality}`;
+    if (!presentKeys.has(key)) {
+      valid.push({
+        item_id: p.item_id,
+        quality: p.quality,
+        quantity: 0,
+        unit_cost: null,
+      });
+    }
+  }
+
+  let created = 0;
+  let closed = 0;
+  let adjusted = 0;
+
+  await db.begin(async (sql) => {
+    for (const entry of valid) {
+      // 1) snapshot skladu (per položka + kvalita, včetně unit_cost)
+      await sql`
+        insert into game_warehouse (item_id, quality, quantity, unit_cost)
+        values (${entry.item_id}, ${entry.quality}, ${Math.round(entry.quantity)},
+                ${entry.unit_cost})
+        on conflict (item_id, quality) do update
+          set quantity = excluded.quantity,
+              unit_cost = excluded.unit_cost,
+              updated_at = now()
+      `;
+
+      // 2) stav otevřených game pozic dané položky A kvality
+      const rows = (await sql`
+        select coalesce(sum(quantity), 0)::int as qty
+        from positions
+        where item_id = ${entry.item_id}
+          and quality = ${entry.quality}
+          and closed_at is null
+          and source = 'game'
+      `) as unknown as { qty: number }[];
+      const currentQty = Number(rows[0]?.qty ?? 0);
+      const diff = Math.round(entry.quantity) - currentQty;
+
+      if (diff === 0) continue;
+
+      // poslední tržní cena (tick Q0) – fallback pro ceny
+      const priceRows = (await sql`
+        select price from price_history
+        where item_id = ${entry.item_id} and quality = 0
+        order by recorded_at desc limit 1
+      `) as unknown as { price: string }[];
+      const marketPrice =
+        priceRows[0] && Number(priceRows[0].price) > 0
+          ? Number(priceRows[0].price)
+          : 0;
+
+      if (diff > 0) {
+        // nákup detekovaný ze skladu – cena ze hry (unit_cost),
+        // fallback tržní tick; jinak symbolická 0,001 (uživatel doladí)
+        const buyPrice =
+          entry.unit_cost !== null && entry.unit_cost > 0
+            ? entry.unit_cost
+            : marketPrice > 0
+              ? marketPrice
+              : 0.001;
+        await sql`
+          insert into positions (item_id, quality, quantity, buy_price, source, note)
+          values (${entry.item_id}, ${entry.quality}, ${diff}, ${buyPrice},
+                  'game', 'Sync ze hry (sklad)')
+        `;
+        await sql`update items set track_ticks = true where id = ${entry.item_id}`;
+        created++;
+      } else {
+        // prodej – FIFO přes otevřené game lots téže kvality
+        const lots = (await sql`
+          select id, quantity from positions
+          where item_id = ${entry.item_id}
+            and quality = ${entry.quality}
+            and closed_at is null and source = 'game'
+          order by opened_at asc
+          for update
+        `) as unknown as { id: string; quantity: number }[];
+
+        const sellPrice = marketPrice > 0 ? marketPrice : null;
+        let remaining = -diff;
+        for (const lot of lots) {
+          if (remaining <= 0) break;
+          const take = Math.min(lot.quantity, remaining);
+
+          if (take === lot.quantity) {
+            await sql`
+              update positions
+              set sell_price = ${sellPrice}, closed_at = now()
+              where id = ${lot.id}
+            `;
+            await sql`
+              insert into condition_log
+                (position_id, event_type, market_price_at_log, condition_text)
+              values
+                (${lot.id}, 'CLOSED', ${sellPrice},
+                 ${`Prodej detekován syncem ze hry (${take.toLocaleString("cs-CZ")} ks, cena odhadnuta z trhu).`})
+            `;
+          } else {
+            await sql`
+              update positions set quantity = quantity - ${take} where id = ${lot.id}
+            `;
+            const [closedPart] = (await sql`
+              insert into positions
+                (item_id, quality, quantity, buy_price, sell_price, opened_at,
+                 closed_at, source, note)
+              values
+                (${entry.item_id}, ${entry.quality}, ${take},
+                 (select buy_price from positions where id = ${lot.id}),
+                 ${sellPrice},
+                 (select opened_at from positions where id = ${lot.id}),
+                 now(), 'game', 'Sync ze hry (sklad)')
+              returning id
+            `) as unknown as { id: string }[];
+            await sql`
+              insert into condition_log
+                (position_id, event_type, market_price_at_log, condition_text)
+              values
+                (${closedPart.id}, 'CLOSED', ${sellPrice},
+                 ${`Částečný prodej detekován syncem ze hry (${take.toLocaleString("cs-CZ")} ks, cena odhadnuta z trhu).`})
+            `;
+            adjusted++;
+          }
+          closed++;
+          remaining -= take;
+        }
+      }
+    }
+  });
+
+  return {
+    warehouse_rows: valid.length,
+    positions_created: created,
+    positions_closed: closed,
+    positions_adjusted: adjusted,
+  };
+}
+
+/** Poslední snapshot skladu (pro UI /statistiky či /portfolio). */
+export async function getGameWarehouse(): Promise<
+  {
+    item_id: number;
+    quality: number;
+    quantity: number;
+    unit_cost: number | null;
+    updated_at: string;
+  }[]
+> {
+  const db = getDb();
+  const rows = (await db`
+    select item_id, quality, quantity, unit_cost, updated_at
+    from game_warehouse
+    where quantity > 0
+    order by quantity desc
+  `) as unknown as {
+    item_id: number;
+    quality: number;
+    quantity: number;
+    unit_cost: string | null;
+    updated_at: Date;
+  }[];
+  return rows.map((r) => ({
+    item_id: r.item_id,
+    quality: r.quality,
+    quantity: r.quantity,
+    unit_cost: r.unit_cost === null ? null : Number(r.unit_cost),
+    updated_at: iso(r.updated_at),
+  }));
+}
+
+/** Kolik řádků raw importů máme (audit velikosti). */
+export async function countGameImports(): Promise<number> {
+  const db = getDb();
+  const rows = (await db`select count(*)::int as c from game_imports`) as
+    unknown as { c: number }[];
+  return Number(rows[0]?.c ?? 0);
+}

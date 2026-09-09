@@ -26,6 +26,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# debug dumpy z hry (obsahují herní data, nikdy necommitovat)
+simalytics-dump-*.json
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
