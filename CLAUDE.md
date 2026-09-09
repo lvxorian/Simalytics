@@ -34,10 +34,12 @@ Testy nejsou — ověření = `npm run typecheck` + `npm run build`.
 ```
 db/schema.sql              # items, price_history, positions, condition_log, watchlist
 # upgrades: 001_terminal (candles, watchlist), 002_signal_engine (vwap_daily, contests, cert_kinds),
-#           003_alerts (alerts s cooldownem), 005_alert_seen (seen_at), 006_limit_sell_alerts (kind 'limit_sell')
+#           003_alerts (alerts s cooldownem), 005_alert_seen (seen_at), 006_limit_sell_alerts (kind 'limit_sell'),
+#           008_alert_v2 (direction 'cross', one_shot)
 src/lib/
   metrics.ts               # likvidita (obchody/24h + obrat) a volatilita (annualizovaná σ log-výnosů) – karty na market page
-  alerts.ts                # evaluace alertů (cena + skóre + limitní prodeje, cooldown) – 5min cron
+  alerts.ts                # evaluace alertů (cena nad/pod/cross + skóre + limitní prodeje,
+                           # one_shot = smazat po první aktivaci, cooldown) – 5min cron
   notifier.ts              # webhook (Discord/Slack) + e-mail přes Resend REST API
   price-hub.ts             # LIVE cenový hub (Fáze 3): smyčka 2 s (followed/prices střídavě),
                            # detekce obchodů, evaluace alertů, orderbook hlídka buy alertů
@@ -174,7 +176,20 @@ src/components/            # vizní komponenty (viz níže)
   leží v tabulce pod grafem (`item-alerts-table.tsx`, data
   `getAlertsForItem`) – přepínač aktivní/vypnutý + mazání; celkový
   přehled zůstává na /alerts. Pravé tlačítko nesmí spustit drag
-  nástrojů (onMouseDown filtruje `e.button !== 0`).
+  nástrojů (onMouseDown filtruje `e.button !== 0`). Kontextové menu
+  (`chart-context-menu.tsx`) NESMÍ mít `useLayoutEffect` volající
+  `setPos` s novým objektem bez deps – vznikne nekonečný render cyklus
+  a error page (již jednou opraveno; porovnání souřadnic před setPos).
+- **Editace alertů**: tužka vedle badge podmínky (`editable-alert-
+  rule.tsx`, TRVALE VIDITELNÁ – ne opacity-0/hover-only, dotyková
+  zařízení; tabulka pod grafem i /alerts) mění směr (Nad/Pod/Překříží)
+  i práh inline (✓/Enter uloží, X/Esc zruší); jen kind='price' –
+  limitní prodeje řídí portfolio, skóre generuje Signal Engine. V grafu:
+  dvojklik na CENU v boxu alert linky (`chart-alert-lines.tsx`) otevře
+  inline input nad boxem (Enter/✓ uloží přes `updateAlertRuleAction`,
+  Esc zruší); kurzor nad hodnotou je ↕ (ns-resize); klik do boxu
+  NESPUSTÍ drag prahu. Sloupec/směr `cross` = aktivace při překřížení
+  prahu v obou směrech; checkbox „Jednorázový" = `one_shot`.
 - **Fullscreen grafu** (`price-chart.tsx`): tlačítko Maximize2 jen vpravo
   nahoře, countdown svíčky sedí vedle něj zleva (ve fullscreen je
   countdown v hlavičce u Minimize2) →
@@ -201,7 +216,11 @@ src/components/            # vizní komponenty (viz níže)
     (`lib/live-prices.ts`) má REST fallback (8 s timeout → 10 s polling).
   - **Alerty**: hub evaluuje po ticku hned (≤ ~2 s) + pravidelně max 10 s
     (mrtvý trh). Cooldown guard je atomický UPDATE sdílený s 5min cronem
-    a REST fallbackem → notifikace nikdy neodejde dvakrát.
+    a REST fallbackem → notifikace nikdy neodejde dvakrát. Direction
+    'cross' = předchozí cena na DRUHÉ straně prahu (hub drží `prevPrices`,
+    poller čte předchozí tick z price_history). `one_shot` alert se hned
+    po úspěšném cooldown guardu SMAŽE (trigger + delete v jedné evaluaci;
+    persistní verze zůstává s trigger_count).
   - **Orderbook hlídka**: položky s aktivními BUY alerty ('price' +
     'below') se round-robin pollují (1 req / 2 s, ofiko v3 API limit
     1 req/s → throttle v simco-official; seznam refresh 60 s). Buy alert

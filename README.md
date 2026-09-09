@@ -181,7 +181,10 @@ Dokumentace: <https://api.simcotools.com/docs/simcotools.yaml> (limit 2 req/s).
 
 ## Alerty (fáze 4)
 
-Cenové alerty (target/stop) i signálové alerty (Signal Engine skóre −100…+100).
+Cenové alerty (nad / pod / překřížení), signálové alerty (Signal Engine
+skóre −100…+100) i limitní prodeje z portfolia. Každý cenový alert může být
+**jednorázový** (`one_shot`) – po první aktivaci se sám smaže; jinak zůstává
+aktivní se 60min cooldownem.
 Evaluace běží na třech místech se sdíleným cooldownem 60 min (atomický UPDATE
 v DB → notifikace nikdy neodejde dvakrát):
 
@@ -198,11 +201,18 @@ Notifikace (volitelné, obě najednou):
   (Resend REST API, bez SDK)
 - `NEXT_PUBLIC_APP_URL` – základní URL pro odkazy v notifikacích
 
-Migrace: `npm run db:upgrade` (tabulka `alerts` v db/upgrades/003_alerts.sql).
+Migrace: `npm run db:upgrade` (tabulka `alerts` v db/upgrades/003_alerts.sql,
+směr `cross` + `one_shot` v db/upgrades/008_alert_v2.sql).
+
+## Editace alertů
+
+- **Tužka** vedle badge podmínky (tabulka pod grafem i /alerts) – inline
+  editor směru (Nad/Pod/Překříží) a prahu
+- **Dvojklik na cenu v boxu alert linky v grafu** – inline input, Enter/✓
+  uloží, Esc zruší; tažením za linku (mimo box) se práh mění jako dřív
 
 ## Rozšíření (roadmapa)
 
 - **Auth** (Auth.js/Clerk) pro multi-user přístup k pozicím a alertům
 - **Quality** 1–7 (env `SIMCOMPANIES_QUALITIES=0,1,2`)
 - **Neon branching** – testovací větev DB pro vývoj
-- **Orderbook přes SSE** – live refresh mini orderbooku místo 6 s pollingu
