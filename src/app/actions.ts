@@ -77,7 +77,9 @@ export async function closePositionAction(
   try {
     const position_id = String(formData.get("position_id") ?? "");
     const sell_price = Number(formData.get("sell_price"));
-    const condition_text = String(formData.get("condition_text") ?? "").trim();
+    const condition_text =
+      String(formData.get("condition_text") ?? "").trim() ||
+      "Prodej zaznamenán bez poznámky.";
     const market_price_at_log = Number(
       formData.get("market_price_at_log") ?? sell_price
     );
@@ -85,8 +87,6 @@ export async function closePositionAction(
     if (!position_id) return { ok: false, error: "Chybí identifikátor pozice." };
     if (!Number.isFinite(sell_price) || sell_price <= 0)
       return { ok: false, error: "Prodejní cena musí být kladné číslo." };
-    if (!condition_text)
-      return { ok: false, error: "Popiš podmínky prodeje – proč právě teď?" };
 
     await closePosition({
       positionId: position_id,

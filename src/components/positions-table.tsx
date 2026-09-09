@@ -28,7 +28,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import {
   formatDateTime,
@@ -195,17 +194,9 @@ export function PositionsTable({
                     defaultValue={selected.current_price?.toFixed(3) ?? ""}
                     required
                   />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="close_condition">Proč prodáváš právě teď? *</Label>
-                  <Textarea
-                    id="close_condition"
-                    name="condition_text"
-                    rows={3}
-                    required
-                    placeholder="např. splněn cíl +8 %, na trhu se objevily levné náhrady, tlačí mě skladové náklady…"
-                  />
+                  <p className="text-xs text-muted-foreground">
+                    Předvyplněno aktuální tržní cenou – můžeš přepsat.
+                  </p>
                 </div>
 
                 {state.error && (
