@@ -356,3 +356,30 @@ export function useLiveTick(
 
   return tick;
 }
+
+/**
+ * Živá cena jedné položky s SSR fallbackem (Fáze 3C pro tabulky/karty):
+ * dokud nedorazí živý tick, vrací SSR hodnotu (initialPrice + change24h),
+ * po ticku přepočítá 24h změnu proti base odvozené ze SSR. Re-render jen
+ * u položek, které skutečně dostaly nový obchod.
+ */
+export function useLivePriceOverride(
+  itemId: number,
+  initialPrice: number | null,
+  initialChange24h: number | null
+): { price: number | null; change24h: number | null } {
+  const tick = useLiveTick(itemId);
+
+  if (!tick) return { price: initialPrice, change24h: initialChange24h };
+
+  const base24h =
+    initialPrice !== null && initialChange24h !== null
+      ? impliedBase24h(initialPrice, initialChange24h)
+      : null;
+  const change24h =
+    base24h !== null && base24h > 0
+      ? ((tick.price - base24h) / base24h) * 100
+      : initialChange24h;
+
+  return { price: tick.price, change24h };
+}

@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { ChangeBadge } from "@/components/change-badge";
 import { ItemIcon } from "@/components/item-icon";
+import { LiveChangeBadge, LivePrice } from "@/components/live-price-text";
 import { Sparkline } from "@/components/sparkline";
 import { StarButton } from "@/components/star-button";
-import { formatDateTime, formatPrice } from "@/lib/format";
+import { formatDateTime } from "@/lib/format";
 
 export type WatchlistCardRow = {
   item_id: number;
@@ -63,10 +63,20 @@ export function WatchlistCard({
       <div className="mt-4 flex items-end justify-between gap-2">
         <div>
           <div className="font-mono text-xl font-semibold tabular-nums">
-            {formatPrice(row.price)}
+            {/* Živá cena (SSE) – SSR hodnota jen do prvního ticku */}
+            <LivePrice
+              itemId={row.item_id}
+              initialPrice={row.price}
+              className="text-xl font-semibold"
+            />
           </div>
           <div className="mt-1">
-            <ChangeBadge value={row.change24h} size="sm" />
+            <LiveChangeBadge
+              itemId={row.item_id}
+              initialPrice={row.price}
+              initialChange24h={row.change24h}
+              size="sm"
+            />
           </div>
         </div>
         <Sparkline

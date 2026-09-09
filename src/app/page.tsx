@@ -2,9 +2,9 @@ import Link from "next/link";
 import { ArrowRight, Flame, Plus, Snowflake } from "lucide-react";
 
 import { AutoRefresh } from "@/components/auto-refresh";
-import { ChangeBadge } from "@/components/change-badge";
 import { DailyReportCard } from "@/components/daily-report-card";
 import { ItemIcon } from "@/components/item-icon";
+import { LiveChangeBadge, LivePrice } from "@/components/live-price-text";
 import { MarketTable, type MarketRow } from "@/components/market-table";
 import { Sparkline } from "@/components/sparkline";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,7 @@ import {
   getWatchedIds,
 } from "@/lib/data";
 import { buildDailyReport, type ReportEvent } from "@/lib/daily-report";
-import { formatCompact, formatPrice } from "@/lib/format";
+import { formatCompact } from "@/lib/format";
 import { getEvents } from "@/lib/simcotools";
 import { cn } from "@/lib/utils";
 
@@ -320,9 +320,11 @@ function MoversCard({
                 <div className="truncate text-sm font-medium group-hover:text-primary">
                   {row.name}
                 </div>
-                <div className="font-mono text-xs text-muted-foreground">
-                  {formatPrice(row.price)}
-                </div>
+                <LivePrice
+                  itemId={row.item_id}
+                  initialPrice={row.price}
+                  className="text-xs text-muted-foreground"
+                />
               </div>
               <Sparkline
                 data={sparklines.get(row.item_id)}
@@ -331,7 +333,12 @@ function MoversCard({
                 height={28}
                 className="hidden sm:block"
               />
-              <ChangeBadge value={row.change24h} size="sm" />
+              <LiveChangeBadge
+                itemId={row.item_id}
+                initialPrice={row.price}
+                initialChange24h={row.change24h}
+                size="sm"
+              />
             </Link>
           </li>
         ))}

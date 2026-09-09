@@ -21,8 +21,9 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ChangeBadge } from "@/components/change-badge";
 import { ItemIcon } from "@/components/item-icon";
+import { LiveChangeBadge, LivePrice } from "@/components/live-price-text";
+import { useLiveTick } from "@/lib/live-prices";
 import { Sparkline } from "@/components/sparkline";
 import { StarButton } from "@/components/star-button";
 import { cn } from "@/lib/utils";
@@ -275,12 +276,20 @@ export function MarketTable({
                     </div>
                   </TableCell>
 
-                  <TableCell className="text-right font-mono">
-                    {formatPrice(row.price)}
+                  <TableCell className="text-right">
+                    <LivePrice
+                      itemId={row.item_id}
+                      initialPrice={row.price}
+                      className="text-sm"
+                    />
                   </TableCell>
 
                   <TableCell className="text-right">
-                    <ChangeBadge value={row.change24h} />
+                    <LiveChangeBadge
+                      itemId={row.item_id}
+                      initialPrice={row.price}
+                      initialChange24h={row.change24h}
+                    />
                   </TableCell>
 
                   <TableCell className="hidden text-right md:table-cell">
@@ -306,7 +315,10 @@ export function MarketTable({
                   />
 
                   <TableCell className="hidden text-right font-mono text-xs text-muted-foreground lg:table-cell">
-                    {formatDateTime(row.recorded_at)}
+                    <LiveUpdatedCell
+                      itemId={row.item_id}
+                      initialRecordedAt={row.recorded_at}
+                    />
                   </TableCell>
 
                   <TableCell className="pr-4">
@@ -444,6 +456,31 @@ function ThSort({
         )}
       </button>
     </TableHead>
+  );
+}
+
+/**
+ * Buňka „Aktualizováno“: SSR čas posledního obchodu se po připojení
+ * SSE nahradí živým tickem; nový obchod se zvýrazní (text-up, pulse).
+ */
+function LiveUpdatedCell({
+  itemId,
+  initialRecordedAt,
+}: {
+  itemId: number;
+  initialRecordedAt: string;
+}) {
+  const tick = useLiveTick(itemId);
+  const iso = tick ? tick.datetime : initialRecordedAt;
+  return (
+    <span
+      className={cn(
+        tick && "text-up transition-colors duration-700"
+      )}
+      title={tick ? "Živý obchod – aktualizováno právě teď" : undefined}
+    >
+      {formatDateTime(iso)}
+    </span>
   );
 }
 
