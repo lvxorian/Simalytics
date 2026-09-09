@@ -149,7 +149,10 @@ export function PortfolioSellDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      {trigger}
+      {/* Trigger MUSÍ být přes DialogTrigger asChild – samotný <Dialog> je
+          jen context provider a na klik nereaguje (↗ tlačítko by bylo
+          mrtvé). asChild přenese chování triggeru na předané tlačítko. */}
+      <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Prodat – {itemName}</DialogTitle>
