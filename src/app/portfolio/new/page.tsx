@@ -6,7 +6,7 @@ import { getLatestPrices } from "@/lib/data";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Nová pozice",
+  title: "Přidat aktivum",
 };
 
 export default async function NewPositionPage() {
@@ -26,10 +26,10 @@ export default async function NewPositionPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Otevřít pozici</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Přidat aktivum</h1>
         <p className="text-sm text-muted-foreground">
-          Zaznamenej nákup a podmínky, za kterých jsi se rozhodl. Později u
-          každé pozice uvidíš, jestli tvá logika vydělává.
+          Zapiš nákup – co jsi koupil, v jakém množství a za jakou cenu.
+          Aktivum se hned objeví v přehledu portfolia.
         </p>
       </div>
 
@@ -46,7 +46,7 @@ export default async function NewPositionPage() {
               <code className="font-mono text-xs text-foreground">
                 npm run fetch:market
               </code>{" "}
-              nebo počkej na cron. Pozici můžeš i tak zadat ručně, ale položky
+              nebo počkej na cron. Aktivum můžeš i tak zadat ručně, ale položky
               v nabídce chybí.
             </>
           )}

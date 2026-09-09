@@ -224,7 +224,7 @@ export function PortfolioValueChart({
             {fmtValue.format(invested)}
           </span>{" "}
           (pořizovací cena držeb) ·{" "}
-          <Link href="/positions" className="text-primary hover:underline">
+          <Link href="/portfolio" className="text-primary hover:underline">
             historie pozic
           </Link>
         </p>

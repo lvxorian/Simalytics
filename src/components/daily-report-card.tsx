@@ -253,7 +253,7 @@ export function DailyReportCard({ report }: { report: DailyReport }) {
                 ))}
               </ul>
               <Link
-                href="/positions"
+                href="/portfolio"
                 className="mt-2 inline-block text-xs text-muted-foreground transition-colors hover:text-primary"
               >
                 Spravovat pozice →

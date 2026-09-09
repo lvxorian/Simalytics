@@ -149,7 +149,7 @@ export default async function DashboardPage() {
           </p>
         </div>
         <Button asChild size="sm" className="gap-2 rounded-full">
-          <Link href="/positions/new">
+          <Link href="/portfolio/new">
             <Plus className="size-4" />
             Nová pozice
           </Link>

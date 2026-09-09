@@ -9,6 +9,14 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "jaqghnolagdxclnbcxem.supabase.co" },
     ],
   },
+  async redirects() {
+    return [
+      // Fúze Pozic do Portfolia – staré odkazy (záložky, notifikace)
+      // přesměrovat, ať se nic nerozbije
+      { source: "/positions", destination: "/portfolio", permanent: true },
+      { source: "/positions/new", destination: "/portfolio/new", permanent: true },
+    ];
+  },
 };
 
 export default nextConfig;

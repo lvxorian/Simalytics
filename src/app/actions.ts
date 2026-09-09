@@ -20,7 +20,7 @@ import {
 
 export type ActionState = { ok: boolean; error?: string };
 
-/** Otevře novou pozici (formulář /positions/new). */
+/** Otevře novou pozici (formulář /portfolio/new). */
 export async function createPositionAction(
   _prev: ActionState,
   formData: FormData
@@ -58,7 +58,7 @@ export async function createPositionAction(
       market_price_at_log,
     });
 
-    revalidatePath("/positions");
+    revalidatePath("/portfolio");
     revalidatePath("/");
     return { ok: true };
   } catch (err) {
@@ -95,7 +95,7 @@ export async function closePositionAction(
       market_price_at_log,
     });
 
-    revalidatePath("/positions");
+    revalidatePath("/portfolio");
     revalidatePath("/");
     return { ok: true };
   } catch (err) {
@@ -214,7 +214,6 @@ export async function deletePortfolioHoldingAction(
 ): Promise<void> {
   await deletePortfolioHolding(itemId, quality);
   revalidatePath("/portfolio");
-  revalidatePath("/positions");
 }
 
 /**
@@ -242,7 +241,7 @@ export async function updatePortfolioLotsAction(input: {
     }
 
     revalidatePath("/portfolio");
-    revalidatePath("/positions");
+    revalidatePath("/portfolio");
     return { ok: true };
   } catch (err) {
     return {
@@ -279,7 +278,7 @@ export async function addConditionNoteAction(
 
     await addConditionNote({ positionId: position_id, condition_text, market_price_at_log });
 
-    revalidatePath("/positions");
+    revalidatePath("/portfolio");
     return { ok: true };
   } catch (err) {
     return {

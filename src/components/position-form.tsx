@@ -50,9 +50,9 @@ export function NewPositionForm({ items }: { items: ItemOption[] }) {
     if (item) setBuyPrice(item.price.toFixed(3));
   }, [itemId, items]);
 
-  // Po úspěchu přesměruj na přehled pozic
+  // Po úspěchu přesměruj na portfolio
   useEffect(() => {
-    if (state.ok) router.push("/positions");
+    if (state.ok) router.push("/portfolio");
   }, [state.ok, router]);
 
   return (

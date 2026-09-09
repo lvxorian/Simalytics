@@ -1,21 +1,41 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Briefcase, Info, Plus } from "lucide-react";
+import { Briefcase, History, Info, Plus, ScrollText, Target } from "lucide-react";
 
+import { AddNoteForm } from "@/components/add-note-form";
+import { ItemIcon } from "@/components/item-icon";
 import { PortfolioDonut, type DonutSlice } from "@/components/portfolio-donut";
 import {
   PortfolioHoldingsTable,
   type AssetRow,
 } from "@/components/portfolio-holdings-table";
 import { PortfolioValueChart } from "@/components/portfolio-value-chart";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  getConditionLog,
   getPositionLots,
+  getPositionsWithPnl,
   getPortfolioHoldings,
   getPortfolioValueHistory,
 } from "@/lib/data";
-import { formatPercent, formatPrice, formatSigned } from "@/lib/format";
+import type { ConditionLogEntry, PositionWithPnl } from "@/lib/types";
+import {
+  formatDateTime,
+  formatPercent,
+  formatPrice,
+  formatSigned,
+  plColorClass,
+} from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -32,13 +52,17 @@ export default async function PortfolioPage({
   const { range } = await searchParams;
   const historyDays = range === "7" ? 7 : range === "90" ? 90 : 30;
 
-  const holdings = await getPortfolioHoldings().catch(() => []);
+  const [holdings, closedPositions, log] = await Promise.all([
+    getPortfolioHoldings().catch(() => []),
+    getPositionsWithPnl({ open: false }).catch(() => []),
+    getConditionLog(50).catch(
+      () => [] as (ConditionLogEntry & { item_name: string | null })[]
+    ),
+  ]);
 
   // Lots (jednotlivé nákupy) pro každé aktivum – paralelně
   const lotsPerAsset = await Promise.all(
-    holdings.map((h) =>
-      getPositionLots(h.item_id, h.quality).catch(() => [])
-    )
+    holdings.map((h) => getPositionLots(h.item_id, h.quality).catch(() => []))
   );
   const assets: AssetRow[] = holdings.map((h, i) => ({
     ...h,
@@ -59,6 +83,10 @@ export default async function PortfolioPage({
     0
   );
   const totalPlPct = invested > 0 ? (totalPl / invested) * 100 : null;
+  const realized = closedPositions.reduce(
+    (s, p) => s + (p.realized_pl ?? 0),
+    0
+  );
   const best = assets.reduce<null | AssetRow>((best, h) => {
     if (h.unrealized_pl_pct === null) return best;
     if (!best || (best.unrealized_pl_pct ?? -Infinity) < h.unrealized_pl_pct)
@@ -92,19 +120,19 @@ export default async function PortfolioPage({
           </p>
           <h1 className="text-3xl font-semibold tracking-tight">Portfolio</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Tvá aktiva v jednom přehledu – koláč alokace, vývoj hodnoty a
-            zisk/ztráta podle aktuálních cen.
+            Tvá aktiva i uzavřené obchody v jednom přehledu – alokace, vývoj
+            hodnoty a zisk/ztráta podle aktuálních cen.
           </p>
         </div>
         <Button asChild size="sm" className="gap-2 rounded-full">
-          <Link href="/positions/new">
+          <Link href="/portfolio/new">
             <Plus className="size-4" />
             Přidat aktivum
           </Link>
         </Button>
       </div>
 
-      {assets.length === 0 ? (
+      {assets.length === 0 && closedPositions.length === 0 ? (
         <EmptyState />
       ) : (
         <>
@@ -141,20 +169,22 @@ export default async function PortfolioPage({
                 tone={
                   totalPl > 0 ? "up" : totalPl < 0 ? "down" : "neutral"
                 }
-                hint="zisk/ztráta při prodeji za aktuální cenu"
+                hint="zisk/ztráta aktiv při prodeji za aktuální cenu"
               />
               <div className="grid gap-3 sm:grid-cols-2">
+                <SummaryCard
+                  label="Realizovaný P/L"
+                  value={formatSigned(realized)}
+                  tone={
+                    realized > 0 ? "up" : realized < 0 ? "down" : "neutral"
+                  }
+                  hint="zisk/ztráta z už uzavřených pozic"
+                />
                 <MiniCard
-                  label="Nejlepší"
+                  label="Nejlepší aktivum"
                   name={best?.name}
                   value={best?.unrealized_pl_pct ?? null}
                   tone="up"
-                />
-                <MiniCard
-                  label="Nejhorší"
-                  name={worst?.name}
-                  value={worst?.unrealized_pl_pct ?? null}
-                  tone="down"
                 />
               </div>
             </div>
@@ -174,12 +204,191 @@ export default async function PortfolioPage({
 
           {/* ── Tabulka aktiv ──────────────────────────────────── */}
           <section className="space-y-3">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              <Briefcase className="size-4" />
               Aktiva ({assets.length})
             </h2>
-            <PortfolioHoldingsTable assets={assets} />
+            {assets.length > 0 ? (
+              <PortfolioHoldingsTable assets={assets} />
+            ) : (
+              <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
+                Žádná otevřená aktiva.{" "}
+                <Link
+                  href="/portfolio/new"
+                  className="text-primary underline underline-offset-4"
+                >
+                  Přidej první nákup
+                </Link>
+                .
+              </div>
+            )}
+          </section>
+
+          {/* ── Uzavřené pozice (historie) ─────────────────────── */}
+          {closedPositions.length > 0 && (
+            <section className="space-y-3">
+              <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                <History className="size-4" />
+                Uzavřené pozice ({closedPositions.length})
+              </h2>
+              <div className="overflow-hidden rounded-xl border border-border/80 bg-card">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="pl-4">Aktivum</TableHead>
+                      <TableHead className="text-right">Nákup</TableHead>
+                      <TableHead className="text-right">Prodej</TableHead>
+                      <TableHead className="text-right">Množství</TableHead>
+                      <TableHead className="text-right">
+                        Realizovaný P/L
+                      </TableHead>
+                      <TableHead className="pr-4 text-right">Zavřeno</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {closedPositions.map((p) => (
+                      <ClosedRow key={p.id} p={p} />
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </section>
+          )}
+
+          {/* ── Condition log ──────────────────────────────────── */}
+          <section className="space-y-3">
+            <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              <ScrollText className="size-4" />
+              Log obchodů
+            </h2>
+
+            {assets.length > 0 && (
+              <Card className="rounded-xl border-border/80">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Přidat poznámku</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <AddNoteForm
+                    positions={assets.flatMap((a) =>
+                      a.lots.map((lot) => ({
+                        id: lot.id,
+                        label: `${a.name} (Q${a.quality}) – ${lot.quantity.toLocaleString("cs-CZ")} ks @ ${formatPrice(lot.buy_price)}`,
+                      }))
+                    )}
+                  />
+                </CardContent>
+              </Card>
+            )}
+
+            {log.length > 0 ? (
+              <div className="space-y-2">
+                {log.map((entry) => (
+                  <LogEntry key={entry.id} entry={entry} />
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
+                Log je zatím prázdný. Zápisy se vytvářejí automaticky při
+                otevření či uzavření pozice.
+              </div>
+            )}
           </section>
         </>
+      )}
+    </div>
+  );
+}
+
+function ClosedRow({ p }: { p: PositionWithPnl }) {
+  return (
+    <TableRow className="border-border/40">
+      <TableCell className="pl-4">
+        <Link
+          href={`/market/${p.item_id}`}
+          className="flex items-center gap-2.5 group"
+        >
+          <ItemIcon url={p.image_url} name={p.item_name} size={30} />
+          <span className="font-medium group-hover:text-primary">
+            {p.item_name}
+          </span>
+          <Badge variant="outline" className="font-mono text-[10px]">
+            Q{p.quality}
+          </Badge>
+        </Link>
+      </TableCell>
+      <TableCell className="text-right font-mono tabular-nums">
+        {formatPrice(p.buy_price)}
+      </TableCell>
+      <TableCell className="text-right font-mono tabular-nums">
+        {formatPrice(p.sell_price)}
+      </TableCell>
+      <TableCell className="text-right font-mono tabular-nums">
+        {p.quantity.toLocaleString("cs-CZ")}
+      </TableCell>
+      <TableCell
+        className={cn(
+          "text-right font-mono tabular-nums",
+          plColorClass(p.realized_pl)
+        )}
+      >
+        {formatSigned(p.realized_pl)}{" "}
+        <span className="text-xs">
+          (
+          {formatPercent(
+            p.realized_pl !== null
+              ? (p.realized_pl / (p.buy_price * p.quantity)) * 100
+              : null
+          )}
+          )
+        </span>
+      </TableCell>
+      <TableCell className="pr-4 text-right font-mono text-xs text-muted-foreground">
+        {formatDateTime(p.closed_at)}
+      </TableCell>
+    </TableRow>
+  );
+}
+
+function LogEntry({
+  entry,
+}: {
+  entry: ConditionLogEntry & { item_name: string | null };
+}) {
+  return (
+    <div
+      className="rounded-xl border border-border/80 bg-card p-4"
+    >
+      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <Badge
+          variant="outline"
+          className={eventTypeBadgeClass(entry.event_type)}
+        >
+          {entry.event_type}
+        </Badge>
+        <span className="font-medium text-foreground">
+          {entry.item_name ?? "Pozice"}
+        </span>
+        <span>·</span>
+        <span className="font-mono">
+          {formatDateTime(entry.created_at)}
+        </span>
+        {entry.market_price_at_log !== null && (
+          <>
+            <span>·</span>
+            <span className="font-mono">
+              cena {formatPrice(entry.market_price_at_log)}
+            </span>
+          </>
+        )}
+      </div>
+
+      <p className="mt-2 text-sm leading-relaxed">
+        {entry.condition_text}
+      </p>
+      {entry.trigger_reason && (
+        <p className="mt-1 text-xs text-muted-foreground">
+          <span className="text-primary">Trigger:</span> {entry.trigger_reason}
+        </p>
       )}
     </div>
   );
@@ -271,6 +480,17 @@ function MiniCard({
   );
 }
 
+function eventTypeBadgeClass(eventType: string): string {
+  switch (eventType) {
+    case "OPENED":
+      return "border-up/40 bg-up/10 text-up";
+    case "CLOSED":
+      return "border-sky-500/40 bg-sky-500/10 text-sky-400";
+    default:
+      return "border-border bg-secondary text-muted-foreground";
+  }
+}
+
 function EmptyState() {
   return (
     <div className="mx-auto mt-8 max-w-lg rounded-xl border border-dashed border-border bg-card p-10 text-center">
@@ -284,7 +504,7 @@ function EmptyState() {
       </p>
       <div className="mt-4 flex justify-center gap-3">
         <Button asChild size="sm" className="rounded-full">
-          <Link href="/positions/new">Přidat aktivum</Link>
+          <Link href="/portfolio/new">Přidat aktivum</Link>
         </Button>
         <Button asChild size="sm" variant="outline" className="rounded-full">
           <Link href="/">Prozkoumat trh</Link>
