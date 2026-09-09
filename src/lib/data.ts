@@ -1236,6 +1236,30 @@ export async function updateAlertThreshold(
 }
 
 /**
+ * Upraví cenový alert: práh i směr (nad/pod). Jen pro kind='price' –
+ * limitní prodeje se řídí z portfolia (setLimitSellAction), skóre
+ * generuje Signal Engine. Vrací chybovou zprávu nebo null.
+ */
+export async function updateAlertRule(
+  id: string,
+  input: { threshold: number; direction: "above" | "below" }
+): Promise<string | null> {
+  if (!Number.isFinite(input.threshold) || input.threshold <= 0)
+    return "Práh musí být kladné číslo.";
+  if (input.direction !== "above" && input.direction !== "below")
+    return "Neznámý směr alertu.";
+
+  const db = getDb();
+  const rows = (await db`
+    update alerts set threshold = ${input.threshold}, direction = ${input.direction}
+    where id = ${id} and kind = 'price'
+    returning id
+  `) as unknown as { id: string }[];
+  if (rows.length === 0) return "Alert nenalezen nebo se nedá upravit.";
+  return null;
+}
+
+/**
  * Označí alert jako spuštěný (cooldown proti spamu).
  * Vrací true, pokud SMÍ notifikovat – tj. uplynul cooldown.
  */

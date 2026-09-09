@@ -17,6 +17,7 @@ import {
   setLimitSellNote,
   toggleAlert,
   toggleWatchlist,
+  updateAlertRule,
   updateAlertThreshold,
   updatePositionLot,
   upsertLimitSellAlert,
@@ -319,6 +320,22 @@ export async function updateAlertThresholdAction(
 ): Promise<void> {
   await updateAlertThreshold(id, threshold);
   revalidatePath("/alerts");
+}
+
+/**
+ * Upraví cenový alert (práh + směr nad/pod) – tužka v tabulkách i
+ * dvouklik na cenu v boxu alert linie v grafu. Vrací chybu pro UI,
+ * revaliduje obě tabulky i market page (alert linie se překreslí).
+ */
+export async function updateAlertRuleAction(
+  id: string,
+  threshold: number,
+  direction: "above" | "below"
+): Promise<{ ok: boolean; error?: string }> {
+  const error = await updateAlertRule(id, { threshold, direction });
+  if (error) return { ok: false, error };
+  revalidatePath("/alerts");
+  return { ok: true };
 }
 
 /** Přidá poznámku do condition logu existující pozice. */

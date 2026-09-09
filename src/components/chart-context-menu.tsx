@@ -136,7 +136,12 @@ export function ChartContextMenu({
     }
     if (top < margin) top = margin;
 
-    setPos({ left, top });
+    // GUARD: setPos jen když se pozice REÁLNĚ změnila – jinak by každý
+    // render vytvořil nový objekt → nový render → nekonečná smyčka
+    // (Maximum update depth exceeded → error page při pravém kliku).
+    setPos((prev) =>
+      prev && prev.left === left && prev.top === top ? prev : { left, top }
+    );
   }); // bez deps – musí se přepočítat i po přepnutí na formulář
 
   return (

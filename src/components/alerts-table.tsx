@@ -16,6 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ItemIcon } from "@/components/item-icon";
+import { EditableAlertRule } from "@/components/editable-alert-rule";
 import { formatDateTime, formatPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { AlertWithItem } from "@/lib/data";
@@ -84,17 +85,7 @@ export function AlertsTable({ alerts }: { alerts: AlertWithItem[] }) {
                 </TableCell>
 
                 <TableCell>
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "font-mono text-[11px]",
-                      alert.kind === "score" && "border-primary/30 bg-primary/10 text-primary",
-                      alert.kind === "limit_sell" &&
-                        "border-[#d4a72c]/30 bg-[#d4a72c]/10 text-[#d4a72c]"
-                    )}
-                  >
-                    {alertLabel(alert)}
-                  </Badge>
+                  <EditableAlertRule alert={alert} />
                 </TableCell>
 
                 <TableCell className="hidden text-right font-mono text-muted-foreground md:table-cell">

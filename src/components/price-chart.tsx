@@ -45,6 +45,7 @@ import { ItemIcon } from "@/components/item-icon";
 import { ChartAlertLines } from "@/components/chart-alert-lines";
 import {
   deleteAlertAction,
+  updateAlertRuleAction,
   updateAlertThresholdAction,
 } from "@/app/actions";
 
@@ -1398,6 +1399,10 @@ export function PriceChart({
               void deleteAlertAction(alertId).then(() =>
                 router.refresh()
               );
+            }}
+            onUpdateRule={async (alertId, threshold, direction) => {
+              await updateAlertRuleAction(alertId, threshold, direction);
+              router.refresh();
             }}
           />
         )}

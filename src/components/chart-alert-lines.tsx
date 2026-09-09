@@ -10,9 +10,14 @@
  * Editovatelnost: přes linku leží tenký interaktivní pás (±7 px) jako
  * sourozenec chart containeru – tažením mění práh (pointer capture drží
  * tah i mimo pás), koš maže. Pás nekoliduje s pan/kreslením v grafu.
+ *
+ * Editace hodnoty: box (zvoneček + cena) se chová jako HTML overlay nad
+ * canvasem – hover nad cenou ukáže ns-resize kurzor (jako u linky),
+ * DVOJKLIK otevře inline input; Enter/tlčítko ✓ uloží, Esc zruší.
  */
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Check } from "lucide-react";
 
 export type AlertLineAlert = {
   id: string;
@@ -38,6 +43,15 @@ type Props = {
   onDelete: (alertId: string) => void;
   /** bump pro překreslení při re-renderu rodiče. */
   epoch: number;
+  /**
+   * Uložení prahu + směru (dvouklik na cenu v boxu → inline editor).
+   * Když není, editor se nezobrazí (jen drag + koš).
+   */
+  onUpdateRule?: (
+    alertId: string,
+    threshold: number,
+    direction: "above" | "below"
+  ) => Promise<void>;
 };
 
 type DragState = {
@@ -61,6 +75,7 @@ export function ChartAlertLines({
   onThresholdChange,
   onDelete,
   epoch,
+  onUpdateRule,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -71,6 +86,11 @@ export function ChartAlertLines({
   const stripsRef = useRef<Map<string, HTMLDivElement>>(new Map());
   // lokální preview prahu při dragu (optimisticky přes DB)
   const previewRef = useRef<Map<string, number>>(new Map());
+  // Inline editor hodnoty v boxu (dvouklik na cenu) – pozice řídí draw
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const editValueRef = useRef<string>("");
+  // pozice boxu editoru (nastavuje draw imperativně, ~ jako koš)
+  const editorRef = useRef<HTMLDivElement | null>(null);
 
   const priceAlerts = alerts.filter((a) => a.kind === "price");
 
@@ -101,8 +121,9 @@ export function ChartAlertLines({
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, rect.width, rect.height);
 
-    // pozice koše – jen u tažené linky
+    // pozice koše – jen u tažené linky; editor – u linky v editaci
     let trashXY: { x: number; y: number } | null = null;
+    let editorXY: { x: number; y: number } | null = null;
 
     /** Levý okraj popisku – box končí PŘÍMO na oddělovací čáře osy. */
     const labelX = (width: number) => width - axisPx - LABEL_W - 1;
@@ -159,6 +180,11 @@ export function ChartAlertLines({
       if (dragging) {
         trashXY = { x: lx - 34, y: y - 12 };
       }
+
+      // editor hodnoty (dvouklik na cenu) – sedí nad boxem alertu
+      if (editingId === a.id) {
+        editorXY = { x: lx, y: y - LABEL_H / 2 - 34 };
+      }
     }
 
     // koš při dragu (zobrazí se vedle linky; pustíš-li na něj, alert maže)
@@ -172,7 +198,19 @@ export function ChartAlertLines({
         trash.style.display = "none";
       }
     }
-  }, [priceAlerts, priceToY, getThreshold, axisWidth]);
+
+    // inline editor – pozice imperativně (drží se i během zoomu jako koš)
+    const editor = editorRef.current;
+    if (editor) {
+      if (editorXY) {
+        editor.style.display = "flex";
+        editor.style.left = `${editorXY.x}px`;
+        editor.style.top = `${editorXY.y}px`;
+      } else {
+        editor.style.display = "none";
+      }
+    }
+  }, [priceAlerts, priceToY, getThreshold, axisWidth, editingId]);
 
   // aktuální draw pro registraci (zoom/pan rodiče) i lokální volání
   const drawRef = useRef(draw);
@@ -211,9 +249,32 @@ export function ChartAlertLines({
 
   // ── Drag prahu: tah pásu přes linku (pointer capture drží i mimo pás) ──
 
+  /**
+   * Je pointer nad boxem alertu (zvoneček + cena)? Tam NEdraguje se –
+   * dvouklik otevře editor; editační zóna = celý box (±10 px kolem linky).
+   */
+  const isOverPriceLabel = useCallback(
+    (a: AlertLineAlert, e: React.PointerEvent | React.MouseEvent) => {
+      const container = containerRef.current;
+      if (!container) return false;
+      const rect = container.getBoundingClientRect();
+      const axisPx = axisWidth ?? 62;
+      const lx = rect.width - axisPx - LABEL_W - 1;
+      const y = priceToY(getThreshold(a));
+      if (y == null) return false;
+      const px = e.clientX - rect.left;
+      const py = e.clientY - rect.top;
+      return px >= lx && px <= lx + LABEL_W && py >= y - 10 && py <= y + 10;
+    },
+    [axisWidth, getThreshold, priceToY]
+  );
+
   const onStripPointerDown = useCallback(
     (a: AlertLineAlert) => (e: React.PointerEvent<HTMLDivElement>) => {
       if (e.button !== 0) return;
+      // Klik na box (zvoneček + cena) – tady se netáhne; dvojklik otevře
+      // editor (onDoubleClick na tomže pásu), jednoduchý klik = nic.
+      if (isOverPriceLabel(a, e)) return;
       const container = containerRef.current;
       if (!container) return;
       const rect = container.getBoundingClientRect();
@@ -228,7 +289,7 @@ export function ChartAlertLines({
       e.currentTarget.setPointerCapture(e.pointerId);
       e.preventDefault();
     },
-    [getThreshold, priceToY]
+    [getThreshold, priceToY, isOverPriceLabel]
   );
 
   const onStripPointerMove = useCallback(
@@ -246,6 +307,19 @@ export function ChartAlertLines({
     },
     [yToPrice]
   );
+
+  /** Uložení inline editoru (Enter / ✓) – validace + server action. */
+  const saveEditing = useCallback(() => {
+    const id = editingId;
+    if (!id || !onUpdateRule) return;
+    const value = Number(editValueRef.current.replace(",", "."));
+    if (!Number.isFinite(value) || value <= 0) return; // nevalidní = ticho
+    const alert = priceAlerts.find((a) => a.id === id);
+    setEditingId(null);
+    previewRef.current.set(id, value); // optimisticky, dokud nepřijdou data
+    drawRef.current();
+    void onUpdateRule(id, value, alert?.direction ?? "above");
+  }, [editingId, onUpdateRule, priceAlerts]);
 
   /** Puštěno na koš? (geometrický test – pointer capture drží strip) */
   const isOverTrash = useCallback((e: React.PointerEvent) => {
@@ -294,7 +368,8 @@ export function ChartAlertLines({
       />
 
       {/* Interaktivní pásy přes linky – jen ±7 px kolem čáry, zbytek
-          grafu zůstává průchozí (pan/zoom/nástroje) */}
+          grafu zůstává průchozí (pan/zoom/nástroje). Nad boxem alertu
+          (zvoneček + cena) kurzor ns-resize; dvojklik na cenu = editor. */}
       {priceAlerts.map((a) => (
         <div
           key={a.id}
@@ -309,13 +384,79 @@ export function ChartAlertLines({
             top: -100,
             touchAction: "none",
           }}
-          title="Táhni pro změnu prahu alertu"
+          title={
+            onUpdateRule
+              ? "Táhni = změna prahu · dvojklik na cenu = přesná editace"
+              : "Táhni pro změnu prahu alertu"
+          }
           onPointerDown={onStripPointerDown(a)}
           onPointerMove={onStripPointerMove}
           onPointerUp={(e) => endDrag(e, true)}
           onPointerCancel={(e) => endDrag(e, false)}
+          onDoubleClick={
+            onUpdateRule && a.kind === "price"
+              ? (e) => {
+                  if (!isOverPriceLabel(a, e)) return;
+                  editValueRef.current = String(getThreshold(a));
+                  setEditingId(a.id);
+                  drawRef.current();
+                  // focus až po umístění editoru (draw běží v rAF)
+                  requestAnimationFrame(() =>
+                    editorRef.current?.querySelector("input")?.focus()
+                  );
+                }
+              : undefined
+          }
         />
       ))}
+
+      {/* Inline editor hodnoty alertu (dvojklik na cenu v boxu) – pozice
+          řídí draw imperativně (sedí i během zoomu), Enter/✓ uloží. */}
+      {onUpdateRule && (
+        <div
+          ref={editorRef}
+          className="pointer-events-auto absolute z-30 hidden items-center gap-1 rounded-md border border-border/80 bg-popover/95 p-1 shadow-lg backdrop-blur"
+          style={{ display: "none" }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => e.stopPropagation()}
+        >
+          <input
+            ref={(el) => {
+              if (el && editingId) {
+                el.value = editValueRef.current;
+              }
+            }}
+            type="number"
+            step="0.001"
+            min="0"
+            aria-label="Nová hodnota alertu"
+            className="h-7 w-24 rounded border border-border bg-background px-2 font-mono text-xs outline-none focus:ring-1 focus:ring-ring"
+            onChange={(e) => {
+              editValueRef.current = e.target.value;
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                saveEditing();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                setEditingId(null);
+                drawRef.current();
+              }
+            }}
+          />
+          <button
+            type="button"
+            aria-label="Uložit hodnotu alertu"
+            title="Uložit (Enter)"
+            onClick={() => saveEditing()}
+            className="flex size-7 cursor-pointer items-center justify-center rounded-md text-up transition-colors hover:bg-secondary"
+          >
+            <Check className="size-4" />
+          </button>
+        </div>
+      )}
 
       {/* Koš – objeví se u tažené linky (pozici řídí draw imperativně) */}
       <button

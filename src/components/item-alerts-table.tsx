@@ -17,6 +17,7 @@ import {
 import { alertLabel } from "@/components/alerts-table";
 import { formatDateTime } from "@/lib/format";
 import { LiveCurrentPriceCell } from "@/components/live-alert-table-cell";
+import { EditableAlertRule } from "@/components/editable-alert-rule";
 import { cn } from "@/lib/utils";
 import type { AlertWithItem } from "@/lib/data";
 
@@ -70,27 +71,10 @@ export function ItemAlertsTable({
             </TableRow>
           ) : (
             alerts.map((alert) => {
-              const reached =
-                alert.current_price != null &&
-                (alert.direction === "above"
-                  ? alert.current_price >= alert.threshold
-                  : alert.current_price <= alert.threshold);
               return (
                 <TableRow key={alert.id} className="border-border/40">
                   <TableCell className="pl-4">
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "font-mono text-[11px]",
-                        alert.kind === "score" &&
-                          "border-primary/30 bg-primary/10 text-primary",
-                        alert.kind === "limit_sell" &&
-                          "border-[#d4a72c]/30 bg-[#d4a72c]/10 text-[#d4a72c]",
-                        alert.kind === "price" && reached && "border-up/30 bg-up/10 text-up"
-                      )}
-                    >
-                      {alertLabel(alert)}
-                    </Badge>
+                    <EditableAlertRule alert={alert} />
                     {alert.note && (
                       <div className="mt-0.5 max-w-56 truncate text-xs text-muted-foreground">
                         {alert.note}
