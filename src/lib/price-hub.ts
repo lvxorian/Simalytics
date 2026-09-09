@@ -34,8 +34,6 @@ export type HubTick = {
 
 /** Jedna nabídka v orderbooku (ask strana, seřazené vzestupně). */
 export type HubAsk = {
-  /** Id orderu ze hry – stabilní klíč pro animace řádků v UI. */
-  orderId: number;
   price: number;
   quantity: number;
   npc: boolean;

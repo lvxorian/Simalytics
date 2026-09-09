@@ -42,8 +42,6 @@ export type LiveStatus = "connecting" | "live" | "offline";
 
 /** Jedna nabídka orderbooku (ask strana, vzestupně). */
 export type LiveAsk = {
-  /** Id orderu ze hry – stabilní klíč pro animace řádků v UI. */
-  orderId: number;
   price: number;
   quantity: number;
   npc: boolean;
