@@ -185,9 +185,6 @@ export default async function DashboardPage() {
         />
       </section>
 
-      {/* ── Denní report + investiční doporučení ────────────── */}
-      {report && <DailyReportCard report={report} />}
-
       {/* ── Top gainers / losers ─────────────────────────────── */}
       <section className="grid gap-4 lg:grid-cols-2">
         <MoversCard
@@ -226,6 +223,9 @@ export default async function DashboardPage() {
         volatility={volatility}
         liquidity={liquidity}
       />
+
+      {/* ── Denní report + investiční doporučení ────────────── */}
+      {report && <DailyReportCard report={report} />}
     </div>
   );
 }
