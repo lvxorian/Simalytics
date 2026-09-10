@@ -1,3 +1,4 @@
+import type { JSONValue } from "postgres";
 import { getDb } from "@/lib/db";
 import type { SimcoCertificateKind, SimcoContest, SimcoVwap } from "@/lib/simcotools";
 import type {
@@ -1658,9 +1659,11 @@ export async function recordGameImport(
   payload: unknown
 ): Promise<void> {
   const db = getDb();
+  // sql.json() – postgres.js helper; ruční JSON.stringify() + ::jsonb
+  // vytváří dvojitě zakódovaný string scalar (PgBouncer simple protokol)
   await db`
     insert into game_imports (source, payload)
-    values (${source}, ${JSON.stringify(payload)}::jsonb)
+    values (${source}, ${db.json(payload as JSONValue)})
   `;
 }
 
