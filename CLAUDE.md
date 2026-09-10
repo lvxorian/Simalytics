@@ -328,7 +328,17 @@ src/components/            # vizní komponenty (viz níže)
   × unit_cost Přepravy ze skladu; kontrakt spotřebuje POLOVINU poměru,
   fallback % z tržby přes GAME_TRANSPORT_PCT). Kategorie 't' = kontrakt
   (`cs-{itemId}-{kupce}`, details price/amount/quality/resource,
-  bez poplatků).
+  bez poplatků; burza = 'm'-prodej `marketfilled-{id}`, maloobchod 's').
+  Rozpad nákladů se ukládá na uzavřenou pozici (positions.cost_breakdown
+  jsonb: gross/fees/transport/net, transport_units, transport_exact;
+  transport se při ČTENÍ normalizuje na zápornou položku) a UI /portfolio
+  ho ukazuje pod cenou prodeje. DOPATEK (amend v closeSalesFromCashflow):
+  prodej STARŠÍ než snapshot skladu s POŘÁD neaplikovanými jednotkami =
+  cashflow dorazil až po syncu skladu (reconcile ho stihl účtovat jako
+  spotřebu) → automaticky se douzavří (nová uzavřená pozice s reálnou
+  cenou a rozpadem; otevřené loty se nesahají – úbytek už zúčtován).
+  Doporučené pořadí ve hře: nejprve Finance, pak Sklad (opačné pořadí
+  funguje taky, jen přes doplatek při příštím otevření financí).
 
 ## Externí API
 
