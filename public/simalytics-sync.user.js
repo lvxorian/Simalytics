@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Simalytics Sync
 // @namespace    simalytics
-// @version      0.3.0
+// @version      0.4.0
 // @description  Čte data otevřené hry SimCompanies (sklad) a synchronizuje je do Simalytics (portfolio). Žádné extra requesty na herní servery – jen čte odpovědi, které prohlížeč stejně dostal.
 // @author       Simalytics
 // @match        https://www.simcompanies.com/*
@@ -76,16 +76,22 @@
   });
 
   // ── Sběr dat ────────────────────────────────────────────────────
-  // SKLAD (z reálného dumpu 2026-09-09): GET /api/v3/resources/{companyId}/
-  // vrací pole šarží { id, amount, quality, kind, blocked, cost, … }.
-  const CAPTURE_URL_RE = /\/api\/v3\/resources\/\d+\/?$/i;
+  // SKLAD: GET /api/v3/resources/{companyId}/ → šarže { id, amount, quality,
+  // kind, cost } (kind = ID komodity).
+  // CASHFLOW: GET /api/v2/companies/me/cashflow/recent/ → { data: [...] }
+  // s reálnými cenami nákupů ('m') a maloobchodních prodejů ('s').
+  const WAREHOUSE_URL_RE = /\/api\/v3\/resources\/\d+\/?$/i;
+  const CASHFLOW_URL_RE = /\/api\/v2\/companies\/me\/cashflow\/recent\/?$/i;
+  const CAPTURE_URL_RE = /(resources\/\d+|cashflow\/recent)/i;
   // Minimální interval mezi pushi na stejný obsah (antispam).
   const PUSH_COOLDOWN_MS = 60_000;
 
   let lastEntriesJson = ""; // serializovaný poslední sklad
   let lastPushAt = 0;
   let pushTimer = null;
+  let cashflowTimer = null;
   let lastPayloadsForDebug = [];
+  let lastCashflowForDebug = [];
 
   // ── Ring buffer raw odpovědí (pro debug dump) ───────────────────
   // Vždy ukládáme zásahy dle CAPTURE_URL_RE; v debug režimu VŠECHNY
@@ -172,23 +178,11 @@
   }
 
   // ── Push do Simalytics ──────────────────────────────────────────
-  function pushToSimalytics(entries) {
-    if (!entries || entries.length === 0) return;
+  function postJson(body, label) {
     if (!token) {
       console.warn("[Simalytics] Chybí token – nastav v menu Tampermonkey.");
       return;
     }
-
-    const body = JSON.stringify({ source: "warehouse", entries });
-    const signature = body; // jednoduchá dedupe: stejný obsah = neposílat
-    if (signature === lastEntriesJson && Date.now() - lastPushAt < PUSH_COOLDOWN_MS) {
-      return;
-    }
-
-    console.info(
-      `[Simalytics] Sync skladu: ${entries.length} položek → ${endpoint}`
-    );
-
     GM_xmlhttpRequest({
       method: "POST",
       url: `${endpoint}/api/import/sync`,
@@ -199,25 +193,52 @@
       data: body,
       timeout: 15_000,
       onload: (res) => {
-        lastEntriesJson = signature;
-        lastPushAt = Date.now();
         try {
           const json = JSON.parse(res.responseText);
-          console.info("[Simalytics] Odpověď:", res.status, json);
+          console.info(`[Simalytics] ${label}:`, res.status, json);
         } catch {
-          console.warn("[Simalytics] Nečitelná odpověď:", res.status);
+          console.warn(`[Simalytics] ${label}: nečitelná odpověď`, res.status);
         }
       },
-      onerror: () => console.error("[Simalytics] Síťová chyba – sync neprošel."),
-      ontimeout: () => console.error("[Simalytics] Timeout – sync neprošel."),
+      onerror: () => console.error(`[Simalytics] ${label}: síťová chyba.`),
+      ontimeout: () => console.error(`[Simalytics] ${label}: timeout.`),
     });
+  }
+
+  function pushCashflow(rows) {
+    if (!rows || rows.length === 0) return;
+    console.info(`[Simalytics] Sync cashflow: ${rows.length} transakcí → ${endpoint}`);
+    postJson(JSON.stringify({ source: "cashflow", data: rows }), "Cashflow");
+  }
+
+  function pushToSimalytics(entries) {
+    if (!entries || entries.length === 0) return;
+    const body = JSON.stringify({ source: "warehouse", entries });
+    const signature = body; // jednoduchá dedupe: stejný obsah = neposílat
+    if (signature === lastEntriesJson && Date.now() - lastPushAt < PUSH_COOLDOWN_MS) {
+      return;
+    }
+
+    console.info(
+      `[Simalytics] Sync skladu: ${entries.length} položek → ${endpoint}`
+    );
+    postJson(body, "Sklad");
+    lastEntriesJson = signature;
+    lastPushAt = Date.now();
   }
 
   function schedulePush(entries) {
     lastPayloadsForDebug = entries;
     if (pushTimer) clearTimeout(pushTimer);
-    // debounce – hra po otevření skladu často stahuje víc odpovědí
-    pushTimer = setTimeout(() => pushToSimalytics(entries), 3_000);
+    // debounce – hra po otevření skladu často stahuje víc odpovědí;
+    // 4 s dává cashflow (2 s) přednost, ať reconcile má čerstvé ceny
+    pushTimer = setTimeout(() => pushToSimalytics(entries), 4_000);
+  }
+
+  function scheduleCashflow(rows) {
+    lastCashflowForDebug = rows;
+    if (cashflowTimer) clearTimeout(cashflowTimer);
+    cashflowTimer = setTimeout(() => pushCashflow(rows), 2_000);
   }
 
   // ── Debug dump ──────────────────────────────────────────────────
@@ -225,12 +246,13 @@
     const urls = [...new Set(rawSamples.map((s) => s.url))];
     return {
       generatedAt: new Date().toISOString(),
-      scriptVersion: "0.3.0",
+      scriptVersion: "0.4.0",
       debugMode,
       hasToken: Boolean(token),
       matchedUrlRe: String(CAPTURE_URL_RE),
       capturedUrls: urls,
       extracted: lastPayloadsForDebug,
+      extractedCashflow: lastCashflowForDebug.slice(0, 20),
       rawSamples,
     };
   }
@@ -318,8 +340,11 @@
   // ── Zpracování odpovědi (společné pro fetch i XHR) ──────────────
   function processResponse(url, status, text) {
     try {
-      const isMatch = CAPTURE_URL_RE.test(url);
-      const looksApi = /\/api\//.test(String(url));
+      const urlStr = String(url);
+      const isWarehouse = WAREHOUSE_URL_RE.test(urlStr);
+      const isCashflow = CASHFLOW_URL_RE.test(urlStr);
+      const isMatch = isWarehouse || isCashflow;
+      const looksApi = /\/api\//.test(urlStr);
 
       if (debugMode && looksApi && status >= 200 && status < 300) {
         rememberSample(url, status, text);
@@ -332,11 +357,17 @@
       const data = tryParseJson(text);
       if (data === undefined) return; // odpověď není JSON – ignoruj
 
+      if (isCashflow) {
+        const rows = Array.isArray(data?.data) ? data.data : [];
+        if (rows.length > 0) scheduleCashflow(rows);
+        return;
+      }
+
       const entries = extractEntries(data);
       if (entries.length > 0) {
         if (debugMode) {
           console.info(
-            `[Simalytics] Extrahováno ${entries.length} položek z ${url}`
+            `[Simalytics] Extrahováno ${entries.length} šarží z ${url}`
           );
         }
         schedulePush(entries);
@@ -355,7 +386,8 @@
       const shouldPeek =
         debugMode && /\/api\//.test(String(url))
           ? true
-          : CAPTURE_URL_RE.test(String(url));
+          : WAREHOUSE_URL_RE.test(String(url)) ||
+            CASHFLOW_URL_RE.test(String(url));
       if (shouldPeek && res.ok) {
         // klon – původní odpověď musí zůstat čitelná pro hru
         res
@@ -379,7 +411,7 @@
     const shouldWatch =
       debugMode && /\/api\//.test(xhrUrl)
         ? true
-        : CAPTURE_URL_RE.test(xhrUrl);
+        : WAREHOUSE_URL_RE.test(xhrUrl) || CASHFLOW_URL_RE.test(xhrUrl);
 
     if (shouldWatch) {
       this.addEventListener("load", function () {

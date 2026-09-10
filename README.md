@@ -208,7 +208,7 @@ směr `cross` + `one_shot` v db/upgrades/008_alert_v2.sql).
 
 **Simalytics Sync** – Tampermonkey skript (`scripts/userscript/simalytics-sync.user.js`) čte data otevřené hry přímo v prohlížeči a synchronizuje je do portfolia. HERNÍ SERVERY SE NEVOLAJÍ ANI JEDNOU – skript jen čte odpovědi, které prohlížeč stejně dostal, takže odpovídá ofiko pravidlům API (jen GET, žádná automatizace vůči hře).
 
-**Co umí (v0.3):** sklad → portfolio s **reálnými pořizovacími cenami** ze hry (Σ cost šarže / ks), reconcile per (položka, kvalita), FIFO prodeje, kompletní prodej detekován ze zmizení položky. Raw importy auditované v `game_imports`.
+**Co umí (v0.4):** sklad → portfolio s **reálnými pořizovacími cenami** ze hry (Σ cost šarže / ks), **cashflow → reálné prodejní ceny** (maloobchodní prodeje FIFO, nákupy z burzy), spotřeba ve výrobě rozpoznána od prodeje (neznečišťuje P/L), reconcile per (položka, kvalita), kompletní prodej detekován ze zmizení položky. Raw importy auditované v `game_imports`, transakce v `game_cashflow` (dedupe dle ID, stav aplikace `units_unapplied`/`applied_at`).
 
 **Zjištěné herní endpointy** (reálný dump, neoficiální): sklad = `/api/v3/resources/{companyId}/` (šarže `{id, amount, quality, kind, cost}` — kind = ID komodity, Σcost/amount = pořizovací cena); cashflow = `/api/v2/companies/me/cashflow/recent/` (nákupy 'm' se skutečnou cenou, prodeje 's', produkce 'p').
 
@@ -218,7 +218,7 @@ směr `cross` + `one_shot` v db/upgrades/008_alert_v2.sql).
 3. V Tampermonkey menu: nastav URL (https://simalytics.vercel.app) a token (= GAME_SYNC_SECRET).
 4. Otevři hru → sklad (Warehouse). Sync proběhne sám (debounce 3 s, dedupe 60 s); „Simalytics: debug dump“ v menu ukáže nasbíraná data.
 
-**Jak to funguje:** hook na `fetch`/XHR v kontextu hry → extrakce `{ id, quality, amount }` → POST `/api/import/sync` (Bearer GAME_SYNC_SECRET). Server porovná sklad s otevřenými pozicemi `source='game'`: sklad > pozice = nový lot (cena odhadnuta z posledního tržního ticku), sklad < pozice = FIFO prodej (cena odhadnuta). Manuální pozice nesahá.
+**Jak to funguje:** hook na `fetch`/XHR ve hře → POST `/api/import/sync` (Bearer GAME_SYNC_SECRET) se dvěma zdroji: **cashflow** (reálné ceny transakcí, posílá se první) a **warehouse** (šarže skladu). Server reconcile: rozdíl sklad vs. pozice = nákup (cena: unit_cost šarže → burzovní nákup z cashflow → tržní tick) nebo FIFO prodej (cena: maloobchodní prodeje z cashflow → tržní tick). Manuální pozice nesahá. Úbytek bez prodeje = spotřeba ve výrobě → jen zmenšení lotu.
 
 **Důležité:** cena u syncovaných pozic je zatím odhad z trhu – doladit jde editací lots v portfoliu. Skript je heuristický (hra nemá ofiko API dokumentaci) – „debug dump“ pomůže doladit parser, když formát herních odpovědí neodpovídá.
 

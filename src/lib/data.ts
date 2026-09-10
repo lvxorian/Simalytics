@@ -1,6 +1,5 @@
-import type { JSONValue } from "postgres";
-import { getDb } from "@/lib/db";
-import type { SimcoCertificateKind, SimcoContest, SimcoVwap } from "@/lib/simcotools";
+import postgres, { type JSONValue } from "postgres";
+import { getDb } from "@/lib/db";import type { SimcoCertificateKind, SimcoContest, SimcoVwap } from "@/lib/simcotools";
 import type {
   ConditionLogEntry,
   Item,
@@ -1638,7 +1637,14 @@ export type GameSyncResult = {
   positions_created: number;
   positions_closed: number;
   positions_adjusted: number;
+  /** Loty zmenšené spotřebou ve výrobě (bez prodeje, bez P/L). */
+  lots_shrunk: number;
 };
+
+/** SQL klient v transakci i mimo ni (společná signatura helperů). */
+type PostgresSql =
+  | postgres.Sql<Record<string, unknown>>
+  | postgres.TransactionSql<Record<string, unknown>>;
 
 /**
  * Šarže skladu ze hry (formát z reálného dumpu, upgrade 009):
@@ -1670,13 +1676,16 @@ export async function recordGameImport(
 /**
  * Reconcile skladu ze hry proti portfoliu.
  *
- * Model: sklad ze hry = pravda o MNOŽSTVÍ (a díky cost i o CENĚ).
- * Otevřené pozice se source='game' se srovnají per (položka, kvalita):
- * – sklad > pozice  → nový nákup (lot) s buy_price = unit_cost ze hry
- *   (fallback: poslední tržní tick Q0),
- * – sklad < pozice  → FIFO prodej v rámci dané kvality (částečný =
- *   zmenšení lotu + dceřiná uzavřená pozice, jako sellPortfolioAsset),
- *   sell_price = odhad z posledního ticku (kvalita 0).
+ * Model (fáze 2 – cashflow napojeno):
+ * – SKLAD = pravda o MNOŽSTVÍ (rozdíl sklad vs. otevřené game pozice
+ *   per (položka, kvalita) → nákup nebo FIFO prodej),
+ * – CASHFLOW = zdroj REÁLNÝCH CEN (lazy aplikace při reconcile):
+ *   prodej → FIFO přes pending retail_sale (vážený průměr details.price),
+ *   fallback tržní tick; spotřebované ks se odečtou z units_unapplied
+ *   → applied_at, když je vše pokryto. Nákup → unit_cost ze šarže,
+ *   bez cost → FIFO přes pending market_buy, fallback tržní tick.
+ * Úbytek skladu BEZ odpovídajících prodejů v cashflow = spotřeba ve
+ * výrobě / přesun → pozice se jen ZMENŠÍ (žádný falešný prodej/P/L).
  * Manuální pozice (source='manual') se nesahají.
  * Vše v transakci; snapshot s unit_cost se ukládá do game_warehouse.
  */
@@ -1736,6 +1745,7 @@ export async function reconcileGameWarehouse(
   let created = 0;
   let closed = 0;
   let adjusted = 0;
+  let lotsShrunk = 0; // loty zmenšené smazáním (spotřeba ve výrobě)
 
   await db.begin(async (sql) => {
     for (const entry of valid) {
@@ -1776,78 +1786,164 @@ export async function reconcileGameWarehouse(
           : 0;
 
       if (diff > 0) {
-        // nákup detekovaný ze skladu – cena ze hry (unit_cost),
-        // fallback tržní tick; jinak symbolická 0,001 (uživatel doladí)
-        const buyPrice =
+        // ── PŘÍRŮSTEK: nákup detekovaný ze skladu ──────────────────
+        // Cena: unit_cost ze šarže → pending market_buy z cashflow
+        // (FIFO, reálná cena burzy) → tržní tick → 0,001
+        let buyPrice: number | null =
           entry.unit_cost !== null && entry.unit_cost > 0
             ? entry.unit_cost
-            : marketPrice > 0
-              ? marketPrice
-              : 0.001;
+            : null;
+        let priceSource =
+          buyPrice !== null ? "unit_cost šarže" : null;
+
+        if (buyPrice === null) {
+          const buyMatch = await matchBuyPrice(
+            sql,
+            entry.item_id,
+            entry.quality,
+            diff
+          );
+          if (buyMatch.price !== null) {
+            buyPrice = buyMatch.price;
+            priceSource = "cashflow (nákup na burze)";
+            const pendingNow = await getPendingCashflowFor(
+              sql,
+              entry.item_id,
+              entry.quality
+            );
+            await applyCashflowUnits(
+              sql,
+              pendingNow.filter((p) => p.kind === "market_buy"),
+              diff
+            );
+          }
+        }
+        if (buyPrice === null && marketPrice > 0) {
+          buyPrice = marketPrice;
+          priceSource = "tržní tick (odhad)";
+        }
+        if (buyPrice === null) {
+          buyPrice = 0.001;
+          priceSource = null;
+        }
+
         await sql`
           insert into positions (item_id, quality, quantity, buy_price, source, note)
           values (${entry.item_id}, ${entry.quality}, ${diff}, ${buyPrice},
-                  'game', 'Sync ze hry (sklad)')
+                  'game', ${
+                    priceSource !== null
+                      ? `Sync ze hry – cena: ${priceSource}`
+                      : "Sync ze hry (sklad)"
+                  })
         `;
         await sql`update items set track_ticks = true where id = ${entry.item_id}`;
         created++;
       } else {
-        // prodej – FIFO přes otevřené game lots téže kvality
-        const lots = (await sql`
-          select id, quantity from positions
-          where item_id = ${entry.item_id}
-            and quality = ${entry.quality}
-            and closed_at is null and source = 'game'
-          order by opened_at asc
-          for update
-        `) as unknown as { id: string; quantity: number }[];
+        // ── ÚBYTEK: prodej (reálná cena z cashflow) vs. spotřeba ────
+        const decrease = -diff;
 
-        const sellPrice = marketPrice > 0 ? marketPrice : null;
-        let remaining = -diff;
-        for (const lot of lots) {
-          if (remaining <= 0) break;
-          const take = Math.min(lot.quantity, remaining);
+        const pending = await getPendingCashflowFor(
+          sql,
+          entry.item_id,
+          entry.quality
+        );
+        const sales = pending.filter((p) => p.kind === "retail_sale");
+        const saleUnits = sales.reduce((s, p) => s + p.units_unapplied, 0);
+        const coveredBySales = Math.min(decrease, saleUnits);
 
-          if (take === lot.quantity) {
-            await sql`
-              update positions
-              set sell_price = ${sellPrice}, closed_at = now()
-              where id = ${lot.id}
-            `;
-            await sql`
-              insert into condition_log
-                (position_id, event_type, market_price_at_log, condition_text)
-              values
-                (${lot.id}, 'CLOSED', ${sellPrice},
-                 ${`Prodej detekován syncem ze hry (${take.toLocaleString("cs-CZ")} ks, cena odhadnuta z trhu).`})
-            `;
-          } else {
-            await sql`
-              update positions set quantity = quantity - ${take} where id = ${lot.id}
-            `;
-            const [closedPart] = (await sql`
-              insert into positions
-                (item_id, quality, quantity, buy_price, sell_price, opened_at,
-                 closed_at, source, note)
-              values
-                (${entry.item_id}, ${entry.quality}, ${take},
-                 (select buy_price from positions where id = ${lot.id}),
-                 ${sellPrice},
-                 (select opened_at from positions where id = ${lot.id}),
-                 now(), 'game', 'Sync ze hry (sklad)')
-              returning id
-            `) as unknown as { id: string }[];
-            await sql`
-              insert into condition_log
-                (position_id, event_type, market_price_at_log, condition_text)
-              values
-                (${closedPart.id}, 'CLOSED', ${sellPrice},
-                 ${`Částečný prodej detekován syncem ze hry (${take.toLocaleString("cs-CZ")} ks, cena odhadnuta z trhu).`})
-            `;
-            adjusted++;
+        const closeLotsFifo = async (
+          units: number,
+          sellPrice: number | null,
+          logText: (take: number) => string
+        ): Promise<void> => {
+          const lots = (await sql`
+            select id, quantity from positions
+            where item_id = ${entry.item_id}
+              and quality = ${entry.quality}
+              and closed_at is null and source = 'game'
+            order by opened_at asc
+            for update
+          `) as unknown as { id: string; quantity: number }[];
+
+          let remaining = units;
+          for (const lot of lots) {
+            if (remaining <= 0) break;
+            const take = Math.min(lot.quantity, remaining);
+
+            if (take === lot.quantity) {
+              await sql`
+                update positions
+                set sell_price = ${sellPrice}, closed_at = now()
+                where id = ${lot.id}
+              `;
+              await sql`
+                insert into condition_log
+                  (position_id, event_type, market_price_at_log, condition_text)
+                values
+                  (${lot.id}, 'CLOSED', ${sellPrice}, ${logText(take)})
+              `;
+            } else {
+              await sql`
+                update positions set quantity = quantity - ${take} where id = ${lot.id}
+              `;
+              const [closedPart] = (await sql`
+                insert into positions
+                  (item_id, quality, quantity, buy_price, sell_price, opened_at,
+                   closed_at, source, note)
+                values
+                  (${entry.item_id}, ${entry.quality}, ${take},
+                   (select buy_price from positions where id = ${lot.id}),
+                   ${sellPrice},
+                   (select opened_at from positions where id = ${lot.id}),
+                   now(), 'game', 'Sync ze hry (sklad)')
+                returning id
+              `) as unknown as { id: string }[];
+              await sql`
+                insert into condition_log
+                  (position_id, event_type, market_price_at_log, condition_text)
+                values
+                  (${closedPart.id}, 'CLOSED', ${sellPrice}, ${logText(take)})
+              `;
+              adjusted++;
+            }
+            closed++;
+            remaining -= take;
           }
-          closed++;
-          remaining -= take;
+        };
+
+        if (coveredBySales > 0) {
+          // reálná prodejní cena (vážený průměr FIFO retail prodejů),
+          // fallback tržní tick, když retail řádky cenu nemají
+          const matched = await matchSalePrice(
+            sql,
+            entry.item_id,
+            entry.quality,
+            coveredBySales
+          );
+          const sellPrice =
+            matched.price !== null
+              ? matched.price
+              : marketPrice > 0
+                ? marketPrice
+                : null;
+
+          await closeLotsFifo(
+            coveredBySales,
+            sellPrice,
+            (take) =>
+              `Prodej ze hry – ${take.toLocaleString("cs-CZ")} ks @ ${
+                sellPrice !== null ? sellPrice.toFixed(3) : "?"
+              } $ (cena z cashflow).`
+          );
+          await applyCashflowUnits(sql, sales, coveredBySales);
+        }
+
+        const leftover = decrease - coveredBySales;
+        if (leftover > 0) {
+          // spotřeba ve výrobě / přesun bez prodeje → loty jen zmenšíme
+          // (bez sell_price = žádný falešný realized P/L)
+          await closeLotsShrink(sql, entry.item_id, entry.quality, leftover);
+          lotsShrunk++;
         }
       }
     }
@@ -1858,6 +1954,7 @@ export async function reconcileGameWarehouse(
     positions_created: created,
     positions_closed: closed,
     positions_adjusted: adjusted,
+    lots_shrunk: lotsShrunk,
   };
 }
 
@@ -1899,4 +1996,226 @@ export async function countGameImports(): Promise<number> {
   const rows = (await db`select count(*)::int as c from game_imports`) as
     unknown as { c: number }[];
   return Number(rows[0]?.c ?? 0);
+}
+
+// ── GAME CASHFLOW (reálné ceny transakcí ze hry) ────────────────────
+
+/**
+ * Řádek cashflow ze hry (GET /api/v2/companies/me/cashflow/recent/).
+ * Kategorii a descriptionKey parsuje route – sem přichází hotové
+ * odvozené pole. Příklad reálných řádků:
+ * – { category:'m', descriptionKey:'marketbuy-3', details:{amount:1000, price:2.298} }
+ * – { category:'s', descriptionKey:'retail-3', details:{price:5.07, quality:0} }
+ */
+export type GameCashflowRow = {
+  id: number; // ID transakce ze hry (dedupe klíč)
+  datetime: string; // ISO
+  category: string; // 'm' | 's' | 'p' | 'g' | …
+  description: string | null;
+  description_key: string | null;
+  money: number; // + příjem / − výdaj
+  details: Record<string, unknown>;
+  kind:
+    | "market_buy" // nákup na burze – details.amount × details.price (EXAKTNÍ)
+    | "retail_sale" // maloobchodní prodej – details.price za ks
+    | "other"; // produkce, mimořádné… (bez napojení na pozice)
+  item_id: number | null;
+  quality: number;
+  quantity: number | null; // ks (market_buy: details.amount; retail: money/price)
+  unit_price: number | null; // $/ks
+  /** Počáteční zásob neaplikovaných ks (jen market_buy/retail_sale). */
+  units_unapplied: number | null;
+};
+
+/**
+ * Uloží cashflow ze hry (dedupe dle ID transakce). Při konfliktu
+ * aktualizuje jen obsah – units_unapplied/applied_at se NEDOTKÁ,
+ * ať se neztratí stav aplikace do portfolia.
+ */
+export async function syncGameCashflow(rows: GameCashflowRow[]): Promise<number> {
+  if (rows.length === 0) return 0;
+  const db = getDb();
+  const result = await db`
+    insert into game_cashflow ${db(
+      rows.map((r) => ({
+        ...r,
+        details: r.details as unknown as JSONValue,
+      })),
+      "id",
+      "datetime",
+      "category",
+      "description",
+      "description_key",
+      "money",
+      "details",
+      "kind",
+      "item_id",
+      "quality",
+      "quantity",
+      "unit_price",
+      "units_unapplied"
+    )}
+    on conflict (id) do update set
+      datetime = excluded.datetime,
+      money = excluded.money,
+      details = excluded.details,
+      description = excluded.description
+  `;
+  return result.count;
+}
+
+/**
+ * Neaplikované transakce (pending) pro jednu položku a kvalitu,
+ * chronologicky. Používá reconcile skladu k dobití reálných cen.
+ */
+type PendingCashflow = {
+  id: number;
+  kind: GameCashflowRow["kind"];
+  quantity: number | null;
+  unit_price: number | null;
+  units_unapplied: number;
+};
+
+async function getPendingCashflowFor(
+  sql: PostgresSql,
+  itemId: number,
+  quality: number
+): Promise<PendingCashflow[]> {
+  return (await sql`
+    select id, kind, quantity, unit_price, units_unapplied
+    from game_cashflow
+    where item_id = ${itemId}
+      and quality = ${quality}
+      and applied_at is null
+      and units_unapplied > 0
+      and kind in ('market_buy', 'retail_sale')
+    order by datetime asc
+    for update
+  `) as unknown as PendingCashflow[];
+}
+
+/**
+ * Zmenší otevřené game lots o `units` ks (FIFO) BEZ uzavření – spotřeba
+ * ve výrobě / přesun. Celé loty se mažou, částečné se zmenší. Žádný
+ * sell_price → žádný falešný realized P/L.
+ */
+async function closeLotsShrink(
+  sql: PostgresSql,
+  itemId: number,
+  quality: number,
+  units: number
+): Promise<void> {
+  const lots = (await sql`
+    select id, quantity from positions
+    where item_id = ${itemId}
+      and quality = ${quality}
+      and closed_at is null and source = 'game'
+    order by opened_at asc
+    for update
+  `) as unknown as { id: string; quantity: number }[];
+
+  let remaining = units;
+  for (const lot of lots) {
+    if (remaining <= 0) break;
+    const take = Math.min(lot.quantity, remaining);
+    if (take === lot.quantity) {
+      await sql`delete from positions where id = ${lot.id}`;
+    } else {
+      await sql`update positions set quantity = quantity - ${take} where id = ${lot.id}`;
+    }
+    remaining -= take;
+  }
+}
+
+/** Aplikuje x jednotek FIFO přes pending transakce (nejstarší nejdřív). */
+async function applyCashflowUnits(
+  sql: PostgresSql,
+  pending: PendingCashflow[],
+  units: number
+): Promise<void> {
+  let remaining = units;
+  for (const cf of pending) {
+    if (remaining <= 0) break;
+    const avail = cf.units_unapplied;
+    const take = Math.min(avail, remaining);
+    if (take >= avail) {
+      await sql`
+        update game_cashflow
+        set units_unapplied = 0, applied_at = now()
+        where id = ${cf.id}
+      `;
+    } else {
+      await sql`
+        update game_cashflow
+        set units_unapplied = units_unapplied - ${take}
+        where id = ${cf.id}
+      `;
+    }
+    remaining -= take;
+  }
+}
+
+/**
+ * Cena prodejů (FIFO přes pending retail_sale transakcí).
+ * Vrací vážený průměr ceny pro uzavření `units` ks, NEBO null, když
+ * pending prodeje nedostají (př. historie nedoručena) – volající
+ * použije fallback (poslední tržní tick).
+ */
+async function matchSalePrice(
+  sql: PostgresSql,
+  itemId: number,
+  quality: number,
+  units: number
+): Promise<{ price: null | number; matchedUnits: number }> {
+  const pending = await getPendingCashflowFor(sql, itemId, quality);
+  const sales = pending.filter((p) => p.kind === "retail_sale");
+  const available = sales.reduce((s, p) => s + p.units_unapplied, 0);
+  if (available < units || sales.length === 0) {
+    return { price: null, matchedUnits: 0 };
+  }
+
+  // vážený průměr ceny přes dotčené FIFO prodeje
+  let remaining = units;
+  let costSum = 0;
+  for (const s of sales) {
+    if (remaining <= 0) break;
+    const take = Math.min(s.units_unapplied, remaining);
+    if (s.unit_price !== null && s.unit_price > 0) {
+      costSum += s.unit_price * take;
+    }
+    remaining -= take;
+  }
+  const price = units > 0 && costSum > 0 ? costSum / units : null;
+  return { price, matchedUnits: units };
+}
+
+/**
+ * Cena nákupů (FIFO přes pending market_buy transakcí) – doplněk k
+ * unit_cost ze skladu, když šarže nemá cost (např. jen tržní nákup).
+ */
+async function matchBuyPrice(
+  sql: PostgresSql,
+  itemId: number,
+  quality: number,
+  units: number
+): Promise<{ price: null | number; matchedUnits: number }> {
+  const pending = await getPendingCashflowFor(sql, itemId, quality);
+  const buys = pending.filter((p) => p.kind === "market_buy");
+  const available = buys.reduce((s, p) => s + p.units_unapplied, 0);
+  if (available < units || buys.length === 0) {
+    return { price: null, matchedUnits: 0 };
+  }
+
+  let remaining = units;
+  let costSum = 0;
+  for (const b of buys) {
+    if (remaining <= 0) break;
+    const take = Math.min(b.units_unapplied, remaining);
+    if (b.unit_price !== null && b.unit_price > 0) {
+      costSum += b.unit_price * take;
+    }
+    remaining -= take;
+  }
+  const price = units > 0 && costSum > 0 ? costSum / units : null;
+  return { price, matchedUnits: units };
 }

@@ -301,9 +301,16 @@ src/components/            # vizní komponenty (viz níže)
   sklad = GET `/api/v3/resources/{companyId}/` → pole šarží
   `{ id, amount, quality, kind, cost: {workers, admin, material1..5, market} }`,
   kde **kind = ID komodity** a **Σ cost.* / amount = skutečná pořizovací
-  cena/ks** (unit_cost). Cashflow = `/api/v2/companies/me/cashflow/recent/`
+  cena/ks** (unit_cost).  Cashflow = `/api/v2/companies/me/cashflow/recent/`
   (category 'm' nákup se skutečnou cenou, 's' maloobchodní prodej, 'p'
-  produkce, 'g' mimořádné). Reconcile (`reconcileGameWarehouse`):
+  produkce, 'g' mimořádné). Fáze 2 – CASHFLOW NAPOJENO NA POZICE
+  (migrace 010, tabulka game_cashflow s dedupe dle ID transakce):
+  userscript v0.4+ posílá cashflow PŘED skladem; reconcile pak bere
+  ceny lazy – prodej = FIFO přes pending retail_sale (vážený průměr
+  details.price), nákup bez cost = pending market_buy; spotřebované ks
+  klesají v units_unapplied → applied_at. Úbytek skladu bez prodeje
+  v cashflow = spotřeba ve výrobě → loty se jen ZMENŠÍ (žádný falešný
+  P/L; helper closeLotsShrink). Reconcile (reconcileGameWarehouse):
   rozdíl sklad vs. otevřené pozice source='game' per (položka, kvalita) =
   nový lot (buy_price = unit_cost ze hry) nebo FIFO prodej (sell_price
   odhad z posledního ticku Q0); položka zmizelá ze skladu = prodej vše;
