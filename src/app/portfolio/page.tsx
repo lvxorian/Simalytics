@@ -378,6 +378,24 @@ function ClosedRow({ p }: { p: PositionWithPnl }) {
       </TableCell>
       <TableCell className="text-right font-mono tabular-nums">
         {formatPrice(p.sell_price)}
+        {p.cost_breakdown !== null && (
+          <div
+            className="mt-0.5 text-[10px] leading-tight text-muted-foreground"
+            title={
+              p.cost_breakdown.transport_exact
+                ? "Přeprava exaktně (poměr položky × cena ze skladu), poplatky z cashflow"
+                : "Přeprava odhadem (% z tržby)"
+            }
+          >
+            hrubá {formatPrice(p.cost_breakdown.gross)}
+            {p.cost_breakdown.fees !== 0 && (
+              <> · popl. {formatPrice(p.cost_breakdown.fees)}</>
+            )}
+            {p.cost_breakdown.transport !== 0 && (
+              <> · přepr. {formatPrice(p.cost_breakdown.transport)}</>
+            )}
+          </div>
+        )}
       </TableCell>
       <TableCell className="text-right font-mono tabular-nums">
         {p.quantity.toLocaleString("cs-CZ")}

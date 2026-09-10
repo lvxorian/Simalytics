@@ -3,6 +3,7 @@ import { getDb } from "@/lib/db";
 import type { SimcoCertificateKind, SimcoContest, SimcoVwap } from "@/lib/simcotools";
 import { getResources } from "@/lib/simcotools";
 import type {
+  CostBreakdown,
   ConditionLogEntry,
   Item,
   LatestPriceRow,
@@ -41,6 +42,7 @@ type RawPosition = {
   closed_at: Date | null;
   note: string | null;
   created_at: Date;
+  cost_breakdown: unknown | null;
 };
 
 type RawPositionJoined = RawPosition & {
@@ -145,7 +147,33 @@ export async function getPositions(opts: { open?: boolean } = {}): Promise<Posit
   return rows.map(mapPosition);
 }
 
-function mapPosition(r: RawPosition): Position {
+/** Bezpečná konverze jsonb rozpadu nákladů (numerics přichází jako string). */
+function mapCostBreakdown(raw: unknown): CostBreakdown | null {
+  if (raw === null || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const num = (v: unknown): number | null => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  const gross = num(o.gross);
+  if (gross === null) return null;
+  const fees = num(o.fees) ?? 0;
+  const transport = num(o.transport) ?? 0;
+  const net = num(o.net) ?? gross + fees + transport;
+  return {
+    gross,
+    fees,
+    transport,
+    transport_units: num(o.transport_units) ?? 0,
+    transport_unit_cost: num(o.transport_unit_cost),
+    transport_exact: o.transport_exact === true,
+    net,
+  };
+}
+
+function mapPosition(r: RawPosition): Position & {
+  cost_breakdown: CostBreakdown | null;
+} {
   return {
     id: r.id,
     item_id: r.item_id,
@@ -157,6 +185,7 @@ function mapPosition(r: RawPosition): Position {
     closed_at: r.closed_at === null ? null : iso(r.closed_at),
     note: r.note,
     created_at: iso(r.created_at),
+    cost_breakdown: mapCostBreakdown(r.cost_breakdown),
   };
 }
 
@@ -224,6 +253,7 @@ export async function getPositionsWithPnl(
       unrealized_pl,
       unrealized_pl_pct,
       realized_pl,
+      cost_breakdown: position.cost_breakdown,
     };
   });
 }
@@ -1924,7 +1954,8 @@ export async function reconcileGameWarehouse(
         const closeLotsFifo = async (
           units: number,
           sellPrice: number | null,
-          logText: (take: number) => string
+          logText: (take: number) => string,
+          breakdown: (take: number) => CostBreakdown | null = () => null
         ): Promise<void> => {
           const lots = (await sql`
             select id, quantity from positions
@@ -1939,11 +1970,13 @@ export async function reconcileGameWarehouse(
           for (const lot of lots) {
             if (remaining <= 0) break;
             const take = Math.min(lot.quantity, remaining);
+            const bd = breakdown(take);
 
             if (take === lot.quantity) {
               await sql`
                 update positions
-                set sell_price = ${sellPrice}, closed_at = now()
+                set sell_price = ${sellPrice}, closed_at = now(),
+                    cost_breakdown = ${bd === null ? null : sql.json(bd)}
                 where id = ${lot.id}
               `;
               await sql`
@@ -1959,13 +1992,14 @@ export async function reconcileGameWarehouse(
               const [closedPart] = (await sql`
                 insert into positions
                   (item_id, quality, quantity, buy_price, sell_price, opened_at,
-                   closed_at, source, note)
+                   closed_at, source, note, cost_breakdown)
                 values
                   (${entry.item_id}, ${entry.quality}, ${take},
                    (select buy_price from positions where id = ${lot.id}),
                    ${sellPrice},
                    (select opened_at from positions where id = ${lot.id}),
-                   now(), 'game', 'Sync ze hry (sklad)')
+                   now(), 'game', 'Sync ze hry (sklad)',
+                   ${bd === null ? null : sql.json(bd)})
                 returning id
               `) as unknown as { id: string }[];
               await sql`
@@ -1982,8 +2016,8 @@ export async function reconcileGameWarehouse(
         };
 
         if (coveredBySales > 0) {
-          // reálná prodejní cena (vážený průměr FIFO retail prodejů),
-          // fallback tržní tick, když retail řádky cenu nemají
+          // reálná prodejní cena (vážený průměr FIFO prodejů z cashflow),
+          // fallback tržní tick, když pending řádky cenu nemají
           const matched = await matchSalePrice(
             sql,
             entry.item_id,
@@ -1997,13 +2031,61 @@ export async function reconcileGameWarehouse(
                 ? marketPrice
                 : null;
 
+          // Rozpad nákladů – jen když máme reálnou cenu z cashflow.
+          // Hrubá tržba + přepravní jednotky se sčítají per prodejní
+          // řádek (kontrakt = polovina poměru), poplatky z okna ±10 min.
+          let breakdownFactory: ((take: number) => CostBreakdown | null) | null =
+            null;
+          if (matched.price !== null) {
+            let gross = 0;
+            let transportUnits = 0;
+            let saleMin: Date | null = null;
+            let saleMax: Date | null = null;
+            const ratio = await getTransportationRatio(entry.item_id);
+            {
+              let rem = coveredBySales;
+              for (const s of sales) {
+                if (rem <= 0) break;
+                const take = Math.min(s.units_unapplied, rem);
+                gross += take * (s.unit_price ?? 0);
+                transportUnits +=
+                  take * (ratio ?? 0) * (s.kind === "contract_sale" ? 0.5 : 1);
+                if (saleMin === null || s.datetime < saleMin) saleMin = s.datetime;
+                if (saleMax === null || s.datetime > saleMax) saleMax = s.datetime;
+                rem -= take;
+              }
+            }
+            const fees = await collectSaleFees(sql, entry.item_id, saleMin, saleMax);
+            const costs = await computeSaleCosts(sql, {
+              itemId: entry.item_id,
+              fees,
+              gross,
+              transportUnits,
+            });
+            const netTotal = gross + fees - costs.transport;
+            breakdownFactory = (take: number) => ({
+              gross: (gross * take) / coveredBySales,
+              fees: (fees * take) / coveredBySales,
+              transport: (costs.transport * take) / coveredBySales,
+              transport_units: Math.round(
+                (transportUnits * take) / coveredBySales
+              ),
+              transport_unit_cost: costs.transportExact
+                ? costs.trUnitCost
+                : null,
+              transport_exact: costs.transportExact,
+              net: (netTotal * take) / coveredBySales,
+            });
+          }
+
           await closeLotsFifo(
             coveredBySales,
             sellPrice,
             (take) =>
               `Prodej ze hry – ${take.toLocaleString("cs-CZ")} ks @ ${
                 sellPrice !== null ? sellPrice.toFixed(3) : "?"
-              } $ (cena z cashflow).`
+              } $ (cena z cashflow).`,
+            breakdownFactory ?? undefined
           );
           await applyCashflowUnits(sql, sales, coveredBySales);
         }
@@ -2359,7 +2441,7 @@ export async function closeSalesFromCashflow(): Promise<number> {
       );
       if (matched.price === null) return 0;
 
-      // Poměr přepravy položky (pro exaktní cenu přepravy níže)
+      // Poměr přepravy položky (pro přepravní jednotky níže)
       const ratio = await getTransportationRatio(t.item_id);
 
       // ── NÁKLADY PRODEJE (ať P/L odpovídá čistému zisku ve hře) ────
@@ -2387,26 +2469,7 @@ export async function closeSalesFromCashflow(): Promise<number> {
         }
       }
 
-      // Burzovní poplatky (fees-{item}, NE cancelfee – to je samostatná
-      // ztráta z Dotnutí nabídky) v okně ±10 min od prodejů, exactně
-      // z cashflow. Označí se za aplikované, ať se nezapočítají dvakrát.
-      let fees = 0;
-      if (saleMin !== null && saleMax !== null) {
-        const feeRows = (await sql`
-          select id, money from game_cashflow
-          where category = 'f' and item_id = ${t.item_id}
-            and applied_at is null
-            and description_key like 'fees-%'
-            and datetime between ${new Date(saleMin.getTime() - 10 * 60_000)}
-                             and ${new Date(saleMax.getTime() + 10 * 60_000)}
-        `) as unknown as { id: number; money: string }[];
-        for (const f of feeRows) {
-          fees += Number(f.money);
-          await sql`
-            update game_cashflow set applied_at = now() where id = ${f.id}
-          `;
-        }
-      }
+      const fees = await collectSaleFees(sql, t.item_id, saleMin, saleMax);
 
       // ── PŘEPRAVA – EXAKTNÍ výpočet ──────────────────────────────
       // Mechanika hry (ověřeno naměřením): burzovní/maloobchodní prodej
@@ -2415,23 +2478,16 @@ export async function closeSalesFromCashflow(): Promise<number> {
       // × unit_cost Přepravy na skladu. Naměříno: 300 × 0,5 × 0,0882 =
       // 13,23 $ = přesně počítadlo hry. Fallback: % z tržby (env),
       // když poměr/cena nejsou k dispozici.
-      let transport = 0;
-      let transportExact = false;
-      const trUnitCost = await getTransportUnitCost(sql);
-      const useExact =
-        ratio !== null && trUnitCost !== null && ratio > 0 && trUnitCost > 0;
-      if (useExact) {
-        transport = transportUnits * (trUnitCost as number);
-        transportExact = true;
-      } else {
-        const transportPct = Number(
-          process.env.GAME_TRANSPORT_PCT ?? "0.0306"
-        );
-        transport =
-          Number.isFinite(transportPct) && transportPct > 0
-            ? gross * transportPct
-            : 0;
-      }
+      const costs = await computeSaleCosts(sql, {
+        itemId: t.item_id,
+        fees,
+        gross,
+        transportUnits,
+      });
+      const transport = costs.transport;
+      const transportExact = costs.transportExact;
+      const trUnitCost = costs.trUnitCost;
+      const useExact = transportExact;
 
       // Prodejní cena se ukládá NETTO (po poplatcích a přepravě) –
       // realized P/L = (netto − nákup) × ks odpovídá čistému zisku.
@@ -2447,6 +2503,17 @@ export async function closeSalesFromCashflow(): Promise<number> {
         for update
       `) as unknown as { id: string; quantity: number }[];
 
+      // Rozpad nákladů prodejní transakce (UI tabulky uzavřených pozic)
+      const breakdown = (): CostBreakdown => ({
+        gross: gross,
+        fees: fees,
+        transport: transport,
+        transport_units: Math.round(transportUnits),
+        transport_unit_cost: useExact ? (trUnitCost as number) : null,
+        transport_exact: transportExact,
+        net: gross + fees - transport,
+      });
+
       let remaining = closable;
       let closed = 0;
       const logText = (take: number) =>
@@ -2454,10 +2521,20 @@ export async function closeSalesFromCashflow(): Promise<number> {
       for (const lot of lots) {
         if (remaining <= 0) break;
         const take = Math.min(lot.quantity, remaining);
+        const scale = closable > 0 ? take / closable : 0;
+        const bd: CostBreakdown = {
+          ...breakdown(),
+          gross: gross * scale,
+          fees: fees * scale,
+          transport: transport * scale,
+          transport_units: Math.round(breakdown().transport_units * scale),
+          net: (gross + fees - transport) * scale,
+        };
         if (take === lot.quantity) {
           await sql`
             update positions
-            set sell_price = ${netPrice}, closed_at = now()
+            set sell_price = ${netPrice}, closed_at = now(),
+                cost_breakdown = ${sql.json(bd)}
             where id = ${lot.id}
           `;
           await sql`
@@ -2473,13 +2550,14 @@ export async function closeSalesFromCashflow(): Promise<number> {
           const [closedPart] = (await sql`
             insert into positions
               (item_id, quality, quantity, buy_price, sell_price, opened_at,
-               closed_at, source, note)
+               closed_at, source, note, cost_breakdown)
             values
               (${t.item_id}, ${t.quality}, ${take},
                (select buy_price from positions where id = ${lot.id}),
                ${netPrice},
                (select opened_at from positions where id = ${lot.id}),
-               now(), 'game', 'Sync ze hry (okamžitý prodej z cashflow)')
+               now(), 'game', 'Sync ze hry (okamžitý prodej z cashflow)',
+               ${sql.json(bd)})
             returning id
           `) as unknown as { id: string }[];
           await sql`
@@ -2598,11 +2676,87 @@ async function applyCashflowUnits(
 }
 
 /**
+ * Výpočet nákladů prodejní transakce (poplatky + přeprava) — sdílený
+ * okamžitým uzavřením i reconcile skladu, ať je rozpad vždy stejný.
+ *
+ * Přeprava EXAKTNĚ: prodané ks × transportation poměr položky (Simco
+ * Tools) × unit_cost Přepravy na skladu; kontrakt spotřebuje POLOVINU
+ * poměru (naměřeno: 100 dýní = −50 přepravy). Fallback: % z tržby
+ * (env GAME_TRANSPORT_PCT), když poměr/cena nejsou k dispozici.
+ */
+async function computeSaleCosts(
+  sql: PostgresSql,
+  opts: {
+    itemId: number;
+    /** částka poplatků exact z cashflow (záporná nebo 0) */
+    fees: number;
+    /** hrubá tržba za uzavírané ks */
+    gross: number;
+    /** spotřebované přepravní jednotky (vč. kontraktového faktoru) */
+    transportUnits: number;
+  }
+): Promise<{
+  transport: number;
+  transportExact: boolean;
+  trUnitCost: number | null;
+}> {
+  const ratio = await getTransportationRatio(opts.itemId);
+  const trUnitCost = await getTransportUnitCost(sql);
+  const useExact =
+    ratio !== null && trUnitCost !== null && ratio > 0 && trUnitCost > 0;
+
+  if (useExact) {
+    return {
+      transport: opts.transportUnits * (trUnitCost as number),
+      transportExact: true,
+      trUnitCost,
+    };
+  }
+
+  const transportPct = Number(process.env.GAME_TRANSPORT_PCT ?? "0.0306");
+  const transport =
+    Number.isFinite(transportPct) && transportPct > 0
+      ? opts.gross * transportPct
+      : 0;
+  return { transport, transportExact: false, trUnitCost: null };
+}
+
+/**
  * Cena prodejů (FIFO přes pending retail_sale transakcí).
  * Vrací vážený průměr ceny pro uzavření `units` ks, NEBO null, když
  * pending prodeje nedostají (př. historie nedoručena) – volající
  * použije fallback (poslední tržní tick).
  */
+/**
+ * Burzovní poplatky (fees-{item}, NE cancelfee – to je samostatná
+ * ztráta ze zrušení nabídky) v okně ±10 min od prodejů, exactně
+ * z cashflow. Označí se za aplikované, ať se nezapočítají dvakrát.
+ */
+async function collectSaleFees(
+  sql: PostgresSql,
+  itemId: number,
+  saleMin: Date | null,
+  saleMax: Date | null
+): Promise<number> {
+  if (saleMin === null || saleMax === null) return 0;
+  const feeRows = (await sql`
+    select id, money from game_cashflow
+    where category = 'f' and item_id = ${itemId}
+      and applied_at is null
+      and description_key like 'fees-%'
+      and datetime between ${new Date(saleMin.getTime() - 10 * 60_000)}
+                       and ${new Date(saleMax.getTime() + 10 * 60_000)}
+  `) as unknown as { id: number; money: string }[];
+  let fees = 0;
+  for (const f of feeRows) {
+    fees += Number(f.money);
+    await sql`
+      update game_cashflow set applied_at = now() where id = ${f.id}
+    `;
+  }
+  return fees;
+}
+
 async function matchSalePrice(
   sql: PostgresSql,
   itemId: number,
@@ -2611,7 +2765,10 @@ async function matchSalePrice(
 ): Promise<{ price: null | number; matchedUnits: number }> {
   const pending = await getPendingCashflowFor(sql, itemId, quality);
   const sales = pending.filter(
-    (p) => p.kind === "retail_sale" || p.kind === "market_sale"
+    (p) =>
+      p.kind === "retail_sale" ||
+      p.kind === "market_sale" ||
+      p.kind === "contract_sale"
   );
   const available = sales.reduce((s, p) => s + p.units_unapplied, 0);
   if (available < units || sales.length === 0) {

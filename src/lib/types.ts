@@ -55,6 +55,24 @@ export type ConditionLogEntry = {
   created_at: string;
 };
 
+/** Rozpad nákladů prodeje ze hry (uložený na uzavřené pozici). */
+export type CostBreakdown = {
+  /** hrubá tržba za uzavřené ks (kladné) */
+  gross: number;
+  /** burzovní poplatky (exact z cashflow, záporné nebo 0) */
+  fees: number;
+  /** náklad přepravy (signed, záporný nebo 0) */
+  transport: number;
+  /** spotřebované jednotky přepravy */
+  transport_units: number;
+  /** cena jednotky přepravy v okamžiku prodeje */
+  transport_unit_cost: number | null;
+  /** true = exaktní (poměr × cena skladu), false = % odhad */
+  transport_exact: boolean;
+  /** netto tržba = gross + fees + transport */
+  net: number;
+};
+
 /** Pozice obohacená o aktuální cenu a P/L – používá UI trackeru. */
 export type PositionWithPnl = Position & {
   item_name: string;
@@ -63,6 +81,7 @@ export type PositionWithPnl = Position & {
   unrealized_pl: number | null; // absolutní $ (pozice otevřená)
   unrealized_pl_pct: number | null; // procenta
   realized_pl: number | null; // pro uzavřené pozice
+  cost_breakdown: CostBreakdown | null;
 };
 
 export type Quality = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
