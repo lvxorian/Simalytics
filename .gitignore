@@ -28,6 +28,7 @@ yarn-error.log*
 
 # debug dumpy z hry (obsahují herní data, nikdy necommitovat)
 simalytics-dump-*.json
+portfolio-backup-*.json
 
 # typescript
 *.tsbuildinfo
