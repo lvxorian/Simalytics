@@ -26,6 +26,7 @@ npm run icons:download  # stáhne ikony z CDN do public/icons + image_url do DB
 npm run fetch:market # lokální test cron skriptu (ceny → Neon)
 npm run backfill:candles  # denní svíčky ze Simco Tools → DB
 npm run sync:daily   # denní sync VWAP/contests/cert kinds (Signal Engine fáze 1)
+npm run import:catalog  # kompletní katalog položek ze Simco Tools → items (nové = track_ticks false)
 ```
 
 Testy nejsou — ověření = `npm run typecheck` + `npm run build` + `npm run lint`.
@@ -35,7 +36,8 @@ Testy nejsou — ověření = `npm run typecheck` + `npm run build` + `npm run l
 ```
 db/schema.sql              # items, price_history, positions, condition_log, watchlist
 # upgrades: 001_terminal (candles, watchlist), 002_signal_engine (vwap_daily, contests, cert_kinds),
-#           003_alerts (alerts s cooldownem), 005_alert_seen (seen_at), 006_limit_sell_alerts (kind 'limit_sell'),
+#           003_alerts (alerts s cooldownem), 004_tick_volume (price_history.volume –
+#           objemy intraday svíček z market/followed), 005_alert_seen (seen_at), 006_limit_sell_alerts (kind 'limit_sell'),
 #           008_alert_v2 (direction 'cross', one_shot), 009_game_sync (game_imports,
 #           game_warehouse, positions.source), 010_cashflow (game_cashflow),
 #           012_cost_breakdown (positions.cost_breakdown jsonb – rozpad
