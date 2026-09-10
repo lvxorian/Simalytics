@@ -2413,7 +2413,103 @@ export async function closeSalesFromCashflow(): Promise<number> {
         snapAt === null
           ? sales
           : sales.filter((s) => s.datetime > snapAt);
-      if (freshSales.length === 0) return 0;
+      if (freshSales.length === 0) {
+        // Prodeje STARŠÍ než poslední snapshot: reconcile je už viděl.
+        // Jsou-li ale jejich jednotky POŘÁD neaplikované, cashflow dorazil
+        // až PO snapshotu → reconcile je stihl účtovat jako spotřebu
+        // (zmenšení lotů bez P/L). Doplatíme uzavření (amend): vznikne
+        // uzavřená pozice s reálnou cenou, otevřené loty se NEDOTÝKÁ
+        // (úbytek už je zúčtován) – dvojité účtování nehrozí, protože
+        // pokryté prodeje by už units_unapplied = 0 měly.
+        const staleSales =
+          snapAt === null ? [] : sales.filter((s) => s.datetime <= snapAt);
+        const staleUnits = staleSales.reduce(
+          (s, p) => s + p.units_unapplied,
+          0
+        );
+        if (staleSales.length === 0 || staleUnits <= 0) return 0;
+
+        const [fifoLot] = (await sql`
+          select id, buy_price, opened_at from positions
+          where item_id = ${t.item_id} and quality = ${t.quality}
+            and closed_at is null and source = 'game'
+          order by opened_at asc limit 1
+        `) as unknown as {
+          id: string;
+          buy_price: string;
+          opened_at: Date;
+        }[];
+        if (!fifoLot) return 0;
+        const buy = Number(fifoLot.buy_price);
+
+        // Hrubá tržba + přepravní jednotky per prodejní řádek
+        // (kontrakt = polovina poměru), poplatky z okna ±10 min.
+        const ratio = await getTransportationRatio(t.item_id);
+        let gross = 0;
+        let transportUnits = 0;
+        let saleMin: Date | null = null;
+        let saleMax: Date | null = null;
+        {
+          let rem = staleUnits;
+          for (const s of staleSales) {
+            if (rem <= 0) break;
+            const take = Math.min(s.units_unapplied, rem);
+            gross += take * (s.unit_price ?? 0);
+            transportUnits +=
+              take * (ratio ?? 0) * (s.kind === "contract_sale" ? 0.5 : 1);
+            if (saleMin === null || s.datetime < saleMin)
+              saleMin = s.datetime;
+            if (saleMax === null || s.datetime > saleMax)
+              saleMax = s.datetime;
+            rem -= take;
+          }
+        }
+        const fees = await collectSaleFees(sql, t.item_id, saleMin, saleMax);
+        const costs = await computeSaleCosts(sql, {
+          itemId: t.item_id,
+          fees,
+          gross,
+          transportUnits,
+        });
+        const netTotal = gross + fees - costs.transport;
+        if (gross <= 0) return 0;
+        const netPrice = netTotal / staleUnits;
+        const closedAt = saleMax ?? new Date();
+
+        const amendNote =
+          "Sync ze hry (doplatek uzavření – cashflow dorazil po snapshotu skladu)";
+        const [amendRow] = (await sql`
+          insert into positions
+            (item_id, quality, quantity, buy_price, sell_price, opened_at,
+             closed_at, source, note, cost_breakdown)
+          values
+            (${t.item_id}, ${t.quality}, ${staleUnits}, ${buy}, ${netPrice},
+             ${fifoLot.opened_at}, ${closedAt}, 'game', ${amendNote},
+             ${sql.json({
+               gross,
+               fees,
+               transport: costs.transport,
+               transport_units: Math.round(transportUnits),
+               transport_unit_cost: costs.transportExact
+                 ? costs.trUnitCost
+                 : null,
+               transport_exact: costs.transportExact,
+               net: netTotal,
+             })})
+          returning id
+        `) as unknown as { id: string }[];
+
+        const amendLog = `Prodej ze hry (doplatek – cashflow dorazil po snapshotu) – ${staleUnits.toLocaleString("cs-CZ")} ks, hrubá ${(gross / staleUnits).toFixed(3)} $/ks, netto po poplatcích (${fees.toFixed(2)} $) a přepravě (${costs.transportExact ? `${Math.round(transportUnits).toLocaleString("cs-CZ")} ks × ${(costs.trUnitCost as number).toFixed(4)} $` : `odhad ${costs.transport.toFixed(2)} $`}) ${netPrice.toFixed(3)} $/ks.`;
+        await sql`
+          insert into condition_log
+            (position_id, event_type, market_price_at_log, condition_text)
+          values
+            (${amendRow.id}, 'CLOSED', ${gross / staleUnits}, ${amendLog})
+        `;
+
+        await applyCashflowUnits(sql, staleSales, staleUnits);
+        return 1;
+      }
       const saleDatetime = new Map(
         freshSales.map((p) => [p.id, p.datetime] as const)
       );
