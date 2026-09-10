@@ -59,10 +59,16 @@ function parseCashflowRow(raw: unknown): GameCashflowRow | null {
     ? row.details
     : {}) as unknown as GameCashflowRow["details"];
 
-  // odvození itemu z descriptionKey: 'marketbuy-3' / 'retail-66' → id 3 / 66
+  // odvození itemu z descriptionKey:
+  //   'marketbuy-3' / 'retail-66' / 'marketfilled-40' → id na konci
+  //   'cs-146-Momoi.cc' (kontrakt) → id jako druhý segment
   let itemId: number | null = null;
-  const keyMatch = descriptionKey?.match(/-(\d+)$/);
-  if (keyMatch) itemId = Number(keyMatch[1]);
+  const contractMatch = descriptionKey?.match(/^cs-(\d+)-/);
+  if (contractMatch) itemId = Number(contractMatch[1]);
+  if (itemId === null) {
+    const keyMatch = descriptionKey?.match(/-(\d+)$/);
+    if (keyMatch) itemId = Number(keyMatch[1]);
+  }
 
   let kind: GameCashflowRow["kind"] = "other";
   let quality = 0;
@@ -79,6 +85,23 @@ function parseCashflowRow(raw: unknown): GameCashflowRow | null {
     // details: price, amount, buyer, profit, quality); marketsell = stejný tvar.
     // Bez amount se ks dopočtou z money (příjem je kladný).
     kind = "market_sale";
+    const price = num(details.price);
+    const amount = num(details.amount);
+    const q = Number(details.quality ?? 0);
+    quality = Number.isInteger(q) && q >= 0 && q <= 7 ? q : 0;
+    if (price > 0 && (amount > 0 || money !== 0)) {
+      unitPrice = price;
+      quantity =
+        amount > 0 ? Math.round(amount) : Math.round(Math.abs(money) / price);
+    } else {
+      itemId = null;
+      kind = "other";
+    }
+  } else if (keyStr.startsWith("cs-") && itemId !== null) {
+    // prodej přes kontrakt ('cs-{itemId}-{kupce}', money kladné, details:
+    // price/amount/quality/resource). Žádné burzovní poplatky (měřeno),
+    // přeprava se spotřebuje polovině poměru (měřeno na dýních ×2).
+    kind = "contract_sale";
     const price = num(details.price);
     const amount = num(details.amount);
     const q = Number(details.quality ?? 0);
@@ -119,7 +142,10 @@ function parseCashflowRow(raw: unknown): GameCashflowRow | null {
   }
 
   const unitsUnapplied =
-    kind === "market_buy" || kind === "retail_sale" || kind === "market_sale"
+    kind === "market_buy" ||
+    kind === "retail_sale" ||
+    kind === "market_sale" ||
+    kind === "contract_sale"
       ? (quantity ?? 0)
       : null;
 

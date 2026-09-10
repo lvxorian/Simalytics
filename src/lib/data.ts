@@ -1913,7 +1913,10 @@ export async function reconcileGameWarehouse(
         // marketsell). Dřív jen retail → burzovní prodeje neměly pokrytí
         // cenou, šly jako „spotřeba" a realized P/L zůstal 0.
         const sales = pending.filter(
-          (p) => p.kind === "retail_sale" || p.kind === "market_sale"
+          (p) =>
+            p.kind === "retail_sale" ||
+            p.kind === "market_sale" ||
+            p.kind === "contract_sale"
         );
         const saleUnits = sales.reduce((s, p) => s + p.units_unapplied, 0);
         const coveredBySales = Math.min(decrease, saleUnits);
@@ -2172,6 +2175,7 @@ export type GameCashflowRow = {
   kind:
     | "market_buy" // nákup na burze – details.amount × details.price (EXAKTNÍ)
     | "market_sale" // prodej na burze – details.amount × details.price
+    | "contract_sale" // prodej přes kontrakt ('cs-{id}-{kupce}') – bez poplatků
     | "retail_sale" // maloobchodní prodej – details.price za ks
     | "other"; // produkce, mimořádné… (bez napojení na pozice)
   item_id: number | null;
@@ -2288,14 +2292,14 @@ async function getTransportUnitCost(
 export async function closeSalesFromCashflow(): Promise<number> {
   const db = getDb();
 
-  // Položky s pending prodeji (maloobchod + burza), nejstarší první.
-  // Ignorované položky (palivo) se vynechají – jejich loty se
+  // Položky s pending prodeji (maloobchod + burza + kontrakty), nejstarší
+  // první. Ignorované položky (palivo) se vynechají – jejich loty se
   // záměrně nevedou a pending se u nich uzavírá jinudy.
   const targets = (await db`
     select item_id, quality, sum(units_unapplied)::int as units
     from game_cashflow
     where applied_at is null and units_unapplied > 0
-      and kind in ('retail_sale', 'market_sale')
+      and kind in ('retail_sale', 'market_sale', 'contract_sale')
       and item_id not in (select item_id from game_sync_ignored)
     group by item_id, quality
     order by min(datetime) asc
@@ -2308,7 +2312,10 @@ export async function closeSalesFromCashflow(): Promise<number> {
     const result = await db.begin(async (sql) => {
       const pending = await getPendingCashflowFor(sql, t.item_id, t.quality);
       const sales = pending.filter(
-        (p) => p.kind === "retail_sale" || p.kind === "market_sale"
+        (p) =>
+          p.kind === "retail_sale" ||
+          p.kind === "market_sale" ||
+          p.kind === "contract_sale"
       );
       if (sales.length === 0) return 0;
       const saleDatetime = new Map(
@@ -2338,10 +2345,15 @@ export async function closeSalesFromCashflow(): Promise<number> {
       );
       if (matched.price === null) return 0;
 
+      // Poměr přepravy položky (pro exaktní cenu přepravy níže)
+      const ratio = await getTransportationRatio(t.item_id);
+
       // ── NÁKLADY PRODEJE (ať P/L odpovídá čistému zisku ve hře) ────
       // Hrubé výnosy aplikovaných prodejů (FIFO po jednotkách) + jejich
-      // časové okno, ať se k nim přiřadí poplatky.
+      // časové okno, ať se k nim přiřadí poplatky. Zároveň se počítají
+      // přepravní jednotky per prodej (kontrakt = polovina poměru).
       let gross = 0;
+      let transportUnits = 0;
       let saleMin: Date | null = null;
       let saleMax: Date | null = null;
       {
@@ -2350,6 +2362,8 @@ export async function closeSalesFromCashflow(): Promise<number> {
           if (rem <= 0) break;
           const take = Math.min(s.units_unapplied, rem);
           gross += take * (s.unit_price ?? 0);
+          transportUnits +=
+            take * (ratio ?? 0) * (s.kind === "contract_sale" ? 0.5 : 1);
           const dt = saleDatetime.get(s.id);
           if (dt) {
             if (saleMin === null || dt < saleMin) saleMin = dt;
@@ -2389,10 +2403,11 @@ export async function closeSalesFromCashflow(): Promise<number> {
       // když poměr/cena nejsou k dispozici.
       let transport = 0;
       let transportExact = false;
-      const ratio = await getTransportationRatio(t.item_id);
       const trUnitCost = await getTransportUnitCost(sql);
-      if (ratio !== null && trUnitCost !== null && ratio > 0 && trUnitCost > 0) {
-        transport = closable * ratio * trUnitCost;
+      const useExact =
+        ratio !== null && trUnitCost !== null && ratio > 0 && trUnitCost > 0;
+      if (useExact) {
+        transport = transportUnits * (trUnitCost as number);
         transportExact = true;
       } else {
         const transportPct = Number(
@@ -2421,7 +2436,7 @@ export async function closeSalesFromCashflow(): Promise<number> {
       let remaining = closable;
       let closed = 0;
       const logText = (take: number) =>
-        `Prodej ze hry (okamžitě z cashflow) – ${take.toLocaleString("cs-CZ")} ks, hrubá cena ${matched.price?.toFixed(3)} $, netto po poplatcích (${fees.toFixed(2)} $) a přepravě (${transportExact ? `${(closable * (ratio ?? 0)).toLocaleString("cs-CZ")} ks × ${trUnitCost?.toFixed(4)} $` : `odhad ${transport.toFixed(2)} $`}) ${netPrice.toFixed(3)} $.`;
+        `Prodej ze hry (okamžitě z cashflow) – ${take.toLocaleString("cs-CZ")} ks, hrubá cena ${matched.price?.toFixed(3)} $, netto po poplatcích (${fees.toFixed(2)} $) a přepravě (${transportExact ? `${Math.round(transportUnits).toLocaleString("cs-CZ")} ks × ${(trUnitCost as number).toFixed(4)} $` : `odhad ${transport.toFixed(2)} $`}) ${netPrice.toFixed(3)} $.`;
       for (const lot of lots) {
         if (remaining <= 0) break;
         const take = Math.min(lot.quantity, remaining);
@@ -2499,7 +2514,7 @@ async function getPendingCashflowFor(
       and quality = ${quality}
       and applied_at is null
       and units_unapplied > 0
-      and kind in ('market_buy', 'retail_sale', 'market_sale')
+      and kind in ('market_buy', 'retail_sale', 'market_sale', 'contract_sale')
     order by datetime asc
     for update
   `) as unknown as PendingCashflow[];
