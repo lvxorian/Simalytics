@@ -5,7 +5,10 @@ import {
   recordGameImport,
   reconcileGameWarehouse,
   syncGameCashflow,
+  syncGameMarketOrders,
   type GameCashflowRow,
+  type GameMarketOrder,
+  type GameMarketOrdersSyncResult,
   type GameSyncResult,
   type GameWarehouseEntry,
 } from "@/lib/data";
@@ -198,10 +201,11 @@ export async function POST(req: Request) {
     return Response.json({ error: "Neplatný JSON." }, { status: 400 });
   }
 
-  const { source, entries, data } = (body ?? {}) as {
+  const { source, entries, data, orders } = (body ?? {}) as {
     source?: string;
     entries?: unknown;
     data?: unknown;
+    orders?: unknown;
   };
 
   if (!source || typeof source !== "string" || source.length > 40) {
@@ -262,6 +266,106 @@ export async function POST(req: Request) {
         skipped,
         closed_lots,
         total_imports: await countGameImports(),
+      });
+    } catch (err) {
+      return Response.json(
+        { error: err instanceof Error ? err.message : "Unknown error" },
+        { status: 500 }
+      );
+    }
+  }
+
+  // ── MARKET ORDERS: vlastní nabídky na burze (limitní prodeje) ────
+  if (source === "market_orders") {
+    if (!Array.isArray(orders) || orders.length === 0) {
+      // Prázdný snapshot je legální stav (žádné limitky) – uložit
+      // jako synchronizaci s nulou, ať se staré nabídky uklidí.
+      try {
+        const empty = await syncGameMarketOrders([]);
+        return Response.json({
+          ok: true,
+          stored: "market_orders",
+          order_count: empty.stored,
+          logged: empty.logged,
+          watch_updated: empty.watch_updated,
+        });
+      } catch (err) {
+        return Response.json(
+          { error: err instanceof Error ? err.message : "Unknown error" },
+          { status: 500 }
+        );
+      }
+    }
+    if (orders.length > 200) {
+      return Response.json(
+        { error: "Příliš mnoho nabídek (max 200)." },
+        { status: 413 }
+      );
+    }
+
+    const parsedOrders: GameMarketOrder[] = [];
+    let skippedOrders = 0;
+    for (const raw of orders) {
+      const row = raw as {
+        id?: unknown;
+        kind?: unknown;
+        quality?: unknown;
+        quantity?: unknown;
+        price?: unknown;
+        fees?: unknown;
+        posted?: unknown;
+      };
+
+      const id = Number(row.id);
+      const itemId = Number(row.kind);
+      const quality = Number(row.quality ?? 0);
+      const quantity = Number(row.quantity);
+      const price = Number(row.price);
+      const fees = row.fees === undefined || row.fees === null ? null : Number(row.fees);
+      const postedAt =
+        typeof row.posted === "string" && !Number.isNaN(Date.parse(row.posted))
+          ? row.posted
+          : null;
+
+      if (
+        !Number.isFinite(id) ||
+        id <= 0 ||
+        !Number.isInteger(itemId) ||
+        itemId <= 0 ||
+        !Number.isInteger(quality) ||
+        quality < 0 ||
+        quality > 7 ||
+        !Number.isFinite(quantity) ||
+        quantity <= 0 ||
+        !Number.isFinite(price) ||
+        price <= 0 ||
+        postedAt === null
+      ) {
+        skippedOrders++;
+        continue;
+      }
+
+      parsedOrders.push({
+        id,
+        item_id: itemId,
+        quality,
+        quantity: Math.round(quantity),
+        price,
+        fees: fees !== null && Number.isFinite(fees) ? fees : null,
+        posted_at: postedAt,
+      });
+    }
+
+    try {
+      const result: GameMarketOrdersSyncResult =
+        await syncGameMarketOrders(parsedOrders);
+      return Response.json({
+        ok: true,
+        stored: "market_orders",
+        skipped: skippedOrders,
+        order_count: result.stored,
+        logged: result.logged,
+        watch_updated: result.watch_updated,
       });
     } catch (err) {
       return Response.json(

@@ -659,9 +659,15 @@ export async function getPortfolioHoldings(): Promise<PortfolioHolding[]> {
            count(p.id)::int                     as position_count,
            min(p.opened_at)                     as first_opened_at,
            max(p.opened_at)                     as last_bought_at,
-           (array_agg(p.note) filter (where p.note like 'limit %'))[1] as limit_note
+           (array_agg(p.note) filter (where p.note like 'limit %'))[1] as limit_note,
+           gmo.limit_price                        as game_limit_price
     from positions p
     join items i on i.id = p.item_id
+    left join lateral (
+      select min(price) as limit_price
+      from game_market_orders g
+      where g.item_id = p.item_id
+    ) gmo on true
     left join lateral (
       select price
       from price_history ph
@@ -688,6 +694,7 @@ export async function getPortfolioHoldings(): Promise<PortfolioHolding[]> {
     first_opened_at: Date;
     last_bought_at: Date;
     limit_note: string | null;
+    game_limit_price: string | null;
   }[];
 
   return rows.map((r) => {
@@ -712,10 +719,14 @@ export async function getPortfolioHoldings(): Promise<PortfolioHolding[]> {
       position_count: Number(r.position_count),
       first_opened_at: iso(r.first_opened_at),
       last_bought_at: iso(r.last_bought_at),
+      // Herní limitka (vlastní nabídka na burze) má přednost před
+      // ručně zadanou poznámkou – je to skutečný stav ve hře.
       limit_price:
-        r.limit_note !== null
-          ? Number(r.limit_note.replace("limit ", "").replace(" $", ""))
-          : null,
+        r.game_limit_price !== null
+          ? Number(r.game_limit_price)
+          : r.limit_note !== null
+            ? Number(r.limit_note.replace("limit ", "").replace(" $", ""))
+            : null,
     };
   });
 }
@@ -1855,6 +1866,10 @@ export async function reconcileGameWarehouse(
       `;
 
       // 2) stav otevřených game pozic dané položky A kvality
+      // + jednotky vložené na burzu (vlastní nabídky) – ty se ve hře
+      // PŘESUNOU ze skladu, ale nejsou to prodej ani spotřeba; bez
+      // tohoto strapců by reconcile loty neoprávněně zmenšil
+      // (a po naplnění limitky by nebylo co uzavírat).
       const rows = (await sql`
         select coalesce(sum(quantity), 0)::int as qty
         from positions
@@ -1863,7 +1878,12 @@ export async function reconcileGameWarehouse(
           and closed_at is null
           and source = 'game'
       `) as unknown as { qty: number }[];
-      const currentQty = Number(rows[0]?.qty ?? 0);
+      const onExchange = await getWarehouseOnExchangeUnits(
+        sql,
+        entry.item_id,
+        entry.quality
+      );
+      const currentQty = Number(rows[0]?.qty ?? 0) + onExchange;
       const diff = Math.round(entry.quantity) - currentQty;
 
       if (diff === 0) continue;
@@ -2111,6 +2131,220 @@ export async function reconcileGameWarehouse(
     lots_shrunk: lotsShrunk,
     ignored_cleared: ignoredCleared,
   };
+}
+
+// ── HERNÍ LIMITKY (vlastní nabídky na burze) ────────────────────────
+
+/**
+ * Kolik ks dané položky a kvality je PŘESUNUTO ze skladu na burzu
+ * (vlastní neprodané nabídky). Volá reconcile skladu – difference
+ * „sklad − pozice“ je totiž jen spotřeba/prodej PŘES tyto jednotky.
+ */
+async function getWarehouseOnExchangeUnits(
+  sql: PostgresSql,
+  itemId: number,
+  quality: number
+): Promise<number> {
+  const rows = (await sql`
+    select coalesce(sum(quantity), 0)::int as qty
+    from game_market_orders
+    where item_id = ${itemId} and quality = ${quality}
+  `) as unknown as { qty: number }[];
+  return Number(rows[0]?.qty ?? 0);
+}
+
+export type GameMarketOrder = {
+  id: number; // ID nabídky ze hry (dedupe klíč)
+  item_id: number;
+  quality: number;
+  quantity: number;
+  price: number;
+  fees: number | null;
+  posted_at: string; // ISO
+};
+
+export type GameMarketOrdersSyncResult = {
+  stored: number;
+  logged: number;
+  watch_updated: number;
+};
+
+/**
+ * Synchronizuje vlastní nabídky na burze (limitní prodeje) ze hry.
+ *
+ * – full snapshot: nesynchronizované řádky se SMAŽOU (nabídka zrušena
+ *   nebo vyplacena),
+ * – nová/change nabídka pro existující otevřené game loty položky:
+ *   NOTE do logu obchodů („Limitka na burze…“) + hlídka alerts
+ *   kind='limit_sell' (notifikace při dosažení limitu; auto-close
+ *   po naplnění obstarává closeSalesFromCashflow z cashflow).
+ * – položky bez otevřených game lotů se jen ukládají (audit; badge
+ *   a log nemá smysl, když portfolio nic nevede).
+ */
+export async function syncGameMarketOrders(
+  orders: GameMarketOrder[]
+): Promise<GameMarketOrdersSyncResult> {
+  const db = getDb();
+
+  // 0) Agregace per (položka, kvalita): cena = min (nejnižší aktivní limit)
+  type Agg = { quantity: number; minPrice: number };
+  const agg = new Map<string, Agg>();
+  for (const o of orders) {
+    if (!Number.isFinite(o.price) || o.price <= 0) continue;
+    const key = `${o.item_id}#${o.quality}`;
+    const cur = agg.get(key) ?? { quantity: 0, minPrice: o.price };
+    cur.quantity += o.quantity;
+    cur.minPrice = Math.min(cur.minPrice, o.price);
+    agg.set(key, cur);
+  }
+
+  let logged = 0;
+  let watchUpdated = 0;
+
+  await db.begin(async (sql) => {
+    // 1) Full snapshot: smaž nesynchronizované nabídky (zrušené/vyplacené)
+    await sql`delete from game_market_orders`;
+    for (const o of orders) {
+      if (!Number.isFinite(o.price) || o.price <= 0) continue;
+      await sql`
+        insert into game_market_orders
+          (id, item_id, quality, quantity, price, fees, posted_at)
+        values (${o.id}, ${o.item_id}, ${o.quality}, ${Math.round(o.quantity)},
+                ${o.price}, ${o.fees}, ${o.posted_at})
+        on conflict (id) do update
+          set quantity = excluded.quantity,
+              price = excluded.price,
+              fees = excluded.fees,
+              updated_at = now()
+      `;
+    }
+
+    // 2) Log + hlídka per (položka, kvalita) s otevřenými game loty
+    for (const [key, a] of agg) {
+      const itemId = Number(key.split("#")[0]);
+      const quality = Number(key.split("#")[1]);
+
+      const [lot] = (await sql`
+        select id from positions
+        where item_id = ${itemId} and quality = ${quality}
+          and closed_at is null and source = 'game'
+        order by opened_at asc limit 1
+      `) as unknown as { id: string }[];
+      if (!lot) continue; // žádná držba → jen audit
+
+      const [lastLimit] = (await sql`
+        select condition_text from condition_log
+        where position_id = ${lot.id} and event_type = 'NOTE'
+          and condition_text like 'Limitka na burze%'
+        order by created_at desc limit 1
+      `) as unknown as { condition_text: string }[];
+      const logText =
+        `Limitka na burze – ${a.quantity.toLocaleString("cs-CZ")} ks @ ${a.minPrice.toFixed(3)} $ (čeká na naplnění; po prodeji se pozice uzavřou automaticky s netto cenou z cashflow).`;
+      if (lastLimit?.condition_text !== logText) {
+        await sql`
+          insert into condition_log
+            (position_id, event_type, condition_text)
+          values (${lot.id}, 'NOTE', ${logText})
+        `;
+        logged++;
+      }
+
+      const [watch] = (await sql`
+        select threshold from alerts
+        where item_id = ${itemId} and quality = 0 and kind = 'limit_sell'
+      `) as unknown as { threshold: string }[];
+      if (!watch || Number(watch.threshold) !== a.minPrice) {
+        await sql`
+          insert into alerts (item_id, quality, kind, direction, threshold, note)
+          values (${itemId}, 0, 'limit_sell', 'above', ${a.minPrice},
+                  'Limitní prodej z herní burzy')
+          on conflict (item_id, quality, kind) do update
+            set threshold = ${a.minPrice},
+                direction = 'above',
+                active = true,
+                seen_at = null
+        `;
+        watchUpdated++;
+      }
+    }
+
+    // 3) Úklid hlídek: položky bez otevřených pozic (jakéhokoli zdroje –
+    // ruční limitky z portfolia musí zůstat!) a bez limitky na burze
+    await sql`
+      delete from alerts a
+      where a.kind = 'limit_sell'
+        and a.quality = 0
+        and not exists (
+          select 1 from positions p
+          where p.item_id = a.item_id and p.closed_at is null
+        )
+        and not exists (
+          select 1 from game_market_orders g
+          where g.item_id = a.item_id
+        )
+    `;
+  });
+
+  return {
+    stored: orders.length,
+    logged,
+    watch_updated: watchUpdated,
+  };
+}
+
+/**
+ * Herní limitky s názvem položky (pro sekci „Limitky na burze“ v UI).
+ * Jejen neprodané nabídky (tabulka je full snapshot).
+ */
+export async function getGameMarketOrders(): Promise<
+  {
+    id: number;
+    item_id: number;
+    name: string;
+    image_url: string | null;
+    quality: number;
+    quantity: number;
+    price: number;
+    fees: number | null;
+    posted_at: string;
+  }[]
+> {
+  const db = getDb();
+  const rows = (await db`
+    select g.id,
+           g.item_id,
+           i.name,
+           i.image_url,
+           g.quality,
+           g.quantity,
+           g.price,
+           g.fees,
+           g.posted_at
+    from game_market_orders g
+    join items i on i.id = g.item_id
+    order by g.posted_at desc
+  `) as unknown as {
+    id: number;
+    item_id: number;
+    name: string;
+    image_url: string | null;
+    quality: number;
+    quantity: number;
+    price: string;
+    fees: string | null;
+    posted_at: Date;
+  }[];
+  return rows.map((r) => ({
+    id: Number(r.id),
+    item_id: r.item_id,
+    name: r.name,
+    image_url: r.image_url,
+    quality: r.quality,
+    quantity: Number(r.quantity),
+    price: Number(r.price),
+    fees: r.fees === null ? null : Number(r.fees),
+    posted_at: iso(r.posted_at),
+  }));
 }
 
 /** Poslední snapshot skladu (pro UI /statistiky či /portfolio). */

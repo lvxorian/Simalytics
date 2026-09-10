@@ -82,7 +82,8 @@ src/app/
   api/live/stream/         # SSE push (hello/tick/alert/stale + heartbeat 15 s, maxDuration 300)
   api/live/ask/            # orderbook položky (ask + top 5 nabídek, cache 3 s)
   api/import/sync/         # import dat ze hry (userscript, Bearer GAME_SYNC_SECRET):
-                           # source 'warehouse' = snapshot skladu + reconcile portfolia
+                           # source 'warehouse' = snapshot skladu + reconcile portfolia,
+                           # source 'market_orders' = vlastní nabídky na burze (limitky)
   api/search/              # hledání instrumentů pro header
   actions.ts               # server actions (open/close position, notes, watchlist)
 src/components/            # vizní komponenty (viz níže)
@@ -339,6 +340,18 @@ src/components/            # vizní komponenty (viz níže)
   cenou a rozpadem; otevřené loty se nesahají – úbytek už zúčtován).
   Doporučené pořadí ve hře: nejprve Finance, pak Sklad (opačné pořadí
   funguje taky, jen přes doplatek při příštím otevření financí).
+  Fáze 4 – LIMITKY NA BURZE (migrace 013, game_market_orders): userscript
+  v0.5+ čte GET /api/v2/companies/me/market-orders/ (stránka statistiky
+  skladu; formát { id, kind, quantity, quality, price, posted, fees }) a
+  posílá jako source 'market_orders' (i prázdný snapshot – uklidí staré
+  záznamy). Full snapshot = smazat nesynchronizované nabídky (zrušené/
+  vyplacené). Per (položka, kvalita) s otevřenými game loty: NOTE do logu
+  obchodů (dedupe dle textu) + hlídka alerts kind='limit_sell' (práh =
+  min cena nabídek). Badge u aktiva bere limit z herních nabídek (přednost
+  před poznámkou). Reconcile skladu přičítá onExchange jednotky k otevřeným
+  pozicím (vložení nabídky přesune ks ze skladu na burzu – není to prodej
+  ani spotřeba). Auto-close po naplnění obstarává closeSalesFromCashflow
+  (cashflow marketfilled) – napojení limitka→prodej není potřeba.
 
 ## Externí API
 

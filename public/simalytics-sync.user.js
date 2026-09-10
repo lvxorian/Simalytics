@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Simalytics Sync
 // @namespace    simalytics
-// @version      0.4.0
-// @description  Čte data otevřené hry SimCompanies (sklad) a synchronizuje je do Simalytics (portfolio). Žádné extra requesty na herní servery – jen čte odpovědi, které prohlížeč stejně dostal.
+// @version      0.5.0
+// @description  Čte data otevřené hry SimCompanies (sklad, cashflow, limitky na burze) a synchronizuje je do Simalytics. Žádné extra requesty na herní servery – jen čte odpovědi, které prohlížeč stejně dostal.
 // @author       Simalytics
 // @match        https://www.simcompanies.com/*
 // @run-at       document-start
@@ -80,18 +80,27 @@
   // kind, cost } (kind = ID komodity).
   // CASHFLOW: GET /api/v2/companies/me/cashflow/recent/ → { data: [...] }
   // s reálnými cenami nákupů ('m') a maloobchodních prodejů ('s').
+  // MARKET ORDERS: GET /api/v2/companies/me/market-orders/ → pole vlastních
+  // nabídek na burze (limitní prodeje): { id, kind, quantity, quality,
+  // price, posted, fees } (formát z dumpu 2026-09-10).
   const WAREHOUSE_URL_RE = /\/api\/v3\/resources\/\d+\/?$/i;
   const CASHFLOW_URL_RE = /\/api\/v2\/companies\/me\/cashflow\/recent\/?$/i;
-  const CAPTURE_URL_RE = /(resources\/\d+|cashflow\/recent)/i;
+  // Vlastní nabídky na burze (limitní prodeje) – stránka statistiky skladu.
+  const MARKET_ORDERS_URL_RE = /\/api\/v2\/companies\/me\/market-orders\/?$/i;
+  const CAPTURE_URL_RE = /(resources\/\d+|cashflow\/recent|market-orders)/i;
   // Minimální interval mezi pushi na stejný obsah (antispam).
   const PUSH_COOLDOWN_MS = 60_000;
 
   let lastEntriesJson = ""; // serializovaný poslední sklad
-  let lastPushAt = 0;
+  let lastOrdersJson = ""; // serializované poslední limitky
+  let lastWarehousePushAt = 0;
+  let lastOrdersPushAt = 0;
   let pushTimer = null;
   let cashflowTimer = null;
+  let ordersTimer = null;
   let lastPayloadsForDebug = [];
   let lastCashflowForDebug = [];
+  let lastOrdersForDebug = [];
 
   // ── Ring buffer raw odpovědí (pro debug dump) ───────────────────
   // Vždy ukládáme zásahy dle CAPTURE_URL_RE; v debug režimu VŠECHNY
@@ -211,11 +220,69 @@
     postJson(JSON.stringify({ source: "cashflow", data: rows }), "Cashflow");
   }
 
+  /**
+   * Parser vlastních nabídek (dle reálného dumpu 2026-09-10):
+   * pole objektů { id, kind, quantity, quality, price, posted, fees,
+   * seller }. Posíláme jen položky s kladnou cenou/množstvím a malým
+   * kind (ID komodity) – bez seller blobu (ten zůstává v auditu).
+   */
+  function extractOrders(data) {
+    if (!Array.isArray(data)) return [];
+    const orders = [];
+    for (const o of data) {
+      if (!o || typeof o !== "object") continue;
+      const id = Number(o.id);
+      const kind = Number(o.kind);
+      const quality = Number(o.quality ?? 0);
+      const quantity = Number(o.quantity);
+      const price = Number(o.price);
+      if (
+        !Number.isFinite(id) || id <= 0 ||
+        !Number.isInteger(kind) || kind <= 0 || kind >= 200 ||
+        !Number.isInteger(quality) || quality < 0 || quality > 7 ||
+        !Number.isFinite(quantity) || quantity <= 0 ||
+        !Number.isFinite(price) || price <= 0 ||
+        typeof o.posted !== "string"
+      ) {
+        continue;
+      }
+      orders.push({
+        id,
+        kind,
+        quality,
+        quantity,
+        price,
+        fees: Number.isFinite(Number(o.fees)) ? Number(o.fees) : null,
+        posted: o.posted,
+      });
+    }
+    return orders;
+  }
+
+  function pushOrders(orders) {
+    // Prázdný snapshot posíláme taky – server tím smaže staré limitky
+    // (zrušené/vyplacené nabídky) a uklidí hlídky alertů.
+    const body = JSON.stringify({ source: "market_orders", orders });
+    const signature = body;
+    if (
+      signature === lastOrdersJson &&
+      Date.now() - lastOrdersPushAt < PUSH_COOLDOWN_MS
+    ) {
+      return;
+    }
+    console.info(
+      `[Simalytics] Sync limitky: ${orders.length} nabídek → ${endpoint}`
+    );
+    postJson(body, "Limitky");
+    lastOrdersJson = signature;
+    lastOrdersPushAt = Date.now();
+  }
+
   function pushToSimalytics(entries) {
     if (!entries || entries.length === 0) return;
     const body = JSON.stringify({ source: "warehouse", entries });
     const signature = body; // jednoduchá dedupe: stejný obsah = neposílat
-    if (signature === lastEntriesJson && Date.now() - lastPushAt < PUSH_COOLDOWN_MS) {
+    if (signature === lastEntriesJson && Date.now() - lastWarehousePushAt < PUSH_COOLDOWN_MS) {
       return;
     }
 
@@ -224,7 +291,7 @@
     );
     postJson(body, "Sklad");
     lastEntriesJson = signature;
-    lastPushAt = Date.now();
+    lastWarehousePushAt = Date.now();
   }
 
   function schedulePush(entries) {
@@ -241,18 +308,27 @@
     cashflowTimer = setTimeout(() => pushCashflow(rows), 2_000);
   }
 
+  function scheduleOrders(orders) {
+    lastOrdersForDebug = orders;
+    if (ordersTimer) clearTimeout(ordersTimer);
+    // 3 s – ať push stihne před skladem (reconcile potřebuje vědět,
+    // kolik ks je na burze, ať je neúčtuje jako spotřebu)
+    ordersTimer = setTimeout(() => pushOrders(orders), 3_000);
+  }
+
   // ── Debug dump ──────────────────────────────────────────────────
   function buildDump() {
     const urls = [...new Set(rawSamples.map((s) => s.url))];
     return {
       generatedAt: new Date().toISOString(),
-      scriptVersion: "0.4.0",
+      scriptVersion: "0.5.0",
       debugMode,
       hasToken: Boolean(token),
       matchedUrlRe: String(CAPTURE_URL_RE),
       capturedUrls: urls,
       extracted: lastPayloadsForDebug,
       extractedCashflow: lastCashflowForDebug.slice(0, 20),
+      extractedOrders: lastOrdersForDebug,
       rawSamples,
     };
   }
@@ -343,7 +419,8 @@
       const urlStr = String(url);
       const isWarehouse = WAREHOUSE_URL_RE.test(urlStr);
       const isCashflow = CASHFLOW_URL_RE.test(urlStr);
-      const isMatch = isWarehouse || isCashflow;
+      const isOrders = MARKET_ORDERS_URL_RE.test(urlStr);
+      const isMatch = isWarehouse || isCashflow || isOrders;
       const looksApi = /\/api\//.test(urlStr);
 
       if (debugMode && looksApi && status >= 200 && status < 300) {
@@ -360,6 +437,21 @@
       if (isCashflow) {
         const rows = Array.isArray(data?.data) ? data.data : [];
         if (rows.length > 0) scheduleCashflow(rows);
+        return;
+      }
+
+      if (isOrders) {
+        const orders = extractOrders(data);
+        if (orders.length > 0 || data.length === 0) {
+          // data.length === 0 = žádné aktivní limitky – stejně pushni
+          // (server uklidí staré záznamy)
+          if (debugMode) {
+            console.info(
+              `[Simalytics] Extrahováno ${orders.length} nabídek z ${url}`
+            );
+          }
+          scheduleOrders(orders);
+        }
         return;
       }
 
@@ -387,7 +479,8 @@
         debugMode && /\/api\//.test(String(url))
           ? true
           : WAREHOUSE_URL_RE.test(String(url)) ||
-            CASHFLOW_URL_RE.test(String(url));
+            CASHFLOW_URL_RE.test(String(url)) ||
+            MARKET_ORDERS_URL_RE.test(String(url));
       if (shouldPeek && res.ok) {
         // klon – původní odpověď musí zůstat čitelná pro hru
         res
@@ -407,11 +500,12 @@
   // ── Hook: XMLHttpRequest ────────────────────────────────────────
   const origOpen = XMLHttpRequest.prototype.open;
   XMLHttpRequest.prototype.open = function (method, url, ...rest) {
-    const xhrUrl = String(url ?? "");
-    const shouldWatch =
+    const xhrUrl = String(url ?? "");    const shouldWatch =
       debugMode && /\/api\//.test(xhrUrl)
         ? true
-        : WAREHOUSE_URL_RE.test(xhrUrl) || CASHFLOW_URL_RE.test(xhrUrl);
+        : WAREHOUSE_URL_RE.test(xhrUrl) ||
+          CASHFLOW_URL_RE.test(xhrUrl) ||
+          MARKET_ORDERS_URL_RE.test(xhrUrl);
 
     if (shouldWatch) {
       this.addEventListener("load", function () {
