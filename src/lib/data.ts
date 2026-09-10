@@ -158,7 +158,9 @@ function mapCostBreakdown(raw: unknown): CostBreakdown | null {
   const gross = num(o.gross);
   if (gross === null) return null;
   const fees = num(o.fees) ?? 0;
-  const transport = num(o.transport) ?? 0;
+  // Konvence: transport je ZÁPORNÁ položka (náklad). Starší záznamy i nové
+  // větve mohou ukládat kladnou částku – normalizuje se při čtení.
+  const transport = -Math.abs(num(o.transport) ?? 0);
   const net = num(o.net) ?? gross + fees + transport;
   return {
     gross,
