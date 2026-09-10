@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Briefcase, History, Info, Plus, ScrollText, Target } from "lucide-react";
+import { Archive, Briefcase, History, Info, Plus, RotateCcw, ScrollText, Target } from "lucide-react";
 
 import { AddNoteForm } from "@/components/add-note-form";
 import { ItemIcon } from "@/components/item-icon";
@@ -10,6 +10,7 @@ import {
   type AssetRow,
 } from "@/components/portfolio-holdings-table";
 import { PortfolioValueChart } from "@/components/portfolio-value-chart";
+import { PortfolioUnignoreButton } from "@/components/portfolio-unignore-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,6 +24,7 @@ import {
 } from "@/components/ui/table";
 import {
   getConditionLog,
+  getGameSyncIgnored,
   getPositionLots,
   getPositionsWithPnl,
   getPortfolioHoldings,
@@ -52,12 +54,13 @@ export default async function PortfolioPage({
   const { range } = await searchParams;
   const historyDays = range === "7" ? 7 : range === "90" ? 90 : 30;
 
-  const [holdings, closedPositions, log] = await Promise.all([
+  const [holdings, closedPositions, log, ignoredItems] = await Promise.all([
     getPortfolioHoldings().catch(() => []),
     getPositionsWithPnl({ open: false }).catch(() => []),
     getConditionLog(50).catch(
       () => [] as (ConditionLogEntry & { item_name: string | null })[]
     ),
+    getGameSyncIgnored().catch(() => []),
   ]);
 
   // Lots (jednotlivé nákupy) pro každé aktivum – paralelně
@@ -252,6 +255,63 @@ export default async function PortfolioPage({
                   </TableBody>
                 </Table>
               </div>
+            </section>
+          )}
+
+          {/* ── Mimo portfolio (palivo/výroba na skladu) ───────── */}
+          {ignoredItems.length > 0 && (
+            <section className="space-y-3">
+              <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                <Archive className="size-4" />
+                Mimo portfolio ({ignoredItems.length})
+              </h2>
+              <div className="overflow-hidden rounded-xl border border-border/80 bg-card">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="pl-4">Položka</TableHead>
+                      <TableHead className="text-right">Na skladu</TableHead>
+                      <TableHead className="text-right">Náklad/ks</TableHead>
+                      <TableHead className="hidden text-left md:table-cell">Důvod</TableHead>
+                      <TableHead className="pr-4 text-right">Akce</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {ignoredItems.map((g) => (
+                      <TableRow key={g.item_id} className="border-border/40">
+                        <TableCell className="pl-4">
+                          <Link
+                            href={`/market/${g.item_id}`}
+                            className="group flex items-center gap-2.5"
+                          >
+                            <ItemIcon url={g.image_url} name={g.name} size={28} />
+                            <span className="font-medium group-hover:text-primary">
+                              {g.name}
+                            </span>
+                          </Link>
+                        </TableCell>
+                        <TableCell className="text-right font-mono tabular-nums">
+                          {g.warehouse_qty.toLocaleString("cs-CZ")}
+                        </TableCell>
+                        <TableCell className="text-right font-mono tabular-nums text-muted-foreground">
+                          {g.warehouse_cost === null ? "–" : formatPrice(g.warehouse_cost)}
+                        </TableCell>
+                        <TableCell className="hidden text-sm text-muted-foreground md:table-cell">
+                          {g.reason ?? "–"}
+                        </TableCell>
+                        <TableCell className="pr-4 text-right">
+                          <PortfolioUnignoreButton itemId={g.item_id} />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Položky syncované ze skladu, které nejsou investicí/flipem
+                (palivo, výroba). Ve hře zůstávají na skladu, do portfolia se
+                nenačítají a P/L jich netýká.
+              </p>
             </section>
           )}
 

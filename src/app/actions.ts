@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import {
   addConditionNote,
+  addToGameSyncIgnore,
   closePosition,
   createAlert,
   createPortfolioHolding,
@@ -13,6 +14,7 @@ import {
   deletePositionLot,
   markAlertsSeen,
   openPosition,
+  removeFromGameSyncIgnore,
   sellPortfolioAsset,
   setLimitSellNote,
   toggleAlert,
@@ -235,6 +237,27 @@ export async function deletePortfolioHoldingAction(
 ): Promise<void> {
   await deletePortfolioHolding(itemId);
   await deleteLimitSellAlert(itemId);
+  revalidatePath("/portfolio");
+}
+
+/**
+ * Vyloučí položku z portfolia, ale NECHÁ ji na skladu ve hře (palivo/
+ * výroba – nesouvisí s investicemi/flipy). Otevřené pozice se zahodí
+ * bez P/L a sync už ji do portfolia nenahrá.
+ */
+export async function ignoreGameSyncItemAction(
+  itemId: number,
+  reason: string | null = null
+): Promise<void> {
+  await addToGameSyncIgnore(itemId, reason);
+  revalidatePath("/portfolio");
+}
+
+/** Vrátí položku z ignore-listu – příští sync ji znovu nahraje. */
+export async function unignoreGameSyncItemAction(
+  itemId: number
+): Promise<void> {
+  await removeFromGameSyncIgnore(itemId);
   revalidatePath("/portfolio");
 }
 

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowUpRight, Pencil, Trash2 } from "lucide-react";
 
 import {
-  deletePortfolioHoldingAction,
+  ignoreGameSyncItemAction,
 } from "@/app/actions";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -45,10 +45,13 @@ export function PortfolioHoldingsTable({
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
-  const handleDelete = (itemId: number, key: string) => {
+  const handleIgnore = (itemId: number, key: string) => {
     setPendingKey(key);
     startTransition(async () => {
-      await deletePortfolioHoldingAction(itemId);
+      // Vyloučí z portfolia (loty zahodí), ale na skladu ve hře zůstane –
+      // sync už položku do portfolia nenahrá. Vrátit jde v sekci
+      // „Mimo portfolio“ dole na stránce.
+      await ignoreGameSyncItemAction(itemId);
       setPendingKey(null);
     });
   };
@@ -192,12 +195,12 @@ export function PortfolioHoldingsTable({
                       variant="ghost"
                       size="icon-sm"
                       className="text-muted-foreground hover:text-down"
-                      onClick={() => handleDelete(h.item_id, key)}
+                      onClick={() => handleIgnore(h.item_id, key)}
                       disabled={pendingKey === key}
-                      title="Odebrat aktivum z portfolia"
+                      title="Odebrat z portfolia (ponechat na skladu ve hře)"
                     >
                       <Trash2 className="size-4" />
-                      <span className="sr-only">Odebrat {h.name}</span>
+                      <span className="sr-only">Odebrat {h.name} z portfolia</span>
                     </Button>
                   </div>
                 </TableCell>

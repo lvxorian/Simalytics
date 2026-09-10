@@ -222,6 +222,8 @@ směr `cross` + `one_shot` v db/upgrades/008_alert_v2.sql).
 
 **Důležité:** cena u syncovaných pozic je zatím odhad z trhu – doladit jde editací lots v portfoliu. Skript je heuristický (hra nemá ofiko API dokumentaci) – „debug dump“ pomůže doladit parser, když formát herních odpovědí neodpovídá.
 
+**Mimo portfolio (ignore-list):** sklad obsahuje i věci, které nejsou investicí/flipem (palivo výroby – energie, voda, přeprava, semena). Položka se v portfoliu označí košem („Odebrat z portfolia, ponechat na skladu“) → loty se zahodí bez P/L a sync už ji nenahraje; ve hře na skladu zůstává. Sekce „Mimo portfolio“ dole na /portfolio vypisuje vyloučené položky včetně stavu skladu, tlačítkem **Vrátit** se vrátí (příští sync je znovu nahraje). Tabulka `game_sync_ignored` (migrace 011).
+
 ## Editace alertů
 
 - **Tužka** vedle badge podmínky (tabulka pod grafem i /alerts) – inline

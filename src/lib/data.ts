@@ -636,6 +636,9 @@ export async function getPortfolioHoldings(): Promise<PortfolioHolding[]> {
       limit 1
     ) latest on true
     where p.closed_at is null
+      and not exists (
+        select 1 from game_sync_ignored g where g.item_id = p.item_id
+      )
     group by p.item_id, i.name, i.db_letter, i.image_url, latest.price
     order by (sum(p.buy_price * p.quantity)) desc
     limit 500
@@ -719,7 +722,8 @@ export async function getPortfolioValueHistory(
     close: string;
   }[];
 
-  // 2) Změny množství držby (nákupy i prodeje) po dnech
+  // 2) Změny množství držby (nákupy i prodeje) po dnech – bez položek
+  // z ignore-listu (palivo/výroba nejsou investice, skáčou v grafu)
   const lots = (await db`
     select opened_at::date::text as day,
            item_id,
@@ -727,6 +731,9 @@ export async function getPortfolioValueHistory(
            sum(quantity)::int as qty
     from positions
     where opened_at::date >= current_date - ${days}::int
+      and not exists (
+        select 1 from game_sync_ignored g where g.item_id = positions.item_id
+      )
     group by opened_at::date, item_id, quality
     union all
     select closed_at::date::text as day,
@@ -736,6 +743,9 @@ export async function getPortfolioValueHistory(
     from positions
     where closed_at is not null
       and closed_at::date >= current_date - ${days}::int
+      and not exists (
+        select 1 from game_sync_ignored g where g.item_id = positions.item_id
+      )
     group by closed_at::date, item_id, quality
   `) as unknown as {
     day: string;
@@ -1639,6 +1649,8 @@ export type GameSyncResult = {
   positions_adjusted: number;
   /** Loty zmenšené spotřebou ve výrobě (bez prodeje, bez P/L). */
   lots_shrunk: number;
+  /** Položky z ignore-listu – loty zahodíme (zůstávají jen na skladu). */
+  ignored_cleared: number;
 };
 
 /** SQL klient v transakci i mimo ni (společná signatura helperů). */
@@ -1723,6 +1735,16 @@ export async function reconcileGameWarehouse(
     })
   );
 
+  // Ignore-list: položky, které se do portfolia NENAČÍTAJÍ (palivo/výroba).
+  // Snapshot skladu zůstává kompletní i pro ně – jen portfolio se jich
+  // netýká: stávající loty se zahodí (bez P/L) a pending cashflow se
+  // označí za aplikované, ať se nehromadí.
+  const ignored = new Set(
+    (
+      await db`select item_id from game_sync_ignored`
+    ).map((r) => r.item_id as number)
+  );
+
   // 1) Kompletní prodej: co bylo ve skladu dřív a teď chybí = prodáno vše
   const previous = (await db`
     select item_id, quality from game_warehouse where quantity > 0
@@ -1746,9 +1768,47 @@ export async function reconcileGameWarehouse(
   let closed = 0;
   let adjusted = 0;
   let lotsShrunk = 0; // loty zmenšené smazáním (spotřeba ve výrobě)
+  let ignoredCleared = 0; // loty ignorovaných položek (vyloučeny z portfolia)
 
   await db.begin(async (sql) => {
+    // 0) Ignore-list: položky, které do portfolia nepatří – loty zahodíme
+    // (žádný falešný P/L, na skladu ve hře zůstávají) a pending cashflow
+    // uzavřeme, ať se nehromadí. Snapshot níže se přesto uloží celý.
+    if (ignored.size > 0) {
+      const doomed = (await sql`
+        select id from positions
+        where source = 'game' and closed_at is null
+          and item_id in ${sql([...ignored])}`
+      ) as unknown as { id: string }[];
+      for (const d of doomed) {
+        await sql`delete from positions where id = ${d.id}`;
+        ignoredCleared++;
+      }
+      if (doomed.length > 0) {
+        await sql`
+          update game_cashflow
+          set units_unapplied = 0, applied_at = now()
+          where applied_at is null and units_unapplied > 0
+            and item_id in ${sql([...ignored])}`
+        ;
+      }
+    }
+
     for (const entry of valid) {
+      // Ignorovaná položka: jen snapshot, žádné loty.
+      if (ignored.has(entry.item_id)) {
+        await sql`
+          insert into game_warehouse (item_id, quality, quantity, unit_cost)
+          values (${entry.item_id}, ${entry.quality}, ${Math.round(entry.quantity)},
+                  ${entry.unit_cost})
+          on conflict (item_id, quality) do update
+            set quantity = excluded.quantity,
+                unit_cost = excluded.unit_cost,
+                updated_at = now()
+        `;
+        continue;
+      }
+
       // 1) snapshot skladu (per položka + kvalita, včetně unit_cost)
       await sql`
         insert into game_warehouse (item_id, quality, quantity, unit_cost)
@@ -1955,6 +2015,7 @@ export async function reconcileGameWarehouse(
     positions_closed: closed,
     positions_adjusted: adjusted,
     lots_shrunk: lotsShrunk,
+    ignored_cleared: ignoredCleared,
   };
 }
 
@@ -1996,6 +2057,92 @@ export async function countGameImports(): Promise<number> {
   const rows = (await db`select count(*)::int as c from game_imports`) as
     unknown as { c: number }[];
   return Number(rows[0]?.c ?? 0);
+}
+
+// ── IGNORE-LIST SKLADU (palivo/výroba mimo investiční portfolio) ────
+
+/**
+ * Položky na ignore-listu + jejich stav na skladu (pro sekci
+ * „Mimo portfolio“ v UI). Řadíme dle hodnoty na skladu sestupně.
+ */
+export async function getGameSyncIgnored(): Promise<
+  {
+    item_id: number;
+    name: string;
+    image_url: string | null;
+    reason: string | null;
+    warehouse_qty: number;
+    warehouse_cost: number | null;
+  }[]
+> {
+  const db = getDb();
+  const rows = (await db`
+    select g.item_id,
+           i.name,
+           i.image_url,
+           g.reason,
+           coalesce(sum(w.quantity), 0)::int as warehouse_qty,
+           case when sum(w.quantity) > 0
+                then sum(w.unit_cost * w.quantity) / sum(w.quantity)
+                else null end as warehouse_cost
+    from game_sync_ignored g
+    join items i on i.id = g.item_id
+    left join game_warehouse w on w.item_id = g.item_id
+    group by g.item_id, i.name, i.image_url, g.reason
+    order by (coalesce(sum(w.quantity), 0) *
+              coalesce(max(w.unit_cost), 0)) desc
+  `) as unknown as {
+    item_id: number;
+    name: string;
+    image_url: string | null;
+    reason: string | null;
+    warehouse_qty: number;
+    warehouse_cost: string | null;
+  }[];
+  return rows.map((r) => ({
+    item_id: r.item_id,
+    name: r.name,
+    image_url: r.image_url,
+    reason: r.reason,
+    warehouse_qty: Number(r.warehouse_qty),
+    warehouse_cost: r.warehouse_cost === null ? null : Number(r.warehouse_cost),
+  }));
+}
+
+/**
+ * Vyloučí položku z portfolia (ignore-list): všechny otevřené pozice
+ * položky (i manuální!) se zahodí bez P/L – na skladu ve hře zůstávají
+ * a sync je už do portfolia nenahrá.
+ */
+export async function addToGameSyncIgnore(
+  itemId: number,
+  reason: string | null = null
+): Promise<void> {
+  const db = getDb();
+  await db.begin(async (sql) => {
+    await sql`
+      insert into game_sync_ignored (item_id, reason)
+      values (${itemId}, ${reason})
+      on conflict (item_id) do update set reason = excluded.reason
+    `;
+    await sql`delete from positions where item_id = ${itemId} and closed_at is null`;
+    await sql`
+      update game_cashflow
+      set units_unapplied = 0, applied_at = now()
+      where item_id = ${itemId} and applied_at is null and units_unapplied > 0
+    `;
+  });
+}
+
+/**
+ * Vrátí položku do portfolia (sundá z ignore-listu) – příští sync
+ * ze skladu ji sám znovu nahraje s reálnou cenou.
+ */
+export async function removeFromGameSyncIgnore(
+  itemId: number
+): Promise<void> {
+  const db = getDb();
+  await db`delete from game_sync_ignored where item_id = ${itemId}`;
 }
 
 // ── GAME CASHFLOW (reálné ceny transakcí ze hry) ────────────────────
