@@ -315,8 +315,18 @@ src/components/            # vizní komponenty (viz níže)
   rozdíl sklad vs. otevřené pozice source='game' per (položka, kvalita) =
   nový lot (buy_price = unit_cost ze hry) nebo FIFO prodej (sell_price
   odhad z posledního ticku Q0); položka zmizelá ze skladu = prodej vše;
-  manuální pozice se NESAHAJÍ. Payloady se ukládají raw do `game_imports`
+  manuální pozice se NESAHAJÍ.  Payloady se ukládají raw do `game_imports`
   (audit), snapshot s unit_cost do `game_warehouse`.
+  Fáze 3 – OKAMŽITÉ UZAVÍRÁNÍ + KONTRAKTY + EXAKTNÍ NÁKLADY: prodeje
+  (kind retail_sale / market_sale / contract_sale) uzavírají loty hned
+  z cashflow (closeSalesFromCashflow, jen prodeje novější než poslední
+  snapshot skladu – guard proti dvojitému účtování); sell_price je
+  NETTO = hrubá − burzovní poplatky (fees-{item}, exact z cashflow) −
+  přeprava (EXAKTNĚ = ks × transportation poměr položky ze Simco Tools
+  × unit_cost Přepravy ze skladu; kontrakt spotřebuje POLOVINU poměru,
+  fallback % z tržby přes GAME_TRANSPORT_PCT). Kategorie 't' = kontrakt
+  (`cs-{itemId}-{kupce}`, details price/amount/quality/resource,
+  bez poplatků).
 
 ## Externí API
 
