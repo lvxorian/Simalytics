@@ -2260,6 +2260,9 @@ export async function closeSalesFromCashflow(): Promise<number> {
         (p) => p.kind === "retail_sale" || p.kind === "market_sale"
       );
       if (sales.length === 0) return 0;
+      const saleDatetime = new Map(
+        sales.map((p) => [p.id, p.datetime] as const)
+      );
       const saleUnits = sales.reduce((s, p) => s + p.units_unapplied, 0);
 
       // Stav otevřených game lotů dané položky a kvality
@@ -2284,6 +2287,64 @@ export async function closeSalesFromCashflow(): Promise<number> {
       );
       if (matched.price === null) return 0;
 
+      // ── NÁKLADY PRODEJE (ať P/L odpovídá čistému zisku ve hře) ────
+      // Hrubé výnosy aplikovaných prodejů (FIFO po jednotkách) + jejich
+      // časové okno, ať se k nim přiřadí poplatky.
+      let gross = 0;
+      let saleMin: Date | null = null;
+      let saleMax: Date | null = null;
+      {
+        let rem = closable;
+        for (const s of sales) {
+          if (rem <= 0) break;
+          const take = Math.min(s.units_unapplied, rem);
+          gross += take * (s.unit_price ?? 0);
+          const dt = saleDatetime.get(s.id);
+          if (dt) {
+            if (saleMin === null || dt < saleMin) saleMin = dt;
+            if (saleMax === null || dt > saleMax) saleMax = dt;
+          }
+          rem -= take;
+        }
+      }
+
+      // Burzovní poplatky (fees-{item}, NE cancelfee – to je samostatná
+      // ztráta z Dotnutí nabídky) v okně ±10 min od prodejů, exactně
+      // z cashflow. Označí se za aplikované, ať se nezapočítají dvakrát.
+      let fees = 0;
+      if (saleMin !== null && saleMax !== null) {
+        const feeRows = (await sql`
+          select id, money from game_cashflow
+          where category = 'f' and item_id = ${t.item_id}
+            and applied_at is null
+            and description_key like 'fees-%'
+            and datetime between ${new Date(saleMin.getTime() - 10 * 60_000)}
+                             and ${new Date(saleMax.getTime() + 10 * 60_000)}
+        `) as unknown as { id: number; money: string }[];
+        for (const f of feeRows) {
+          fees += Number(f.money);
+          await sql`
+            update game_cashflow set applied_at = now() where id = ${f.id}
+          `;
+        }
+      }
+
+      // Přeprava – cashflow endpoint ji NEPOSÍLÁ (ověřeno na reálných
+      // datech), proto odhad: % z hrubé tržby (default 3,06 % z reálného
+      // příkladu; přenastavitelné env GAME_TRANSPORT_PCT, 0 = vypnout).
+      const transportPct = Number(
+        process.env.GAME_TRANSPORT_PCT ?? "0.0306"
+      );
+      const transport =
+        Number.isFinite(transportPct) && transportPct > 0
+          ? gross * transportPct
+          : 0;
+
+      // Prodejní cena se ukládá NETTO (po poplatcích a přepravě) –
+      // realized P/L = (netto − nákup) × ks odpovídá čistému zisku.
+      const netPrice =
+        closable > 0 ? (gross + fees - transport) / closable : matched.price;
+
       const lots = (await sql`
         select id, quantity from positions
         where item_id = ${t.item_id}
@@ -2295,21 +2356,22 @@ export async function closeSalesFromCashflow(): Promise<number> {
 
       let remaining = closable;
       let closed = 0;
+      const logText = (take: number) =>
+        `Prodej ze hry (okamžitě z cashflow) – ${take.toLocaleString("cs-CZ")} ks, hrubá cena ${matched.price?.toFixed(3)} $, netto po poplatcích (${fees.toFixed(2)} $) a přepravě (odhad ${transport.toFixed(2)} $) ${netPrice.toFixed(3)} $.`;
       for (const lot of lots) {
         if (remaining <= 0) break;
         const take = Math.min(lot.quantity, remaining);
         if (take === lot.quantity) {
           await sql`
             update positions
-            set sell_price = ${matched.price}, closed_at = now()
+            set sell_price = ${netPrice}, closed_at = now()
             where id = ${lot.id}
           `;
           await sql`
             insert into condition_log
               (position_id, event_type, market_price_at_log, condition_text)
             values
-              (${lot.id}, 'CLOSED', ${matched.price},
-               ${`Prodej ze hry (okamžitě z cashflow) – ${take.toLocaleString("cs-CZ")} ks @ ${matched.price.toFixed(3)} $.`})
+              (${lot.id}, 'CLOSED', ${matched.price}, ${logText(take)})
           `;
         } else {
           await sql`
@@ -2322,7 +2384,7 @@ export async function closeSalesFromCashflow(): Promise<number> {
             values
               (${t.item_id}, ${t.quality}, ${take},
                (select buy_price from positions where id = ${lot.id}),
-               ${matched.price},
+               ${netPrice},
                (select opened_at from positions where id = ${lot.id}),
                now(), 'game', 'Sync ze hry (okamžitý prodej z cashflow)')
             returning id
@@ -2331,8 +2393,7 @@ export async function closeSalesFromCashflow(): Promise<number> {
             insert into condition_log
               (position_id, event_type, market_price_at_log, condition_text)
             values
-              (${closedPart.id}, 'CLOSED', ${matched.price},
-               ${`Prodej ze hry (okamžitě z cashflow) – ${take.toLocaleString("cs-CZ")} ks @ ${matched.price.toFixed(3)} $.`})
+              (${closedPart.id}, 'CLOSED', ${matched.price}, ${logText(take)})
           `;
         }
         closed++;
@@ -2359,6 +2420,7 @@ type PendingCashflow = {
   quantity: number | null;
   unit_price: number | null;
   units_unapplied: number;
+  datetime: Date;
 };
 
 async function getPendingCashflowFor(
@@ -2367,7 +2429,7 @@ async function getPendingCashflowFor(
   quality: number
 ): Promise<PendingCashflow[]> {
   return (await sql`
-    select id, kind, quantity, unit_price, units_unapplied
+    select id, kind, quantity, unit_price, units_unapplied, datetime
     from game_cashflow
     where item_id = ${itemId}
       and quality = ${quality}
