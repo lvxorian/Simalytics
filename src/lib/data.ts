@@ -2269,19 +2269,30 @@ export async function syncGameMarketOrders(
       }
     }
 
-    // 3) Úklid hlídek: položky bez otevřených pozic (jakéhokoli zdroje –
-    // ruční limitky z portfolia musí zůstat!) a bez limitky na burze
+    // 3) Úklid hlídek:
+    //    a) herní hlídka (note '…z herní burzy') bez aktuálních nabídek
+    //       = limitka ve hře zrušena/vyplacena → hlídka zmizí (i když
+    //       pozice still otevřené – jinak by visela zastaralá práha),
+    //    b) položky bez otevřených pozic a bez nabídek (ruční i herní;
+    //       ruční limitky s otevřenými pozicami musí zůstat!)
     await sql`
       delete from alerts a
       where a.kind = 'limit_sell'
         and a.quality = 0
-        and not exists (
-          select 1 from positions p
-          where p.item_id = a.item_id and p.closed_at is null
-        )
-        and not exists (
-          select 1 from game_market_orders g
-          where g.item_id = a.item_id
+        and (
+          (a.note = 'Limitní prodej z herní burzy'
+            and not exists (
+              select 1 from game_market_orders g
+              where g.item_id = a.item_id
+            ))
+          or (not exists (
+                select 1 from positions p
+                where p.item_id = a.item_id and p.closed_at is null
+              )
+              and not exists (
+                select 1 from game_market_orders g
+                where g.item_id = a.item_id
+              ))
         )
     `;
   });
