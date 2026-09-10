@@ -2318,10 +2318,24 @@ export async function closeSalesFromCashflow(): Promise<number> {
           p.kind === "contract_sale"
       );
       if (sales.length === 0) return 0;
+
+      // Guard proti dvojitému účtování: uzavírat jen prodeje NOVĚJŠÍ než
+      // poslední snapshot skladu položky. Starší už (nebo právě) zpracovává
+      // reconcile skladu přes diff – snapshot je „pravda o množství“.
+      const snap = (await sql`
+        select updated_at from game_warehouse
+        where item_id = ${t.item_id} and quality = ${t.quality}
+      `) as unknown as { updated_at: Date }[];
+      const snapAt = snap[0]?.updated_at ?? null;
+      const freshSales =
+        snapAt === null
+          ? sales
+          : sales.filter((s) => s.datetime > snapAt);
+      if (freshSales.length === 0) return 0;
       const saleDatetime = new Map(
-        sales.map((p) => [p.id, p.datetime] as const)
+        freshSales.map((p) => [p.id, p.datetime] as const)
       );
-      const saleUnits = sales.reduce((s, p) => s + p.units_unapplied, 0);
+      const saleUnits = freshSales.reduce((s, p) => s + p.units_unapplied, 0);
 
       // Stav otevřených game lotů dané položky a kvality
       const rows = (await sql`
@@ -2358,7 +2372,7 @@ export async function closeSalesFromCashflow(): Promise<number> {
       let saleMax: Date | null = null;
       {
         let rem = closable;
-        for (const s of sales) {
+        for (const s of freshSales) {
           if (rem <= 0) break;
           const take = Math.min(s.units_unapplied, rem);
           gross += take * (s.unit_price ?? 0);
@@ -2479,7 +2493,9 @@ export async function closeSalesFromCashflow(): Promise<number> {
         remaining -= take;
       }
 
-      await applyCashflowUnits(sql, sales, closable);
+      // Aplikují se jednotky právě uzavřených FRESH prodejů (starší už
+      // zpracoval reconcile skladu – jejich jednotky se nesmí spálit).
+      await applyCashflowUnits(sql, freshSales, closable);
       return closed;
     });
 
