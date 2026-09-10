@@ -1,5 +1,7 @@
 import postgres, { type JSONValue } from "postgres";
-import { getDb } from "@/lib/db";import type { SimcoCertificateKind, SimcoContest, SimcoVwap } from "@/lib/simcotools";
+import { getDb } from "@/lib/db";
+import type { SimcoCertificateKind, SimcoContest, SimcoVwap } from "@/lib/simcotools";
+import { getResources } from "@/lib/simcotools";
 import type {
   ConditionLogEntry,
   Item,
@@ -2217,6 +2219,55 @@ export async function syncGameCashflow(rows: GameCashflowRow[]): Promise<number>
   return result.count;
 }
 
+// ── Přeprava: poměr položky (Simco Tools, cache 24 h) + cena ze skladu ──
+
+let transportationCache: {
+  loadedAt: number;
+  ratios: Map<number, number>;
+} | null = null;
+
+/**
+ * transportation poměr položky (kolik ks Přepravy spotřebuje 1 ks prodeje).
+ * Ze Simco Tools /resources (cache 24 h); při selhání null → fallback odhad.
+ */
+async function getTransportationRatio(
+  itemId: number
+): Promise<number | null> {
+  const now = Date.now();
+  if (
+    transportationCache === null ||
+    now - transportationCache.loadedAt > 24 * 3600_000
+  ) {
+    try {
+      const resources = await getResources();
+      transportationCache = {
+        loadedAt: now,
+        ratios: new Map(
+          resources.map((r) => [r.id, Number(r.transportation) || 0])
+        ),
+      };
+    } catch {
+      // Simco Tools nedostupné → fallback odhadu
+      return transportationCache?.ratios.get(itemId) ?? null;
+      }
+  }
+  return transportationCache?.ratios.get(itemId) ?? null;
+}
+
+/**
+ * Jednicová cena Přepravy (item 13) na skladu (unit_cost posledního
+ * snapshotu). Exaktní vstup pro cenu přepravy prodeje.
+ */
+async function getTransportUnitCost(
+  sql: PostgresSql
+): Promise<number | null> {
+  const rows = (await sql`
+    select unit_cost from game_warehouse where item_id = 13 and quality = 0
+  `) as unknown as { unit_cost: string | null }[];
+  const c = rows[0]?.unit_cost === null ? null : Number(rows[0]?.unit_cost);
+  return c !== null && Number.isFinite(c) && c > 0 ? c : null;
+}
+
 /**
  * OKAMŽITÉ uzavření lotů z čerstvého cashflow (volá se hned po importu).
  *
@@ -2329,16 +2380,29 @@ export async function closeSalesFromCashflow(): Promise<number> {
         }
       }
 
-      // Přeprava – cashflow endpoint ji NEPOSÍLÁ (ověřeno na reálných
-      // datech), proto odhad: % z hrubé tržby (default 3,06 % z reálného
-      // příkladu; přenastavitelné env GAME_TRANSPORT_PCT, 0 = vypnout).
-      const transportPct = Number(
-        process.env.GAME_TRANSPORT_PCT ?? "0.0306"
-      );
-      const transport =
-        Number.isFinite(transportPct) && transportPct > 0
-          ? gross * transportPct
-          : 0;
+      // ── PŘEPRAVA – EXAKTNÍ výpočet ──────────────────────────────
+      // Mechanika hry (ověřeno naměřením): burzovní/maloobchodní prodej
+      // spotřebuje Přepravu ze skladu = prodané ks × transportation
+      // (poměr položky ze Simco Tools: Cotton 0,5, Apples 1, Power 0…)
+      // × unit_cost Přepravy na skladu. Naměříno: 300 × 0,5 × 0,0882 =
+      // 13,23 $ = přesně počítadlo hry. Fallback: % z tržby (env),
+      // když poměr/cena nejsou k dispozici.
+      let transport = 0;
+      let transportExact = false;
+      const ratio = await getTransportationRatio(t.item_id);
+      const trUnitCost = await getTransportUnitCost(sql);
+      if (ratio !== null && trUnitCost !== null && ratio > 0 && trUnitCost > 0) {
+        transport = closable * ratio * trUnitCost;
+        transportExact = true;
+      } else {
+        const transportPct = Number(
+          process.env.GAME_TRANSPORT_PCT ?? "0.0306"
+        );
+        transport =
+          Number.isFinite(transportPct) && transportPct > 0
+            ? gross * transportPct
+            : 0;
+      }
 
       // Prodejní cena se ukládá NETTO (po poplatcích a přepravě) –
       // realized P/L = (netto − nákup) × ks odpovídá čistému zisku.
@@ -2357,7 +2421,7 @@ export async function closeSalesFromCashflow(): Promise<number> {
       let remaining = closable;
       let closed = 0;
       const logText = (take: number) =>
-        `Prodej ze hry (okamžitě z cashflow) – ${take.toLocaleString("cs-CZ")} ks, hrubá cena ${matched.price?.toFixed(3)} $, netto po poplatcích (${fees.toFixed(2)} $) a přepravě (odhad ${transport.toFixed(2)} $) ${netPrice.toFixed(3)} $.`;
+        `Prodej ze hry (okamžitě z cashflow) – ${take.toLocaleString("cs-CZ")} ks, hrubá cena ${matched.price?.toFixed(3)} $, netto po poplatcích (${fees.toFixed(2)} $) a přepravě (${transportExact ? `${(closable * (ratio ?? 0)).toLocaleString("cs-CZ")} ks × ${trUnitCost?.toFixed(4)} $` : `odhad ${transport.toFixed(2)} $`}) ${netPrice.toFixed(3)} $.`;
       for (const lot of lots) {
         if (remaining <= 0) break;
         const take = Math.min(lot.quantity, remaining);
