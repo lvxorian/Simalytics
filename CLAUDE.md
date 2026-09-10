@@ -37,6 +37,8 @@ db/schema.sql              # items, price_history, positions, condition_log, wat
 #           003_alerts (alerts s cooldownem), 005_alert_seen (seen_at), 006_limit_sell_alerts (kind 'limit_sell'),
 #           008_alert_v2 (direction 'cross', one_shot), 009_game_sync (game_imports,
 #           game_warehouse, positions.source), 010_cashflow (game_cashflow),
+#           012_cost_breakdown (positions.cost_breakdown jsonb – rozpad
+#           nákladů prodeje: gross/fees/transport/net),
 #           011_sync_ignore (game_sync_ignored – palivo/výroba mimo portfolio)
 src/lib/
   metrics.ts               # likvidita (obchody/24h + obrat) a volatilita (annualizovaná σ log-výnosů) – karty na market page
