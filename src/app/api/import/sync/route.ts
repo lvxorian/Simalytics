@@ -68,7 +68,23 @@ function parseCashflowRow(raw: unknown): GameCashflowRow | null {
   let quantity: number | null = null;
   let unitPrice: number | null = null;
 
-  if (category === "m" && itemId !== null) {
+  const keyStr = descriptionKey ?? "";
+
+  if (keyStr.startsWith("marketsell") && itemId !== null) {
+    // prodej na burze – tvar odpovídá marketbuy (amount × price);
+    // bez amount se ks dopočtou z money (výdaj je záporný)
+    kind = "market_sale";
+    const price = num(details.price);
+    const amount = num(details.amount);
+    if (price > 0 && (amount > 0 || money !== 0)) {
+      unitPrice = price;
+      quantity =
+        amount > 0 ? Math.round(amount) : Math.round(Math.abs(money) / price);
+    } else {
+      itemId = null;
+      kind = "other";
+    }
+  } else if (category === "m" && itemId !== null) {
     // nákup na burze – details.amount × details.price
     kind = "market_buy";
     const amount = num(details.amount);
@@ -96,7 +112,7 @@ function parseCashflowRow(raw: unknown): GameCashflowRow | null {
   }
 
   const unitsUnapplied =
-    kind === "market_buy" || kind === "retail_sale"
+    kind === "market_buy" || kind === "retail_sale" || kind === "market_sale"
       ? (quantity ?? 0)
       : null;
 

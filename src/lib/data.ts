@@ -2017,6 +2017,7 @@ export type GameCashflowRow = {
   details: Record<string, unknown>;
   kind:
     | "market_buy" // nákup na burze – details.amount × details.price (EXAKTNÍ)
+    | "market_sale" // prodej na burze – details.amount × details.price
     | "retail_sale" // maloobchodní prodej – details.price za ks
     | "other"; // produkce, mimořádné… (bez napojení na pozice)
   item_id: number | null;
@@ -2088,7 +2089,7 @@ async function getPendingCashflowFor(
       and quality = ${quality}
       and applied_at is null
       and units_unapplied > 0
-      and kind in ('market_buy', 'retail_sale')
+      and kind in ('market_buy', 'retail_sale', 'market_sale')
     order by datetime asc
     for update
   `) as unknown as PendingCashflow[];
@@ -2168,7 +2169,9 @@ async function matchSalePrice(
   units: number
 ): Promise<{ price: null | number; matchedUnits: number }> {
   const pending = await getPendingCashflowFor(sql, itemId, quality);
-  const sales = pending.filter((p) => p.kind === "retail_sale");
+  const sales = pending.filter(
+    (p) => p.kind === "retail_sale" || p.kind === "market_sale"
+  );
   const available = sales.reduce((s, p) => s + p.units_unapplied, 0);
   if (available < units || sales.length === 0) {
     return { price: null, matchedUnits: 0 };
