@@ -43,7 +43,9 @@ db/schema.sql              # items, price_history, positions, condition_log, wat
 #           012_cost_breakdown (positions.cost_breakdown jsonb – rozpad
 #           nákladů prodeje: gross/fees/transport/net),
 #           011_sync_ignore (game_sync_ignored – palivo/výroba mimo portfolio),
-#           013_market_orders (game_market_orders – limitky na burze, Fáze 4)
+#           013_market_orders (game_market_orders – limitky na burze, Fáze 4),
+#           014_limit_sell_unique (parciální unique index alerts – upsert hlídek
+#           limit_sell; bez něj on conflict (item_id, quality, kind) padal)
 src/lib/
   metrics.ts               # likvidita (obchody/24h + obrat) a volatilita (annualizovaná σ log-výnosů) – karty na market page
   alerts.ts                # evaluace alertů (cena nad/pod/cross + skóre + limitní prodeje,
@@ -366,6 +368,10 @@ src/components/            # vizní komponenty (viz níže)
   pozicím (vložení nabídky přesune ks ze skladu na burzu – není to prodej
   ani spotřeba). Auto-close po naplnění obstarává closeSalesFromCashflow
   (cashflow marketfilled) – napojení limitka→prodej není potřeba.
+  Test toku limitky: `node scripts/test-market-orders.mjs` (push
+  simulovaného userscriptu → DB hlídka → UI sekce → úklid prázdným
+  snapshitem; při rerunu s identickými daty je logged/watch_updated
+  správně 0 – dedupe).
 
 ## Externí API
 

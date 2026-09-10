@@ -141,8 +141,10 @@ const [note] = (await sql`
   order by cl.created_at desc limit 1
 `);
 ok(!!note, `NOTE v logu obchodů: „${note?.condition_text.slice(0, 60)}…"`);
-ok(body.logged === 1 || body.watch_updated === 1,
-  `API report: logged=${body.logged}, watch_updated=${body.watch_updated}`);
+ok(body.skipped === 0 && body.order_count === 1,
+  `API report: order_count=${body.order_count}, skipped=${body.skipped}` +
+    ` (logged=${body.logged}, watch_updated=${body.watch_updated} – při rerunu\n` +
+    `   s identickými daty správně 0: dedupe dle textu/thresholdu)`);
 
 // ── 4) UI /portfolio ────────────────────────────────────────────────
 console.log(`\n═══ 4) UI /PRODUKCI ═══`);
