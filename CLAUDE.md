@@ -290,6 +290,16 @@ src/components/            # vizní komponenty (viz níže)
   Limitní prodej: `upsertLimitSellAlert`/`deleteLimitSellAlert` udržují
   hlídku alerts kind='limit_sell' (poller notifikuje při dosažení limitu).
   Terminologie v UI: „aktivum/aktiva“ (ne držba), nákup = „lot“.
+  Sekce „Limitky na burze“ (`getGameMarketOrders`) leží MEZI Aktiva a
+  Uzavřené pozice (ne až dole) a tabulka ukazuje ekonomiku realizace:
+  Ø nákup lotů (FIFO dle kvality nabídky, fallback průměr přes všechny
+  kvality), vzdálenost limitu od trhu v %, odhad poplatku + přepravy,
+  netto tržbu a očekávaný zisk ($ i %) vs. nákup. Metodika = rozpad
+  nákladů uzavřených pozic: poplatek 3 % z tržby (přesnou částku,
+  hlásí-li ji hra u nabídky v `fees`, bereme z ní), přeprava exaktně
+  (poměr položky × cena Přepravy ze skladu, fallback GAME_TRANSPORT_PCT).
+  Badge „limit X,XX $“ v tabulce aktiv záměrně NEEXISTUJE – limitní
+  info je kompletní v tabulce limitek, znovu ho nepřidávat.
 - **Fáze ekonomiky**: dle hry `recession` = „Recese 📉", `normal` =
   „Stabilní ⚖️", `boom` = „Růst 📈" (PHASE_LABELS v statistiky/page.tsx).
   Kvalita komodit se v UI zkracuje na „Q0" (ne „kvalita 0").
@@ -363,8 +373,8 @@ src/components/            # vizní komponenty (viz níže)
   záznamy). Full snapshot = smazat nesynchronizované nabídky (zrušené/
   vyplacené). Per (položka, kvalita) s otevřenými game loty: NOTE do logu
   obchodů (dedupe dle textu) + hlídka alerts kind='limit_sell' (práh =
-  min cena nabídek). Badge u aktiva bere limit z herních nabídek (přednost
-  před poznámkou). Reconcile skladu přičítá onExchange jednotky k otevřeným
+  min cena nabídek). Badge „limit X,XX $“ u aktiva byl zrušen –
+  kompletní limitní info (vč. oček. zisku) je v tabulce limitek. Reconcile skladu přičítá onExchange jednotky k otevřeným
   pozicím (vložení nabídky přesune ks ze skladu na burzu – není to prodej
   ani spotřeba). Auto-close po naplnění obstarává closeSalesFromCashflow
   (cashflow marketfilled) – napojení limitka→prodej není potřeba.
