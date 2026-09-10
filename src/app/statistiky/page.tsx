@@ -397,7 +397,7 @@ export default async function StatistikyPage() {
             Cert demand (strukturální poptávka)
           </h2>
           <p className="text-sm text-muted-foreground">
-            Kolik firem drží certifikát „quality leadera" pro komoditu. Držitelé
+            Kolik firem drží certifikát „quality leadera“ pro komoditu. Držitelé
             certu komoditu prodávají, ostatní ji musí kupovat – vysoký počet
             certů = strukturální poptávka po komoditě.
           </p>

@@ -20,6 +20,7 @@ npm run build        # produkční build (Turbopack)
 npm run typecheck    # tsc --noEmit – POKAŽDÉ před commitem
 npm run lint         # eslint
 npm run db:schema    # aplikuje db/schema.sql do Neonu
+npm run db:upgrade   # aplikuje nové migrace z db/upgrades/*.sql (idempotentně)
 npm run db:names     # seed názvů/kategorií/ikon (db/seed-names.sql)
 npm run icons:download  # stáhne ikony z CDN do public/icons + image_url do DB
 npm run fetch:market # lokální test cron skriptu (ceny → Neon)
@@ -27,7 +28,7 @@ npm run backfill:candles  # denní svíčky ze Simco Tools → DB
 npm run sync:daily   # denní sync VWAP/contests/cert kinds (Signal Engine fáze 1)
 ```
 
-Testy nejsou — ověření = `npm run typecheck` + `npm run build`.
+Testy nejsou — ověření = `npm run typecheck` + `npm run build` + `npm run lint`.
 
 ## Architektura
 
@@ -39,7 +40,8 @@ db/schema.sql              # items, price_history, positions, condition_log, wat
 #           game_warehouse, positions.source), 010_cashflow (game_cashflow),
 #           012_cost_breakdown (positions.cost_breakdown jsonb – rozpad
 #           nákladů prodeje: gross/fees/transport/net),
-#           011_sync_ignore (game_sync_ignored – palivo/výroba mimo portfolio)
+#           011_sync_ignore (game_sync_ignored – palivo/výroba mimo portfolio),
+#           013_market_orders (game_market_orders – limitky na burze, Fáze 4)
 src/lib/
   metrics.ts               # likvidita (obchody/24h + obrat) a volatilita (annualizovaná σ log-výnosů) – karty na market page
   alerts.ts                # evaluace alertů (cena nad/pod/cross + skóre + limitní prodeje,
@@ -91,6 +93,16 @@ src/components/            # vizní komponenty (viz níže)
 
 ## Klíčové konvence a pasti
 
+- **ESLint (eslint-config-next v16)**: konfigurace importuje flat config
+  NATIVNĚ (`import from "eslint-config-next/core-web-vitals"`) – `FlatCompat`
+  z doby v13 padá na „Converting circular structure to JSON". Nová React
+  Compiler pravidla (`react-hooks/purity|refs|immutability|set-state-in-
+  effect`) jsou v eslint.config.mjs nastavená na **warn**: kód záměrně
+  používá imperativní canvas overlaye grafu a ref manipulaci (viz výše) –
+  NErefaktorovat kvuli nim; reálné chyby i tak hlásí. `.catch(() => [])`
+  kolem SQL dotazů na stránkách musí VŽDY logovat (`console.error`), jinak
+  se chyba ukáže jen jako prázdná data (už jednou způsobilo „prázdné
+  portfolio", commit c5853af).
 - **Data vrstva je server-only**: `data.ts` importuje `db.ts` (postgres.js).
   Nikdy nedávej `"use client"` na stránku, která importuje z `lib/data` —
   build spadne na Client Component SSR. Interaktivní části vždy vytáhni do

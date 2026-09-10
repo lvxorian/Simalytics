@@ -167,7 +167,7 @@ function publish(ev: Parameters<Sub>[0]) {
 
 async function hubStep(s: HubState) {
   try {
-    let ticks: HubTick[] = [];
+    const ticks: HubTick[] = [];
 
     if (s.toggle) {
       // (A) market/prices – poslední obchody, autorita pro datetime

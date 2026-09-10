@@ -440,7 +440,7 @@ export function mergeLiveTick(
 
   // Nový bucket – dolpněme případnou mezeru plochými svíčkami (kontinuita)
   const out = candles.slice();
-  let prevClose = last.close;
+  const prevClose = last.close;
   let t = nextBucketStart(intervalKey, last.time);
   let guard = 0;
   while (t < bucket && guard < 40) {
