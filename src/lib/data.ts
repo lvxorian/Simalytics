@@ -1907,7 +1907,12 @@ export async function reconcileGameWarehouse(
           entry.item_id,
           entry.quality
         );
-        const sales = pending.filter((p) => p.kind === "retail_sale");
+        // Reálné prodeje z cashflow: maloobchodní i burzovní (marketfilled/
+        // marketsell). Dřív jen retail → burzovní prodeje neměly pokrytí
+        // cenou, šly jako „spotřeba" a realized P/L zůstal 0.
+        const sales = pending.filter(
+          (p) => p.kind === "retail_sale" || p.kind === "market_sale"
+        );
         const saleUnits = sales.reduce((s, p) => s + p.units_unapplied, 0);
         const coveredBySales = Math.min(decrease, saleUnits);
 
@@ -2210,6 +2215,138 @@ export async function syncGameCashflow(rows: GameCashflowRow[]): Promise<number>
       description = excluded.description
   `;
   return result.count;
+}
+
+/**
+ * OKAMŽITÉ uzavření lotů z čerstvého cashflow (volá se hned po importu).
+ *
+ * Prodej ve hře → cashflow dorazí do Simalytics během vteřin, ale sklad
+ * se syncuje později (snapshot se obnovuje pomaleji a jen když je otevřený).
+ * Tahle funkce proto uzavře FIFO loty hned s reálnou cenou z pending
+ * prodejů (maloobchod i burza) – realized P/L v portfoliu se objeví
+ * okamžitě, bez čekání na další sync skladu.
+ *
+ * Bezpečné i dřív, než sklad potvrdí úbytek: odložená spotřeba – co
+ * nedokáže dnes pár „prodej vs. lot", zůstane pending a reconcile skladu
+ * to rozrazí (prodej vs. spotřeba) později. Dvojité uzavření hrozit
+ * nemůže: po uzavření klesne stav pozic, takže diff sklad vs. pozice
+ * bude 0 a prodejní větev se vůbec nespustí.
+ *
+ * Vrací počet uzavřených lotů (pro log/audit v odpovědi API).
+ */
+export async function closeSalesFromCashflow(): Promise<number> {
+  const db = getDb();
+
+  // Položky s pending prodeji (maloobchod + burza), nejstarší první.
+  // Ignorované položky (palivo) se vynechají – jejich loty se
+  // záměrně nevedou a pending se u nich uzavírá jinudy.
+  const targets = (await db`
+    select item_id, quality, sum(units_unapplied)::int as units
+    from game_cashflow
+    where applied_at is null and units_unapplied > 0
+      and kind in ('retail_sale', 'market_sale')
+      and item_id not in (select item_id from game_sync_ignored)
+    group by item_id, quality
+    order by min(datetime) asc
+    limit 50
+  `) as unknown as { item_id: number; quality: number; units: number }[];
+
+  let closedTotal = 0;
+
+  for (const t of targets) {
+    const result = await db.begin(async (sql) => {
+      const pending = await getPendingCashflowFor(sql, t.item_id, t.quality);
+      const sales = pending.filter(
+        (p) => p.kind === "retail_sale" || p.kind === "market_sale"
+      );
+      if (sales.length === 0) return 0;
+      const saleUnits = sales.reduce((s, p) => s + p.units_unapplied, 0);
+
+      // Stav otevřených game lotů dané položky a kvality
+      const rows = (await sql`
+        select coalesce(sum(quantity), 0)::int as qty
+        from positions
+        where item_id = ${t.item_id}
+          and quality = ${t.quality}
+          and closed_at is null and source = 'game'
+      `) as unknown as { qty: number }[];
+      const currentQty = Number(rows[0]?.qty ?? 0);
+
+      // Uzavíráme jen tolik, kolik reálných prodejů dokáže pokrýt držbu
+      const closable = Math.min(saleUnits, currentQty);
+      if (closable <= 0) return 0;
+
+      const matched = await matchSalePrice(
+        sql,
+        t.item_id,
+        t.quality,
+        closable
+      );
+      if (matched.price === null) return 0;
+
+      const lots = (await sql`
+        select id, quantity from positions
+        where item_id = ${t.item_id}
+          and quality = ${t.quality}
+          and closed_at is null and source = 'game'
+        order by opened_at asc
+        for update
+      `) as unknown as { id: string; quantity: number }[];
+
+      let remaining = closable;
+      let closed = 0;
+      for (const lot of lots) {
+        if (remaining <= 0) break;
+        const take = Math.min(lot.quantity, remaining);
+        if (take === lot.quantity) {
+          await sql`
+            update positions
+            set sell_price = ${matched.price}, closed_at = now()
+            where id = ${lot.id}
+          `;
+          await sql`
+            insert into condition_log
+              (position_id, event_type, market_price_at_log, condition_text)
+            values
+              (${lot.id}, 'CLOSED', ${matched.price},
+               ${`Prodej ze hry (okamžitě z cashflow) – ${take.toLocaleString("cs-CZ")} ks @ ${matched.price.toFixed(3)} $.`})
+          `;
+        } else {
+          await sql`
+            update positions set quantity = quantity - ${take} where id = ${lot.id}
+          `;
+          const [closedPart] = (await sql`
+            insert into positions
+              (item_id, quality, quantity, buy_price, sell_price, opened_at,
+               closed_at, source, note)
+            values
+              (${t.item_id}, ${t.quality}, ${take},
+               (select buy_price from positions where id = ${lot.id}),
+               ${matched.price},
+               (select opened_at from positions where id = ${lot.id}),
+               now(), 'game', 'Sync ze hry (okamžitý prodej z cashflow)')
+            returning id
+          `) as unknown as { id: string }[];
+          await sql`
+            insert into condition_log
+              (position_id, event_type, market_price_at_log, condition_text)
+            values
+              (${closedPart.id}, 'CLOSED', ${matched.price},
+               ${`Prodej ze hry (okamžitě z cashflow) – ${take.toLocaleString("cs-CZ")} ks @ ${matched.price.toFixed(3)} $.`})
+          `;
+        }
+        closed++;
+        remaining -= take;
+      }
+
+      await applyCashflowUnits(sql, sales, closable);
+      return closed;
+    });
+
+    closedTotal += result;
+  }
+
+  return closedTotal;
 }
 
 /**

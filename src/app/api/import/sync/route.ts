@@ -1,5 +1,6 @@
 import { getDb } from "@/lib/db";
 import {
+  closeSalesFromCashflow,
   countGameImports,
   recordGameImport,
   reconcileGameWarehouse,
@@ -224,11 +225,16 @@ export async function POST(req: Request) {
 
     try {
       const inserted = await syncGameCashflow(parsed);
+      // Okamžité uzavření lotů reálnou prodejní cenou hned z čerstvého
+      // cashflow – realized P/L se v portfoliu objeví během vteřin od
+      // obchodu, bez čekání na sync skladu.
+      const closed_lots = await closeSalesFromCashflow();
       return Response.json({
         ok: true,
         stored: "cashflow",
         inserted,
         skipped,
+        closed_lots,
         total_imports: await countGameImports(),
       });
     } catch (err) {
