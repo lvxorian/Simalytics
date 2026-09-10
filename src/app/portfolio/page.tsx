@@ -237,6 +237,126 @@ export default async function PortfolioPage({
             )}
           </section>
 
+          {/* ── Limitky na burze (herní market orders) ─────────── */}
+          {marketOrders.length > 0 && (
+            <section className="space-y-3">
+              <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                <Target className="size-4" />
+                Limitky na burze ({marketOrders.length})
+              </h2>
+              <div className="overflow-hidden rounded-xl border border-border/80 bg-card">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="pl-4">Položka</TableHead>
+                      <TableHead className="text-right">Množství</TableHead>
+                      <TableHead className="text-right">Limit</TableHead>
+                      <TableHead className="text-right">Ø nákup</TableHead>
+                      <TableHead className="text-right">Popl. + přepr.</TableHead>
+                      <TableHead className="text-right">Netto</TableHead>
+                      <TableHead className="text-right">Oček. zisk</TableHead>
+                      <TableHead className="pr-4 text-right">Vloženo</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {marketOrders.map((o) => {
+                      const distancePct =
+                        o.current_price !== null && o.current_price > 0
+                          ? ((o.price - o.current_price) / o.current_price) * 100
+                          : null;
+                      return (
+                        <TableRow key={o.id} className="border-border/40">
+                          <TableCell className="pl-4">
+                            <Link
+                              href={`/market/${o.item_id}`}
+                              className="group flex items-center gap-2.5"
+                            >
+                              <ItemIcon url={o.image_url} name={o.name} size={28} />
+                              <span className="font-medium group-hover:text-primary">
+                                {o.name}
+                                {o.quality > 0 && (
+                                  <span className="ml-1 text-xs text-muted-foreground">
+                                    Q{o.quality}
+                                  </span>
+                                )}
+                              </span>
+                            </Link>
+                          </TableCell>
+                          <TableCell className="text-right font-mono tabular-nums">
+                            {o.quantity.toLocaleString("cs-CZ")}
+                          </TableCell>
+                          <TableCell className="text-right font-mono tabular-nums text-primary">
+                            {formatPrice(o.price)}
+                            {distancePct !== null && (
+                              <div
+                                className="text-[10px] text-muted-foreground"
+                                title={`Aktuální tržní cena ${formatPrice(o.current_price)}`}
+                              >
+                                {formatPercent(distancePct)} od trhu
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right font-mono tabular-nums">
+                            {o.avg_buy_price === null ? (
+                              <span className="text-muted-foreground" title="Bez otevřených lotů v portfoliu">–</span>
+                            ) : (
+                              formatPrice(o.avg_buy_price)
+                            )}
+                          </TableCell>
+                          <TableCell
+                            className="text-right font-mono tabular-nums text-muted-foreground"
+                            title={`Poplatek ${formatPrice(o.est_fee)} (${o.fee_from_game ? "hlášený hrou" : "odhad 3 % z tržby"}) + přeprava ${formatPrice(o.est_transport)} (${o.transport_exact ? "exaktně ze skladu" : "odhad % z tržby"})`}
+                          >
+                            {formatPrice(o.est_fee + o.est_transport)}
+                          </TableCell>
+                          <TableCell className="text-right font-mono tabular-nums">
+                            {formatPrice(o.net_total)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {o.pl_total === null ? (
+                              <span
+                                className="font-mono tabular-nums text-muted-foreground"
+                                title="Bez otevřených lotů nelze spočítat zisk"
+                              >
+                                –
+                              </span>
+                            ) : (
+                              <>
+                                <div
+                                  className={`font-mono tabular-nums ${plColorClass(o.pl_total)}`}
+                                >
+                                  {formatSigned(o.pl_total)}
+                                </div>
+                                <div
+                                  className={`font-mono text-xs tabular-nums ${plColorClass(o.pl_pct)}`}
+                                >
+                                  {formatPercent(o.pl_pct)}
+                                </div>
+                              </>
+                            )}
+                          </TableCell>
+                          <TableCell className="pr-4 text-right font-mono text-xs text-muted-foreground">
+                            {formatDateTime(o.posted_at)}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Vlastní nabídky vložené na burzu ve hře (limitní prodeje) –
+                sync ze stránky statistiky skladu. Netto = hrubá tržba −
+                burzovní poplatek (3 % z tržby; přesnou částku, hlásí-li ji
+                hra u nabídky, bereme z ní) − přeprava (exaktně poměr × cena
+                Přepravy ze skladu, jinak odhad % z tržby). Oček. zisk =
+                netto − Ø pořizovací cena otevřených lotů (FIFO dle
+                kvality). Po odklepnutí se pozice uzavřou automaticky s
+                reálnou netto cenou (cashflow).
+              </p>
+            </section>
+          )}
+
           {/* ── Uzavřené pozice (historie) ─────────────────────── */}
           {closedPositions.length > 0 && (
             <section className="space-y-3">
@@ -321,68 +441,6 @@ export default async function PortfolioPage({
                 Položky syncované ze skladu, které nejsou investicí/flipem
                 (palivo, výroba). Ve hře zůstávají na skladu, do portfolia se
                 nenačítají a P/L jich netýká.
-              </p>
-            </section>
-          )}
-
-          {/* ── Limitky na burze (herní market orders) ─────────── */}
-          {marketOrders.length > 0 && (
-            <section className="space-y-3">
-              <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                <Target className="size-4" />
-                Limitky na burze ({marketOrders.length})
-              </h2>
-              <div className="overflow-hidden rounded-xl border border-border/80 bg-card">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="hover:bg-transparent">
-                      <TableHead className="pl-4">Položka</TableHead>
-                      <TableHead className="text-right">Množství</TableHead>
-                      <TableHead className="text-right">Limit</TableHead>
-                      <TableHead className="text-right">Hodnota</TableHead>
-                      <TableHead className="pr-4 text-right">Vloženo</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {marketOrders.map((o) => (
-                      <TableRow key={o.id} className="border-border/40">
-                        <TableCell className="pl-4">
-                          <Link
-                            href={`/market/${o.item_id}`}
-                            className="group flex items-center gap-2.5"
-                          >
-                            <ItemIcon url={o.image_url} name={o.name} size={28} />
-                            <span className="font-medium group-hover:text-primary">
-                              {o.name}
-                              {o.quality > 0 && (
-                                <span className="ml-1 text-xs text-muted-foreground">
-                                  Q{o.quality}
-                                </span>
-                              )}
-                            </span>
-                          </Link>
-                        </TableCell>
-                        <TableCell className="text-right font-mono tabular-nums">
-                          {o.quantity.toLocaleString("cs-CZ")}
-                        </TableCell>
-                        <TableCell className="text-right font-mono tabular-nums text-primary">
-                          {formatPrice(o.price)}
-                        </TableCell>
-                        <TableCell className="text-right font-mono tabular-nums text-muted-foreground">
-                          {formatPrice(o.price * o.quantity)}
-                        </TableCell>
-                        <TableCell className="pr-4 text-right font-mono text-xs text-muted-foreground">
-                          {formatDateTime(o.posted_at)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Vlastní nabídky vložené na burzu ve hře (limitní prodeje) –
-                sync ze stránky statistiky skladu. Po odklepnutí se pozice
-                uzavřou automaticky s reálnou netto cenou (cashflow).
               </p>
             </section>
           )}

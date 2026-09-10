@@ -2306,7 +2306,12 @@ export async function syncGameMarketOrders(
 
 /**
  * Herní limitky s názvem položky (pro sekci „Limitky na burze“ v UI).
- * Jejen neprodané nabídky (tabulka je full snapshot).
+ * Jen neprodané nabídky (tabulka je full snapshot). Kromě stavu nabídky
+ * vrací i ekonomiku realizace: průměrnou pořizovací cenu lotů (FIFO dle
+ * kvality, fallback průměr přes všechny kvality), poslední tržní cenu
+ * (tick Q0) a odhad netto tržby (burzovní poplatek + přeprava) →
+ * očekávaný zisk, když se limitka odklepně. Metodika stejná jako rozpad
+ * nákladů u uzavřených pozic (cost_breakdown).
  */
 export async function getGameMarketOrders(): Promise<
   {
@@ -2319,6 +2324,25 @@ export async function getGameMarketOrders(): Promise<
     price: number;
     fees: number | null;
     posted_at: string;
+    /** vážený průměr pořizovací ceny otevřených lotů (null = žádné loty) */
+    avg_buy_price: number | null;
+    /** poslední tržní cena (tick Q0) – reference pro vzdálenost k limitu */
+    current_price: number | null;
+    /** odhad burzovního poplatku (3 % z tržby, záporný) */
+    est_fee: number;
+    /** true = poplatek nahlásila hra u nabídky, false = odhad 3 % */
+    fee_from_game: boolean;
+    /** odhad nákladu přepravy (záporný; exaktní dle skladu, fallback %) */
+    est_transport: number;
+    /** true = přeprava exaktně (poměr × cena Přepravy ze skladu) */
+    transport_exact: boolean;
+    /** netto tržba = hrubá + poplatek + přeprava */
+    net_total: number;
+    /** netto na ks */
+    net_unit: number;
+    /** očekávaný zisk vs. průměrný nákup (null = nemáme pořizovací cenu) */
+    pl_total: number | null;
+    pl_pct: number | null;
   }[]
 > {
   const db = getDb();
@@ -2331,9 +2355,30 @@ export async function getGameMarketOrders(): Promise<
            g.quantity,
            g.price,
            g.fees,
-           g.posted_at
+           g.posted_at,
+           bq.avg_price  as avg_price_quality,
+           aq.avg_price  as avg_price_any,
+           latest.price  as current_price
     from game_market_orders g
     join items i on i.id = g.item_id
+    left join lateral (
+      select (sum(p.buy_price * p.quantity) / sum(p.quantity))::float8 as avg_price
+      from positions p
+      where p.item_id = g.item_id and p.quality = g.quality
+        and p.closed_at is null
+    ) bq on true
+    left join lateral (
+      select (sum(p.buy_price * p.quantity) / sum(p.quantity))::float8 as avg_price
+      from positions p
+      where p.item_id = g.item_id and p.closed_at is null
+    ) aq on true
+    left join lateral (
+      select price
+      from price_history ph
+      where ph.item_id = g.item_id and ph.quality = 0
+      order by ph.recorded_at desc
+      limit 1
+    ) latest on true
     order by g.posted_at desc
   `) as unknown as {
     id: number;
@@ -2345,18 +2390,80 @@ export async function getGameMarketOrders(): Promise<
     price: string;
     fees: string | null;
     posted_at: Date;
+    avg_price_quality: number | null;
+    avg_price_any: number | null;
+    current_price: string | null;
   }[];
-  return rows.map((r) => ({
-    id: Number(r.id),
-    item_id: r.item_id,
-    name: r.name,
-    image_url: r.image_url,
-    quality: r.quality,
-    quantity: Number(r.quantity),
-    price: Number(r.price),
-    fees: r.fees === null ? null : Number(r.fees),
-    posted_at: iso(r.posted_at),
-  }));
+
+  // Náklady prodeje: burzovní poplatek 3 % z tržby (FAQ hry – hradí se
+  // při odklepnutí) + přeprava exaktně (poměr položky × cena Přepravy na
+  // skladu), fallback % z tržby – stejně jako computeSaleCosts.
+  const MARKET_FEE_PCT = 0.03;
+  const trUnitCost = await getTransportUnitCost(db);
+  const transportPct = Number(process.env.GAME_TRANSPORT_PCT ?? "0.0306");
+  const ratioCache = new Map<number, number | null>();
+  const ratioFor = async (itemId: number) => {
+    if (!ratioCache.has(itemId)) {
+      ratioCache.set(itemId, await getTransportationRatio(itemId));
+    }
+    return ratioCache.get(itemId) as number | null;
+  };
+
+  return Promise.all(
+    rows.map(async (r) => {
+      const quantity = Number(r.quantity);
+      const price = Number(r.price);
+      const gross = price * quantity;
+      // Poplatek: hlásí-li ho už hra u nabídky (nenulový), bereme ho;
+      // jinak odhad 3 % z tržby (FAQ hry – hradí se při odklepnutí).
+      const gameFee = r.fees === null ? null : Number(r.fees);
+      const feeFromGame = gameFee !== null && gameFee !== 0;
+      const estFee = feeFromGame
+        ? -Math.abs(gameFee as number)
+        : -MARKET_FEE_PCT * gross;
+      const ratio = await ratioFor(r.item_id);
+      const useExact = ratio !== null && trUnitCost !== null && ratio > 0;
+      const transport =
+        -1 *
+        (useExact
+          ? (ratio as number) * quantity * (trUnitCost as number)
+          : gross *
+            (Number.isFinite(transportPct) && transportPct > 0
+              ? transportPct
+              : 0));
+      const netTotal = gross + estFee + transport;
+      const avgBuyRaw = r.avg_price_quality ?? r.avg_price_any;
+      const avgBuy = avgBuyRaw === null ? null : Number(avgBuyRaw);
+      const plTotal =
+        avgBuy === null ? null : netTotal - avgBuy * quantity;
+
+      return {
+        id: Number(r.id),
+        item_id: r.item_id,
+        name: r.name,
+        image_url: r.image_url,
+        quality: r.quality,
+        quantity,
+        price,
+        fees: r.fees === null ? null : Number(r.fees),
+        posted_at: iso(r.posted_at),
+        avg_buy_price: avgBuy,
+        current_price:
+          r.current_price === null ? null : Number(r.current_price),
+        est_fee: estFee,
+        fee_from_game: feeFromGame,
+        est_transport: transport,
+        transport_exact: useExact,
+        net_total: netTotal,
+        net_unit: quantity > 0 ? netTotal / quantity : 0,
+        pl_total: plTotal,
+        pl_pct:
+          plTotal === null || avgBuy === null || avgBuy <= 0
+            ? null
+            : (plTotal / (avgBuy * quantity)) * 100,
+      };
+    })
+  );
 }
 
 /** Poslední snapshot skladu (pro UI /statistiky či /portfolio). */

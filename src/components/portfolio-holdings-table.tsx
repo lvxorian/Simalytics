@@ -6,9 +6,7 @@ import { ArrowUpRight, Pencil, Trash2 } from "lucide-react";
 
 import {
   ignoreGameSyncItemAction,
-} from "@/app/actions";
-import { Badge } from "@/components/ui/badge";
-import {
+} from "@/app/actions";import {
   PortfolioSellDialog,
 } from "@/components/portfolio-sell-dialog";
 import {
@@ -108,15 +106,6 @@ export function PortfolioHoldingsTable({
 
                 <TableCell className="text-right font-mono tabular-nums">
                   {formatPrice(h.current_price)}
-                  {h.limit_price !== null && (
-                    <Badge
-                      variant="outline"
-                      className="mt-0.5 border-primary/30 bg-primary/10 font-mono text-[9px] text-primary"
-                      title={`Zadaný limitní prodej ve hře @ ${formatPrice(h.limit_price)} – po realizaci odklepni tlačítkem Prodat`}
-                    >
-                      limit {formatPrice(h.limit_price)}
-                    </Badge>
-                  )}
                 </TableCell>
 
                 <TableCell className="text-right font-mono tabular-nums">
