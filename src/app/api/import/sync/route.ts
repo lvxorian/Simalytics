@@ -70,12 +70,18 @@ function parseCashflowRow(raw: unknown): GameCashflowRow | null {
 
   const keyStr = descriptionKey ?? "";
 
-  if (keyStr.startsWith("marketsell") && itemId !== null) {
-    // prodej na burze – tvar odpovídá marketbuy (amount × price);
-    // bez amount se ks dopočtou z money (výdaj je záporný)
+  if (
+    (keyStr.startsWith("marketsell") || keyStr.startsWith("marketfilled")) &&
+    itemId !== null
+  ) {
+    // prodej na burze – marketfilled = vyplněná vlastní nabídka (money kladné,
+    // details: price, amount, buyer, profit, quality); marketsell = stejný tvar.
+    // Bez amount se ks dopočtou z money (příjem je kladný).
     kind = "market_sale";
     const price = num(details.price);
     const amount = num(details.amount);
+    const q = Number(details.quality ?? 0);
+    quality = Number.isInteger(q) && q >= 0 && q <= 7 ? q : 0;
     if (price > 0 && (amount > 0 || money !== 0)) {
       unitPrice = price;
       quantity =
