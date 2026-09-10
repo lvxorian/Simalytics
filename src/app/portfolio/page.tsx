@@ -57,7 +57,12 @@ export default async function PortfolioPage({
 
   const [holdings, closedPositions, log, ignoredItems, marketOrders] =
     await Promise.all([
-      getPortfolioHoldings().catch(() => []),
+      getPortfolioHoldings().catch((err) => {
+        // prázdné portfolio nesmí vypadat jako „0 ks držby“ bez stopy –
+        // chyba se musí objevit alespoň v logu (Vercel → Runtime Logs)
+        console.error("[portfolio] getPortfolioHoldings selhal:", err);
+        return [];
+      }),
       getPositionsWithPnl({ open: false }).catch(() => []),
       getConditionLog(50).catch(
         () => [] as (ConditionLogEntry & { item_name: string | null })[]

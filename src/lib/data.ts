@@ -679,7 +679,8 @@ export async function getPortfolioHoldings(): Promise<PortfolioHolding[]> {
       and not exists (
         select 1 from game_sync_ignored g where g.item_id = p.item_id
       )
-    group by p.item_id, i.name, i.db_letter, i.image_url, latest.price
+    group by p.item_id, i.name, i.db_letter, i.image_url, latest.price,
+             gmo.limit_price
     order by (sum(p.buy_price * p.quantity)) desc
     limit 500
   `) as unknown as {
