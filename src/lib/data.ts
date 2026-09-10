@@ -1219,7 +1219,7 @@ export async function upsertLimitSellAlert(
     values
       (${itemId}, 0, 'limit_sell', 'above', ${limitPrice},
        'Limitní prodej z portfolia')
-    on conflict (item_id, quality, kind) do update
+    on conflict (item_id, quality, kind) where kind = 'limit_sell' do update
       set threshold = ${limitPrice},
           direction = 'above',
           active = true,
@@ -2259,7 +2259,7 @@ export async function syncGameMarketOrders(
           insert into alerts (item_id, quality, kind, direction, threshold, note)
           values (${itemId}, 0, 'limit_sell', 'above', ${a.minPrice},
                   'Limitní prodej z herní burzy')
-          on conflict (item_id, quality, kind) do update
+          on conflict (item_id, quality, kind) where kind = 'limit_sell' do update
             set threshold = ${a.minPrice},
                 direction = 'above',
                 active = true,
