@@ -58,6 +58,7 @@ src/
     live-prices.ts        # client store: SSE + REST fallback, useLiveTick
     candles.ts            # OHLC agregace + indikátory + mergeLiveTick
     format.ts             # cs-CZ formátování
+    sale-costs.ts         # náklady prodeje: poplatek 4 % + exaktní přeprava (nerealizovaný P/L netto)
 public/icons/             # 151 ikon komodit {id}.png
 ```
 
@@ -208,7 +209,7 @@ směr `cross` + `one_shot` v db/upgrades/008_alert_v2.sql).
 
 **Simalytics Sync** – Tampermonkey skript (`scripts/userscript/simalytics-sync.user.js`) čte data otevřené hry přímo v prohlížeči a synchronizuje je do portfolia. HERNÍ SERVERY SE NEVOLAJÍ ANI JEDNOU – skript jen čte odpovědi, které prohlížeč stejně dostal, takže odpovídá ofiko pravidlům API (jen GET, žádná automatizace vůči hře).
 
-**Co umí (v0.5):** sklad → portfolio s **reálnými pořizovacími cenami** ze hry (Σ cost šarže / ks), **cashflow → reálné prodejní ceny** (maloobchod, burza i kontrakty FIFO — realized P/L se objeví během vteřin od obchodu, bez čekání na sync skladu), **limitky na burze** (vlastní nabídky ze stránky statistiky skladu → badge u aktiva, zápis do logu obchodů, hlídka s notifikací; po odklepnutí se pozice uzavřou automaticky), spotřeba ve výrobě rozpoznána od prodeje (neznečišťuje P/L), reconcile per (položka, kvalita), kompletní prodej detekován ze zmizení položky. Uložená sell_price je **netto** (hrubá − burzovní poplatky 4 % z cashflow − přeprava exaktně = ks × transportation poměr položky × cena Přepravy na skladu; kontrakt má poloviční přepravu). **Rozpad nákladů** (hrubá/poplatky/přeprava/netto) se ukládá na uzavřenou pozici a zobrazuje v tabulce uzavřených pozic na /portfolio. Prodej, jehož cashflow dorazí až po syncu skladu, se sám **douzavří** (doplatek s reálnou cenou). Raw importy auditované v `game_imports`, transakce v `game_cashflow` (dedupe dle ID, stav aplikace `units_unapplied`/`applied_at`), vlastní nabídky na burze v `game_market_orders` (full snapshot).
+**Co umí (v0.5):** sklad → portfolio s **reálnými pořizovacími cenami** ze hry (Σ cost šarže / ks), **cashflow → reálné prodejní ceny** (maloobchod, burza i kontrakty FIFO — realized P/L se objeví během vteřin od obchodu, bez čekání na sync skladu), **limitky na burze** (vlastní nabídky ze stránky statistiky skladu → badge u aktiva, zápis do logu obchodů, hlídka s notifikací; po odklepnutí se pozice uzavřou automaticky), spotřeba ve výrobě rozpoznána od prodeje (neznečišťuje P/L), reconcile per (položka, kvalita), kompletní prodej detekován ze zmizení položky. Uložená sell_price je **netto** (hrubá − burzovní poplatky 4 % z cashflow − přeprava exaktně = ks × transportation poměr položky × cena Přepravy na skladu; kontrakt má poloviční přepravu). **Rozpad nákladů** (hrubá/poplatky/přeprava/netto) se ukládá na uzavřenou pozici a zobrazuje v tabulce uzavřených pozic na /portfolio vč. kanálu prodeje (burza/maloobchod/kontrakt). Prodej, jehož cashflow dorazí až po syncu skladu, se sám **douzavří** (doplatek s reálnou cenou). Raw importy auditované v `game_imports`, transakce v `game_cashflow` (dedupe dle ID, stav aplikace `units_unapplied`/`applied_at`), vlastní nabídky na burze v `game_market_orders` (full snapshot).
 
 **Zjištěné herní endpointy** (reálný dump, neoficiální): sklad = `/api/v3/resources/{companyId}/` (šarže `{id, amount, quality, kind, cost}` — kind = ID komodity, Σcost/amount = pořizovací cena); cashflow = `/api/v2/companies/me/cashflow/recent/` (nákupy 'm' se skutečnou cenou, maloobchodní prodeje 's', produkce 'p', kontrakty 't' = `cs-{itemId}-{kupce}`, burzovní prodej vlastní nabídky = `marketfilled-{id}`); vlastní nabídky na burze = `/api/v2/companies/me/market-orders/` (`{id, kind, quantity, quality, price, posted, fees}` — limitky ze stránky statistiky skladu).
 
@@ -222,14 +223,16 @@ směr `cross` + `one_shot` v db/upgrades/008_alert_v2.sql).
 
 **Důležité:** cena u syncovaných pozic je zatím odhad z trhu – doladit jde editací lots v portfoliu. Skript je heuristický (hra nemá ofiko API dokumentaci) – „debug dump“ pomůže doladit parser, když formát herních odpovědí neodpovídá.
 
-**Mimo portfolio (ignore-list):** sklad obsahuje i věci, které nejsou investicí/flipem (palivo výroby – energie, voda, přeprava, semena). Položka se v portfoliu označí košem („Odebrat z portfolia, ponechat na skladu“) → loty se zahodí bez P/L a sync už ji nenahraje; ve hře na skladu zůstává. Sekce „Mimo portfolio“ dole na /portfolio vypisuje vyloučené položky včetně stavu skladu, tlačítkem **Vrátit** se vrátí (příští sync je znovu nahraje). Tabulka `game_sync_ignored` (migrace 011).
+**Mimo portfolio (ignore-list):** sklad obsahuje i věci, které nejsou investicí/flipem (palivo výroby – energie, voda, přeprava, semena). Položka se v portfoliu přesune ikonou archivu → dialog s potvrzením a volitelným důvodem → loty se zahodí bez P/L a sync už ji nenahraje; ve hře na skladu zůstává. Sekce „Mimo portfolio“ dole na /portfolio vypisuje vyloučené položky včetně stavu skladu, tlačítkem **Vrátit** se vrátí (příští sync je znovu nahraje). Tabulka `game_sync_ignored` (migrace 011).
 
 ## Editace alertů
 
 - **Tužka** vedle badge podmínky (tabulka pod grafem i /alerts) – inline
   editor směru (Nad/Pod/Překříží) a prahu
 - **Dvojklik na cenu v boxu alert linky v grafu** – inline input, Enter/✓
-  uloží, Esc zruší; tažením za linku (mimo box) se práh mění jako dřív
+  uloží, Esc zruší; práh lze tahat z CELÉHO pásu včetně boxu s cenou
+- **X v boxu vpravo od ceny** – smaže alert, VŽDY s potvrzovacím
+  dialogem (platí i pro puštění tažené linky na koš)
 
 ## Rozšíření (roadmapa)
 

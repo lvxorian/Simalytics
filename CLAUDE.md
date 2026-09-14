@@ -60,6 +60,7 @@ src/lib/
                            # FIFO, cena odhadnuta z posledního ticku; manuál nesahá)
   simco-official.ts        # ofiko v3 orderbook (throttle 1,1 s): nejnižší ask, top N nabídek
   alert-tone.ts            # sdílený zvuk alertů (WebAudio, unlock po prvním gestu)
+  sale-costs.ts            # sdílené náklady prodeje: poplatek 4 % (MARKET_FEE_PCT) + exaktní přeprava (poměr položky × cena Přepravy ze skladu, fallback % z tržby) – nerealizovaný P/L netto i limitek
 src/lib/
   db.ts                    # postgres.js klient (Neon pooled, prepare: false pro PgBouncer)
   data.ts                  # VŠECHNY SQL dotazy (server-only, nikdy do client komponent)
@@ -194,7 +195,8 @@ src/components/            # vizní komponenty (viz níže)
   „Nastavit alert“ – cena předvyplněná z místa kliknutí (snap na OHLC,
   3 desetinná místa). Cenové alerty se navíc kreslí do grafu jako
   přetahovací linky (`chart-alert-lines.tsx`, à la TV): drag mění práh
-  přes `updateAlertThresholdAction`, koš maže; popisek končí PŘÍMO na
+  přes `updateAlertThresholdAction`; mazání (koš i X v boxu) jen přes
+  potvrzovací dialog; popisek končí PŘÍMO na
   oddělovací čáře cenové osy (šířka osy = container − paneSize().width).
   Limitní prodeje z portfolia se do grafu Nekreslí (jen zvonek, /alerts).
   Alerty jedné komodity pak
@@ -293,12 +295,23 @@ src/components/            # vizní komponenty (viz níže)
   Limitní prodej: `upsertLimitSellAlert`/`deleteLimitSellAlert` udržují
   hlídku alerts kind='limit_sell' (poller notifikuje při dosažení limitu).
   Terminologie v UI: „aktivum/aktiva“ (ne držba), nákup = „lot“.
+  Nerealizovaný P/L je NETTO (lib/sale-costs.ts): hrubý − poplatek 4 %
+  (hra hlásí-li částku v `fees`, bereme ji) − přeprava exaktně (poměr
+  položky × cena Přepravy ze skladu, fallback % z tržby); pole
+  est_fee/est_transport/unrealized_pl_net. UI: netto jako hlavní číslo,
+  hrubý + rozpad v tooltipu, metodika pod tabulkou. Souhrn = mřížka 2×2
+  (žádné vnořené gridy – kvůli přetékání) + karty „Nejlepší/Nejhorší
+  aktivum“ s ikonou a CELÝM názvem (container queries/clamp, nikdy „…“).
+  Přesun aktiva do „Mimo portfolio“: ikona archivu v tabulce aktiv →
+  `PortfolioIgnoreDialog` (potvrzení + volitelný důvod – kdysi koš bez
+  potvrzení zahazoval loty omylem), `ignoreGameSyncItemAction(itemId,
+  reason)`; akce ignore i unignore revalidují i dashboard /.
   Sekce „Limitky na burze“ (`getGameMarketOrders`) leží MEZI Aktiva a
   Uzavřené pozice (ne až dole) a tabulka ukazuje ekonomiku realizace:
   Ø nákup lotů (FIFO dle kvality nabídky, fallback průměr přes všechny
   kvality), vzdálenost limitu od trhu v %, odhad poplatku + přepravy,
   netto tržbu a očekávaný zisk ($ i %) vs. nákup. Metodika = rozpad
-  nákladů uzavřených pozic: poplatek 3 % z tržby (přesnou částku,
+  nákladů uzavřených pozic: poplatek 4 % z tržby (sazba v `lib/sale-costs.ts`; přesnou částku,
   hlásí-li ji hra u nabídky v `fees`, bereme z ní), přeprava exaktně
   (poměr položky × cena Přepravy ze skladu, fallback GAME_TRANSPORT_PCT).
   Badge „limit X,XX $“ v tabulce aktiv záměrně NEEXISTUJE – limitní
