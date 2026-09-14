@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Archive, Briefcase, History, Info, Plus, RotateCcw, ScrollText, Target } from "lucide-react";
+import { Archive, Briefcase, History, Info, Plus, ScrollText, Target } from "lucide-react";
 
 import { AddNoteForm } from "@/components/add-note-form";
 import { ItemIcon } from "@/components/item-icon";
@@ -153,7 +153,7 @@ export default async function PortfolioPage({
       ) : (
         <>
           {/* ── Koláč + souhrn ─────────────────────────────────── */}
-          <div className="grid gap-4 lg:grid-cols-[auto_1fr]">
+          <div className="grid gap-4 lg:grid-cols-[auto_minmax(0,1fr)]">
             <Card className="rounded-xl border-border/80">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm">Alokace portfolia</CardTitle>
@@ -167,7 +167,17 @@ export default async function PortfolioPage({
               </CardContent>
             </Card>
 
-            <div className="grid content-start gap-3 sm:grid-cols-2">
+            {/* Čistá mřížka 2×2 + dvojice nejlepší/nejhorší – žádná
+                vnořená čtvrtsloupcová karta, kde se dlouhé hodnoty
+                a názvy aktiv nevešly. minmax(0,1fr) + min-w-0 dovolí
+                kartám se zúžit, clamp na číslech zajistí, že dlouhá
+                částka zmenší font místo přetékání přes box. */}
+            {/* Container queries: clamp počítá podle šířky tohoto gridu,
+                ne viewportu – proto musí mít kontejner @container. */}
+            <div
+              className="grid min-w-0 content-start gap-3 sm:grid-cols-2"
+              style={{ containerType: "inline-size" }}
+            >
               <SummaryCard
                 label="Investováno"
                 value={formatPrice(invested)}
@@ -187,22 +197,28 @@ export default async function PortfolioPage({
                 }
                 hint="zisk/ztráta aktiv při prodeji za aktuální cenu PO odečtení burzovního poplatku (4 %) a přepravy"
               />
-              <div className="grid gap-3 sm:grid-cols-2">
-                <SummaryCard
-                  label="Realizovaný P/L"
-                  value={formatSigned(realized)}
-                  tone={
-                    realized > 0 ? "up" : realized < 0 ? "down" : "neutral"
-                  }
-                  hint="zisk/ztráta z už uzavřených pozic"
-                />
-                <MiniCard
-                  label="Nejlepší aktivum"
-                  name={best?.name}
-                  value={best?.unrealized_pl_pct ?? null}
-                  tone="up"
-                />
-              </div>
+              <SummaryCard
+                label="Realizovaný P/L"
+                value={formatSigned(realized)}
+                tone={
+                  realized > 0 ? "up" : realized < 0 ? "down" : "neutral"
+                }
+                hint="zisk/ztráta z už uzavřených pozic"
+              />
+              <BestAssetCard
+                label="Nejlepší aktivum"
+                name={best?.name}
+                iconUrl={best?.image_url}
+                value={best?.unrealized_pl_net_pct ?? null}
+                tone="up"
+              />
+              <BestAssetCard
+                label="Nejhorší aktivum"
+                name={worst?.name}
+                iconUrl={worst?.image_url}
+                value={worst?.unrealized_pl_net_pct ?? null}
+                tone="down"
+              />
             </div>
           </div>
 
@@ -616,20 +632,22 @@ function SummaryCard({
   tone?: "up" | "down" | "neutral";
 }) {
   return (
-    <div className="rounded-xl border border-border/80 bg-card p-4">
+    <div className="min-w-0 rounded-xl border border-border/80 bg-card p-4">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+        <span className="truncate text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
           {label}
         </span>
         {hint && (
-          <span title={hint} className="text-muted-foreground/60">
+          <span title={hint} className="shrink-0 text-muted-foreground/60">
             <Info className="size-3" aria-hidden />
           </span>
         )}
       </div>
+      {/* Clamp podle šířky BOXU (container query): dlouhá částka zmenší
+          font místo přetékání přes okraj – na celé šířce zůstane 2rem. */}
       <div
         className={cn(
-          "mt-2 font-mono text-2xl font-semibold tabular-nums",
+          "mt-2 truncate font-mono font-semibold tabular-nums text-[clamp(1.25rem,5.5cqw,1.5rem)]",
           tone === "up" && "text-up",
           tone === "down" && "text-down"
         )}
@@ -639,7 +657,7 @@ function SummaryCard({
       {sub && (
         <div
           className={cn(
-            "font-mono text-xs tabular-nums",
+            "truncate font-mono text-xs tabular-nums",
             tone === "up" && "text-up",
             tone === "down" && "text-down"
           )}
@@ -651,28 +669,60 @@ function SummaryCard({
   );
 }
 
-function MiniCard({
+/**
+ * Karta „Nejlepší/Nejhorší aktivum“ – celý název se musí vejít: flex
+ * řádek s ikonou, název se zmenšuje clampem podle šířky boxu a teprve
+ * pak (a jen technicky u extrémů) zaláme – truncate by utínal na tečky,
+ * což uživatel zmínil jako chybu. Hodnota % zůstává vpravo, barva dle tone.
+ */
+function BestAssetCard({
   label,
   name,
+  iconUrl,
   value,
   tone,
 }: {
   label: string;
   name?: string;
+  iconUrl?: string | null;
   value: number | null;
   tone: "up" | "down";
 }) {
   return (
-    <div className="rounded-xl border border-border/80 bg-card p-3">
-      <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-        {label}
+    <div className="min-w-0 rounded-xl border border-border/80 bg-card p-4">
+      <div className="flex items-center justify-between gap-2">
+        <span className="truncate text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+          {label}
+        </span>
+        <span
+          title={
+            "Nejvyšší/nejnižší nerealizovaný P/L netto (%) mezi aktivy s dostupnou cenou"
+          }
+          className="shrink-0 text-muted-foreground/60"
+        >
+          <Info className="size-3" aria-hidden />
+        </span>
       </div>
-      <div className="mt-1 truncate text-sm font-medium" title={name}>
-        {name ?? "–"}
+      <div className="mt-2 flex min-w-0 items-center gap-2">
+        {iconUrl ? (
+          <span className="shrink-0">
+            <ItemIcon url={iconUrl} name={name ?? ""} size={22} />
+          </span>
+        ) : null}
+        <span
+          className="min-w-0 truncate text-sm font-medium"
+          style={{
+            // 0,875rem → 0,72rem podle šířky boxu; dlouhý název se zmenší,
+            // ale zůstane čitelný a kompletní (bez teček)
+            fontSize: "clamp(0.72rem, 3.6cqw, 0.875rem)",
+          }}
+        >
+          {name ?? "–"}
+        </span>
       </div>
       <div
         className={cn(
-          "font-mono text-xs tabular-nums",
+          "mt-1 font-mono text-xs tabular-nums",
           value === null
             ? "text-muted-foreground"
             : tone === "up"
