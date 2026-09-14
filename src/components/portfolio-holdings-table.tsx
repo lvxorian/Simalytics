@@ -64,7 +64,7 @@ export function PortfolioHoldingsTable({
             <TableHead className="text-right">Pořizovací cena</TableHead>
             <TableHead className="text-right">Aktuální cena</TableHead>
             <TableHead className="text-right">Hodnota</TableHead>
-            <TableHead className="text-right">Nerealizovaný P/L</TableHead>
+            <TableHead className="text-right">Nerealizovaný P/L (netto)</TableHead>
             <TableHead className="hidden text-right md:table-cell">
               Nákupy
             </TableHead>
@@ -113,18 +113,39 @@ export function PortfolioHoldingsTable({
                 </TableCell>
 
                 <TableCell className="text-right">
+                  {/* Netto nerealizovaný P/L = hrubý − burzovní poplatek (4 %
+                      z tržby) − přeprava (poměr položky × cena Přepravy ze
+                      skladu; bez dat odhad % z tržby). Hrubý zůstává v
+                      tooltipu. */}
                   <div
-                    className={`font-mono tabular-nums ${plColorClass(h.unrealized_pl)}`}
+                    className={`font-mono tabular-nums ${plColorClass(h.unrealized_pl_net)}`}
+                    title={
+                      h.est_fee !== null
+                        ? `Hrubý ${formatSigned(h.unrealized_pl)} – poplatek ${formatPrice(h.est_fee)} – přeprava ${formatPrice(h.est_transport)}${h.transport_exact ? " (exaktně ze skladu)" : " (odhad % z tržby)"}`
+                        : "Bez aktuální ceny nelze odhadnout náklady prodeje"
+                    }
                   >
-                    {formatSigned(h.unrealized_pl)}
+                    {formatSigned(h.unrealized_pl_net ?? h.unrealized_pl)}
                   </div>
                   <div
-                    className={`font-mono text-xs tabular-nums ${plColorClass(h.unrealized_pl_pct)}`}
+                    className={`font-mono text-xs tabular-nums ${plColorClass(h.unrealized_pl_net_pct)}`}
                   >
-                    {h.unrealized_pl_pct === null
+                    {h.unrealized_pl_net_pct === null
                       ? "–"
-                      : `${h.unrealized_pl_pct > 0 ? "+" : h.unrealized_pl_pct < 0 ? "−" : ""}${Math.abs(h.unrealized_pl_pct).toFixed(2)} %`}
+                      : `${h.unrealized_pl_net_pct > 0 ? "+" : h.unrealized_pl_net_pct < 0 ? "−" : ""}${Math.abs(h.unrealized_pl_net_pct).toFixed(2)} %`}
                   </div>
+                  {h.est_fee !== null && (
+                    <div
+                      className="text-[10px] leading-tight text-muted-foreground"
+                      title={
+                        h.transport_exact
+                          ? `Poplatek 4 % (${formatPrice(h.est_fee)}) + přeprava exaktně ze skladu (${formatPrice(h.est_transport)})`
+                          : `Poplatek 4 % (${formatPrice(h.est_fee)}) + přeprava odhadem % z tržby (${formatPrice(h.est_transport)})`
+                      }
+                    >
+                      popl. + přepr. {formatPrice((h.est_fee ?? 0) + (h.est_transport ?? 0))}
+                    </div>
+                  )}
                 </TableCell>
 
                 <TableCell className="hidden text-right md:table-cell">
@@ -198,6 +219,12 @@ export function PortfolioHoldingsTable({
           })}
         </TableBody>
       </Table>
+      <p className="border-t border-border/60 px-4 py-3 text-xs text-muted-foreground">
+        Nerealizovaný P/L je NETTO – po odečtení nákladů prodeje: burzovní
+        poplatek 4 % z tržby a přeprava (exaktně poměr položky × cena Přepravy
+        ze skladu, jinak odhad % z tržby). Hrubý P/L a rozpad nákladů jsou v
+        tooltipu u čísla.
+      </p>
     </div>
   );
 }

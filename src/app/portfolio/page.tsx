@@ -91,8 +91,11 @@ export default async function PortfolioPage({
     (s, h) => s + (h.market_value ?? h.invested),
     0
   );
+  // Netto nerealizovaný P/L = hrubý − poplatek (4 %) − přeprava (per
+  // položka; exaktní ze skladu, fallback % z tržby) – současný stav by
+  // ukazoval optimistické číslo, které se při prodeji nikdy nezmění.
   const totalPl = assets.reduce(
-    (s, h) => s + (h.unrealized_pl ?? 0),
+    (s, h) => s + (h.unrealized_pl_net ?? h.unrealized_pl ?? 0),
     0
   );
   const totalPlPct = invested > 0 ? (totalPl / invested) * 100 : null;
@@ -176,13 +179,13 @@ export default async function PortfolioPage({
                 hint="podle posledních tržních cen"
               />
               <SummaryCard
-                label="Nerealizovaný P/L"
+                label="Nerealizovaný P/L (netto)"
                 value={formatSigned(totalPl)}
                 sub={totalPlPct === null ? null : formatPercent(totalPlPct)}
                 tone={
                   totalPl > 0 ? "up" : totalPl < 0 ? "down" : "neutral"
                 }
-                hint="zisk/ztráta aktiv při prodeji za aktuální cenu"
+                hint="zisk/ztráta aktiv při prodeji za aktuální cenu PO odečtení burzovního poplatku (4 %) a přepravy"
               />
               <div className="grid gap-3 sm:grid-cols-2">
                 <SummaryCard
@@ -305,7 +308,7 @@ export default async function PortfolioPage({
                           </TableCell>
                           <TableCell
                             className="text-right font-mono tabular-nums text-muted-foreground"
-                            title={`Poplatek ${formatPrice(o.est_fee)} (${o.fee_from_game ? "hlášený hrou" : "odhad 3 % z tržby"}) + přeprava ${formatPrice(o.est_transport)} (${o.transport_exact ? "exaktně ze skladu" : "odhad % z tržby"})`}
+                            title={`Poplatek ${formatPrice(o.est_fee)} (${o.fee_from_game ? "hlášený hrou" : "odhad 4 % z tržby"}) + přeprava ${formatPrice(o.est_transport)} (${o.transport_exact ? "exaktně ze skladu" : "odhad % z tržby"})`}
                           >
                             {formatPrice(o.est_fee + o.est_transport)}
                           </TableCell>
@@ -347,7 +350,7 @@ export default async function PortfolioPage({
               <p className="text-xs text-muted-foreground">
                 Vlastní nabídky vložené na burzu ve hře (limitní prodeje) –
                 sync ze stránky statistiky skladu. Netto = hrubá tržba −
-                burzovní poplatek (3 % z tržby; přesnou částku, hlásí-li ji
+                burzovní poplatek (4 % z tržby; přesnou částku, hlásí-li ji
                 hra u nabídky, bereme z ní) − přeprava (exaktně poměr × cena
                 Přepravy ze skladu, jinak odhad % z tržby). Oček. zisk =
                 netto − Ø pořizovací cena otevřených lotů (FIFO dle

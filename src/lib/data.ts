@@ -2,6 +2,11 @@ import postgres, { type JSONValue } from "postgres";
 import { getDb } from "@/lib/db";
 import type { SimcoCertificateKind, SimcoContest, SimcoVwap } from "@/lib/simcotools";
 import { getResources } from "@/lib/simcotools";
+import {
+  TRANSPORT_PCT_FALLBACK,
+  estimateMarketFee,
+  estimateTransport,
+} from "@/lib/sale-costs";
 import type {
   CostBreakdown,
   ConditionLogEntry,
@@ -401,10 +406,20 @@ export type PortfolioHolding = {
   invested: number;
   /** Tržní hodnota držby. */
   market_value: number | null;
-  /** Nerealizovaný P/L v $. */
+  /** Nerealizovaný P/L v $ (hrubý, bez nákladů prodeje). */
   unrealized_pl: number | null;
   /** Nerealizovaný P/L v %. */
   unrealized_pl_pct: number | null;
+  /** Odhad burzovního poplatku při prodeji (4 % z tržby, záporný). */
+  est_fee: number | null;
+  /** Odhad přepravy při prodeji (záporný; exaktní dle poměru položky). */
+  est_transport: number | null;
+  /** true = přeprava exaktně (poměr × cena Přepravy ze skladu). */
+  transport_exact: boolean;
+  /** Nerealizovaný P/L netto = hrubý + poplatek + přeprava. */
+  unrealized_pl_net: number | null;
+  /** Nerealizovaný P/L netto v %. */
+  unrealized_pl_net_pct: number | null;
   /** Kolik otevřených pozic držbu tvoří. */
   position_count: number;
   /** Nejstarší otevření (od kdy držíme). */
@@ -648,6 +663,10 @@ export async function setLimitSellNote(
 export async function getPortfolioHoldings(): Promise<PortfolioHolding[]> {
   const db = getDb();
 
+  // Náklady prodeje pro netto nerealizovaný P/L: poměr přepravy per item
+  // (Simco Tools, cache) + cena Přepravy ze skladu – vyhodnocuje se líně,
+  // jen pro položky s dostupnou cenou (cache v ratioFor).
+
   const rows = (await db`
     select p.item_id,
            i.name,
@@ -698,11 +717,36 @@ export async function getPortfolioHoldings(): Promise<PortfolioHolding[]> {
     game_limit_price: string | null;
   }[];
 
-  return rows.map((r) => {
+  // Cena Přepravy (item 13) na skladu – jednou pro všechny aktiva.
+  const trUnitCost = await getTransportUnitCost(db);
+
+  return Promise.all(
+    rows.map(async (r) => {
     const current = r.current_price === null ? null : Number(r.current_price);
     const invested = r.avg_buy_price * r.quantity;
     const marketValue = current === null ? null : current * r.quantity;
     const pl = marketValue === null ? null : marketValue - invested;
+
+    // Náklady prodeje (poplatek 4 % + přeprava) – jen když známe cenu,
+    // jinak by netto bylo zavádějící. Přeprava exaktně: poměr položky ×
+    // ks × cena Přepravy ze skladu (stejná metodika jako rozpad
+    // cost_breakdown uzavřených pozic a tabulka limitek).
+    let estFee: number | null = null;
+    let estTransport: number | null = null;
+    let transportExact = false;
+    let plNet: number | null = null;
+    let plNetPct: number | null = null;
+    if (marketValue !== null && pl !== null) {
+      const fee = estimateMarketFee(marketValue);
+      estFee = fee.fee;
+      const tr = await getTransportationRatio(r.item_id);
+      const est = estimateTransport(marketValue, Number(r.quantity), tr, trUnitCost);
+      estTransport = est.transport;
+      transportExact = est.exact;
+      plNet = pl + estFee + estTransport;
+      plNetPct =
+        invested > 0 ? ((plNet / invested) * 100) : null;
+    }
 
     return {
       item_id: r.item_id,
@@ -717,6 +761,11 @@ export async function getPortfolioHoldings(): Promise<PortfolioHolding[]> {
       unrealized_pl: pl,
       unrealized_pl_pct:
         pl === null || invested <= 0 ? null : (pl / invested) * 100,
+      est_fee: estFee,
+      est_transport: estTransport,
+      transport_exact: transportExact,
+      unrealized_pl_net: plNet,
+      unrealized_pl_net_pct: plNetPct,
       position_count: Number(r.position_count),
       first_opened_at: iso(r.first_opened_at),
       last_bought_at: iso(r.last_bought_at),
@@ -729,7 +778,8 @@ export async function getPortfolioHoldings(): Promise<PortfolioHolding[]> {
             ? Number(r.limit_note.replace("limit ", "").replace(" $", ""))
             : null,
     };
-  });
+    })
+  );
 }
 
 /**
@@ -2328,9 +2378,9 @@ export async function getGameMarketOrders(): Promise<
     avg_buy_price: number | null;
     /** poslední tržní cena (tick Q0) – reference pro vzdálenost k limitu */
     current_price: number | null;
-    /** odhad burzovního poplatku (3 % z tržby, záporný) */
+    /** odhad burzovního poplatku (4 % z tržby, záporný) */
     est_fee: number;
-    /** true = poplatek nahlásila hra u nabídky, false = odhad 3 % */
+    /** true = poplatek nahlásila hra u nabídky, false = odhad 4 % */
     fee_from_game: boolean;
     /** odhad nákladu přepravy (záporný; exaktní dle skladu, fallback %) */
     est_transport: number;
@@ -2395,12 +2445,11 @@ export async function getGameMarketOrders(): Promise<
     current_price: string | null;
   }[];
 
-  // Náklady prodeje: burzovní poplatek 3 % z tržby (FAQ hry – hradí se
-  // při odklepnutí) + přeprava exaktně (poměr položky × cena Přepravy na
-  // skladu), fallback % z tržby – stejně jako computeSaleCosts.
-  const MARKET_FEE_PCT = 0.03;
+  // Náklady prodeje: burzovní poplatek (MARKET_FEE_PCT z tržby – hradí se
+  // při odklepnutí; přesnou částku, hlásí-li ji hra u nabídky, bereme z ní)
+  // + přeprava exaktně (poměr položky × cena Přepravy na skladu),
+  // fallback % z tržby – sdíleno přes lib/sale-costs.
   const trUnitCost = await getTransportUnitCost(db);
-  const transportPct = Number(process.env.GAME_TRANSPORT_PCT ?? "0.0306");
   const ratioCache = new Map<number, number | null>();
   const ratioFor = async (itemId: number) => {
     if (!ratioCache.has(itemId)) {
@@ -2415,22 +2464,13 @@ export async function getGameMarketOrders(): Promise<
       const price = Number(r.price);
       const gross = price * quantity;
       // Poplatek: hlásí-li ho už hra u nabídky (nenulový), bereme ho;
-      // jinak odhad 3 % z tržby (FAQ hry – hradí se při odklepnutí).
-      const gameFee = r.fees === null ? null : Number(r.fees);
-      const feeFromGame = gameFee !== null && gameFee !== 0;
-      const estFee = feeFromGame
-        ? -Math.abs(gameFee as number)
-        : -MARKET_FEE_PCT * gross;
+      // jinak odhad MARKET_FEE_PCT z tržby (hradí se při odklepnutí).
+      const est = estimateMarketFee(gross, r.fees === null ? null : Number(r.fees));
+      const estFee = est.fee;
+      const feeFromGame = est.fromGame;
       const ratio = await ratioFor(r.item_id);
       const useExact = ratio !== null && trUnitCost !== null && ratio > 0;
-      const transport =
-        -1 *
-        (useExact
-          ? (ratio as number) * quantity * (trUnitCost as number)
-          : gross *
-            (Number.isFinite(transportPct) && transportPct > 0
-              ? transportPct
-              : 0));
+      const transport = estimateTransport(gross, quantity, ratio, trUnitCost).transport;
       const netTotal = gross + estFee + transport;
       const avgBuyRaw = r.avg_price_quality ?? r.avg_price_any;
       const avgBuy = avgBuyRaw === null ? null : Number(avgBuyRaw);
@@ -3164,11 +3204,9 @@ async function computeSaleCosts(
     };
   }
 
-  const transportPct = Number(process.env.GAME_TRANSPORT_PCT ?? "0.0306");
+  // Fallback přepravy jako % z tržby – sdíleno přes lib/sale-costs.
   const transport =
-    Number.isFinite(transportPct) && transportPct > 0
-      ? opts.gross * transportPct
-      : 0;
+    TRANSPORT_PCT_FALLBACK > 0 ? opts.gross * TRANSPORT_PCT_FALLBACK : 0;
   return { transport, transportExact: false, trUnitCost: null };
 }
 
