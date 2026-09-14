@@ -244,6 +244,9 @@ export async function deletePortfolioHoldingAction(
  * Vyloučí položku z portfolia, ale NECHÁ ji na skladu ve hře (palivo/
  * výroba – nesouvisí s investicemi/flipy). Otevřené pozice se zahodí
  * bez P/L a sync už ji do portfolia nenahrá.
+ *
+ * `reason` = volitelná poznámka pro tabulku „Mimo portfolio“ (důvod
+ * vyloučení). Refresh i dashboardu – položka zmizí z hodnoty portfolia.
  */
 export async function ignoreGameSyncItemAction(
   itemId: number,
@@ -251,14 +254,19 @@ export async function ignoreGameSyncItemAction(
 ): Promise<void> {
   await addToGameSyncIgnore(itemId, reason);
   revalidatePath("/portfolio");
+  revalidatePath("/");
 }
 
-/** Vrátí položku z ignore-listu – příští sync ji znovu nahraje. */
+/**
+ * Vrátí položku z ignore-listu – příští sync ji znovu nahraje.
+ * Refresh i dashboardu – položka se může hned objevit v top movers
+ * a v hodnotě portfolia (jinak by tam visely stará data do 60 s). */
 export async function unignoreGameSyncItemAction(
   itemId: number
 ): Promise<void> {
   await removeFromGameSyncIgnore(itemId);
   revalidatePath("/portfolio");
+  revalidatePath("/");
 }
 
 /**

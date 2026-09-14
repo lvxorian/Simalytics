@@ -1,18 +1,19 @@
 "use client";
 
-import { useState, useTransition } from "react";
 import Link from "next/link";
-import { ArrowUpRight, Pencil, Trash2 } from "lucide-react";
+import { ArrowUpRight, Pencil } from "lucide-react";
 
 import {
-  ignoreGameSyncItemAction,
-} from "@/app/actions";import {
   PortfolioSellDialog,
 } from "@/components/portfolio-sell-dialog";
 import {
   PortfolioEditLotsDialog,
   type EditableLot,
 } from "@/components/portfolio-edit-lots-dialog";
+import {
+  PortfolioIgnoreDialog,
+  PortfolioIgnoreTrigger,
+} from "@/components/portfolio-ignore-dialog";
 import { ItemIcon } from "@/components/item-icon";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,7 +26,6 @@ import {
 } from "@/components/ui/table";
 import { formatPrice, formatSigned, plColorClass } from "@/lib/format";
 import type { PortfolioHolding } from "@/lib/data";
-import { cn } from "@/lib/utils";
 
 /** Řádek tabulky aktiv – držba jedné položky (všechny kvality dohromady). */
 export type AssetRow = PortfolioHolding & { lots: EditableLot[] };
@@ -40,20 +40,6 @@ export function PortfolioHoldingsTable({
 }: {
   assets: AssetRow[];
 }) {
-  const [pendingKey, setPendingKey] = useState<string | null>(null);
-  const [, startTransition] = useTransition();
-
-  const handleIgnore = (itemId: number, key: string) => {
-    setPendingKey(key);
-    startTransition(async () => {
-      // Vyloučí z portfolia (loty zahodí), ale na skladu ve hře zůstane –
-      // sync už položku do portfolia nenahrá. Vrátit jde v sekci
-      // „Mimo portfolio“ dole na stránce.
-      await ignoreGameSyncItemAction(itemId);
-      setPendingKey(null);
-    });
-  };
-
   return (
     <div className="overflow-hidden rounded-xl border border-border/80 bg-card">
       <Table>
@@ -73,9 +59,8 @@ export function PortfolioHoldingsTable({
         </TableHeader>
         <TableBody>
           {assets.map((h) => {
-            const key = `${h.item_id}`;
             return (
-              <TableRow key={key}>
+              <TableRow key={h.item_id}>
                 <TableCell className="pl-4">
                   <Link
                     href={`/market/${h.item_id}`}
@@ -201,17 +186,15 @@ export function PortfolioHoldingsTable({
                         </Button>
                       }
                     />
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      className="text-muted-foreground hover:text-down"
-                      onClick={() => handleIgnore(h.item_id, key)}
-                      disabled={pendingKey === key}
-                      title="Odebrat z portfolia (ponechat na skladu ve hře)"
-                    >
-                      <Trash2 className="size-4" />
-                      <span className="sr-only">Odebrat {h.name} z portfolia</span>
-                    </Button>
+                    {/* Přesun do „Mimo portfolio“ – dialog s potvrzením
+                        a volitelným důvodem (koš bez potvrzení hrozil
+                        omylem zahodenou držbou). */}
+                    <PortfolioIgnoreDialog
+                      itemId={h.item_id}
+                      itemName={h.name}
+                      quantity={h.quantity}
+                      trigger={<PortfolioIgnoreTrigger />}
+                    />
                   </div>
                 </TableCell>
               </TableRow>
