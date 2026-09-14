@@ -41,7 +41,7 @@ db/schema.sql              # items, price_history, positions, condition_log, wat
 #           008_alert_v2 (direction 'cross', one_shot), 009_game_sync (game_imports,
 #           game_warehouse, positions.source), 010_cashflow (game_cashflow),
 #           012_cost_breakdown (positions.cost_breakdown jsonb – rozpad
-#           nákladů prodeje: gross/fees/transport/net),
+#           nákladů prodeje: gross/fees/transport/net + sale_channel),
 #           011_sync_ignore (game_sync_ignored – palivo/výroba mimo portfolio),
 #           013_market_orders (game_market_orders – limitky na burze, Fáze 4),
 #           014_limit_sell_unique (parciální unique index alerts – upsert hlídek
@@ -358,7 +358,10 @@ src/components/            # vizní komponenty (viz níže)
   bez poplatků; burza = 'm'-prodej `marketfilled-{id}`, maloobchod 's').
   Rozpad nákladů se ukládá na uzavřenou pozici (positions.cost_breakdown
   jsonb: gross/fees/transport/net, transport_units, transport_exact;
-  transport se při ČTENÍ normalizuje na zápornou položku) a UI /portfolio
+  transport se při ČTENÍ normalizuje na zápornou položku; sale_channel =
+  kanál prodeje (exchange/retail/contract) dle převažujícího druhu
+  cashflow prodejů – starší záznamy pole nemají (null) a UI to ukazuje
+  jako „–“ v sloupci Kanál tabulky Uzavřené pozice) a UI /portfolio
   ho ukazuje pod cenou prodeje. DOPATEK (amend v closeSalesFromCashflow):
   prodej STARŠÍ než snapshot skladu s POŘÁD neaplikovanými jednotkami =
   cashflow dorazil až po syncu skladu (reconcile ho stihl účtovat jako

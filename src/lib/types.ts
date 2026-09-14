@@ -55,6 +55,9 @@ export type ConditionLogEntry = {
   created_at: string;
 };
 
+/** Kanál, přes který proběhl prodej ve hře. */
+export type SaleChannel = "exchange" | "retail" | "contract" | "manual";
+
 /** Rozpad nákladů prodeje ze hry (uložený na uzavřené pozici). */
 export type CostBreakdown = {
   /** hrubá tržba za uzavřené ks (kladné) */
@@ -69,6 +72,9 @@ export type CostBreakdown = {
   transport_unit_cost: number | null;
   /** true = exaktní (poměr × cena skladu), false = % odhad */
   transport_exact: boolean;
+  /** kanál prodeje (exchange/retail/contract/manual) – od 2026-09;
+      starší záznamy pole nemají → null = neznámý */
+  sale_channel: SaleChannel | null;
   /** netto tržba = gross + fees + transport */
   net: number;
 };

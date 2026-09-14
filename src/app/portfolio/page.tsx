@@ -31,7 +31,12 @@ import {
   getPortfolioHoldings,
   getPortfolioValueHistory,
 } from "@/lib/data";
-import type { ConditionLogEntry, PositionWithPnl } from "@/lib/types";
+import type {
+  ConditionLogEntry,
+  CostBreakdown,
+  PositionWithPnl,
+  SaleChannel,
+} from "@/lib/types";
 import {
   formatDateTime,
   formatPercent,
@@ -394,6 +399,7 @@ export default async function PortfolioPage({
                       <TableHead className="text-right">
                         Realizovaný P/L
                       </TableHead>
+                      <TableHead className="text-center">Kanál</TableHead>
                       <TableHead className="pr-4 text-right">Zavřeno</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -566,10 +572,56 @@ function ClosedRow({ p }: { p: PositionWithPnl }) {
           )
         </span>
       </TableCell>
+      <TableCell className="text-center">
+        <SaleChannelBadge channel={p.cost_breakdown?.sale_channel ?? null} />
+      </TableCell>
       <TableCell className="pr-4 text-right font-mono text-xs text-muted-foreground">
         {formatDateTime(p.closed_at)}
       </TableCell>
     </TableRow>
+  );
+}
+
+const SALE_CHANNEL_META: Record<
+  NonNullable<CostBreakdown["sale_channel"]>,
+  { label: string; className: string; title: string }
+> = {
+  exchange: {
+    label: "Burza",
+    className: "border-primary/30 bg-primary/10 text-primary",
+    title: "Prodej na burze (limitní nabídka / market order)",
+  },
+  retail: {
+    label: "Maloobchod",
+    className: "border-up/40 bg-up/10 text-up",
+    title: "Maloobchodní prodej (vlastní prodejna)",
+  },
+  contract: {
+    label: "Kontrakt",
+    className: "border-sky-500/40 bg-sky-500/10 text-sky-400",
+    title: "Prodej přes kontrakt",
+  },
+  manual: {
+    label: "Ruční zápis",
+    className: "border-border bg-secondary text-muted-foreground",
+    title: "Ručně uzavřená pozice v Simalytics (bez herního cashflow)",
+  },
+};
+
+/** Badge kanálu prodeje; null = starší záznam bez kanálu (není co ukázat). */
+function SaleChannelBadge({ channel }: { channel: SaleChannel | null }) {
+  if (channel === null) {
+    return <span className="text-xs text-muted-foreground">–</span>;
+  }
+  const meta = SALE_CHANNEL_META[channel];
+  return (
+    <Badge
+      variant="outline"
+      className={meta.className}
+      title={meta.title}
+    >
+      {meta.label}
+    </Badge>
   );
 }
 

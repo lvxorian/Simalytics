@@ -14,6 +14,7 @@ import type {
   LatestPriceRow,
   Position,
   PositionWithPnl,
+  SaleChannel,
 } from "@/lib/types";
 
 /**
@@ -174,6 +175,13 @@ function mapCostBreakdown(raw: unknown): CostBreakdown | null {
     transport_units: num(o.transport_units) ?? 0,
     transport_unit_cost: num(o.transport_unit_cost),
     transport_exact: o.transport_exact === true,
+    sale_channel:
+      o.sale_channel === "exchange" ||
+      o.sale_channel === "retail" ||
+      o.sale_channel === "contract" ||
+      o.sale_channel === "manual"
+        ? o.sale_channel
+        : null,
     net,
   };
 }
@@ -2136,6 +2144,27 @@ export async function reconcileGameWarehouse(
               transportUnits,
             });
             const netTotal = gross + fees - costs.transport;
+            // Kanál prodeje = převažující druh cashflow prodejů dle ks
+            // (retail_sale = maloobchod, market_sale = burza, contract).
+            const channelCounts = new Map<SaleChannel, number>();
+            {
+              let rem = coveredBySales;
+              for (const s of sales) {
+                if (rem <= 0) break;
+                const take = Math.min(s.units_unapplied, rem);
+                const ch =
+                  s.kind === "retail_sale"
+                    ? ("retail" as SaleChannel)
+                    : s.kind === "contract_sale"
+                      ? ("contract" as SaleChannel)
+                      : ("exchange" as SaleChannel);
+                channelCounts.set(ch, (channelCounts.get(ch) ?? 0) + take);
+                rem -= take;
+              }
+            }
+            const saleChannel: SaleChannel =
+              [...channelCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ??
+              "exchange";
             breakdownFactory = (take: number) => ({
               gross: (gross * take) / coveredBySales,
               fees: (fees * take) / coveredBySales,
@@ -2147,19 +2176,20 @@ export async function reconcileGameWarehouse(
                 ? costs.trUnitCost
                 : null,
               transport_exact: costs.transportExact,
+              sale_channel: saleChannel,
               net: (netTotal * take) / coveredBySales,
             });
           }
 
-          await closeLotsFifo(
-            coveredBySales,
-            sellPrice,
-            (take) =>
-              `Prodej ze hry – ${take.toLocaleString("cs-CZ")} ks @ ${
-                sellPrice !== null ? sellPrice.toFixed(3) : "?"
-              } $ (cena z cashflow).`,
-            breakdownFactory ?? undefined
-          );
+        await closeLotsFifo(
+          coveredBySales,
+          sellPrice,
+          (take) =>
+            `Prodej ze hry – ${take.toLocaleString("cs-CZ")} ks @ ${
+              sellPrice !== null ? sellPrice.toFixed(3) : "?"
+            } $ (cena z cashflow).`,
+          breakdownFactory ?? undefined
+        );
           await applyCashflowUnits(sql, sales, coveredBySales);
         }
 
@@ -2871,6 +2901,27 @@ export async function closeSalesFromCashflow(): Promise<number> {
         const netPrice = netTotal / staleUnits;
         const closedAt = saleMax ?? new Date();
 
+        // Kanál dle převažujícího druhu stale prodejů (doplatek)
+        const amendChannelCounts = new Map<SaleChannel, number>();
+        {
+          let rem = staleUnits;
+          for (const s of staleSales) {
+            if (rem <= 0) break;
+            const take = Math.min(s.units_unapplied, rem);
+            const ch =
+              s.kind === "retail_sale"
+                ? ("retail" as SaleChannel)
+                : s.kind === "contract_sale"
+                  ? ("contract" as SaleChannel)
+                  : ("exchange" as SaleChannel);
+            amendChannelCounts.set(ch, (amendChannelCounts.get(ch) ?? 0) + take);
+            rem -= take;
+          }
+        }
+        const amendChannel: SaleChannel =
+          [...amendChannelCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ??
+          "exchange";
+
         const amendNote =
           "Sync ze hry (doplatek uzavření – cashflow dorazil po snapshotu skladu)";
         const [amendRow] = (await sql`
@@ -2889,6 +2940,7 @@ export async function closeSalesFromCashflow(): Promise<number> {
                  ? costs.trUnitCost
                  : null,
                transport_exact: costs.transportExact,
+               sale_channel: amendChannel,
                net: netTotal,
              })})
           returning id
@@ -3002,13 +3054,36 @@ export async function closeSalesFromCashflow(): Promise<number> {
         transport_units: Math.round(transportUnits),
         transport_unit_cost: useExact ? (trUnitCost as number) : null,
         transport_exact: transportExact,
+        sale_channel: saleChannel,
         net: gross + fees - transport,
       });
 
       let remaining = closable;
       let closed = 0;
+      // Kanál prodeje dle druhu cashflow transakcí (smíšené prodeje =
+      // vážený převažující druh podle ks). Exchange = burza (marketfilled).
+      const channelOf = (k: GameCashflowRow["kind"]): SaleChannel =>
+        k === "retail_sale"
+          ? "retail"
+          : k === "contract_sale"
+            ? "contract"
+            : "exchange";
+      const channelCounts = new Map<SaleChannel, number>();
+      {
+        let rem = closable;
+        for (const s of freshSales) {
+          if (rem <= 0) break;
+          const take = Math.min(s.units_unapplied, rem);
+          const ch = channelOf(s.kind);
+          channelCounts.set(ch, (channelCounts.get(ch) ?? 0) + take);
+          rem -= take;
+        }
+      }
+      const saleChannel: SaleChannel =
+        [...channelCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ??
+        "exchange";
       const logText = (take: number) =>
-        `Prodej ze hry (okamžitě z cashflow) – ${take.toLocaleString("cs-CZ")} ks, hrubá cena ${matched.price?.toFixed(3)} $, netto po poplatcích (${fees.toFixed(2)} $) a přepravě (${transportExact ? `${Math.round(transportUnits).toLocaleString("cs-CZ")} ks × ${(trUnitCost as number).toFixed(4)} $` : `odhad ${transport.toFixed(2)} $`}) ${netPrice.toFixed(3)} $.`;
+        `Prodej ze hry (okamžitě z cashflow, ${saleChannel === "exchange" ? "burza" : saleChannel === "retail" ? "maloobchod" : "kontrakt"}) – ${take.toLocaleString("cs-CZ")} ks, hrubá cena ${matched.price?.toFixed(3)} $, netto po poplatcích (${fees.toFixed(2)} $) a přepravě (${transportExact ? `${Math.round(transportUnits).toLocaleString("cs-CZ")} ks × ${(trUnitCost as number).toFixed(4)} $` : `odhad ${transport.toFixed(2)} $`}) ${netPrice.toFixed(3)} $.`;
       for (const lot of lots) {
         if (remaining <= 0) break;
         const take = Math.min(lot.quantity, remaining);
