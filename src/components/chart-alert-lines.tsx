@@ -9,15 +9,28 @@
  *
  * Editovatelnost: přes linku leží tenký interaktivní pás (±7 px) jako
  * sourozenec chart containeru – tažením mění práh (pointer capture drží
- * tah i mimo pás), koš maže. Pás nekoliduje s pan/kreslením v grafu.
+ * tah i mimo pás), a to z celého pásu VČETNĚ boxu s cenou. Pás nekoliduje
+ * s pan/kreslením v grafu.
  *
- * Editace hodnoty: box (zvoneček + cena) se chová jako HTML overlay nad
- * canvasem – hover nad cenou ukáže ns-resize kurzor (jako u linky),
- * DVOJKLIK otevře inline input; Enter/tlčítko ✓ uloží, Esc zruší.
+ * Editace hodnoty: DVOJKLIK na cenu v boxu otevře inline input;
+ * Enter/tlačítko ✓ uloží, Esc zruší.
+ *
+ * Mazání: X uvnitř boxu (vpravo od ceny) i puštění tažené linky na koš
+ * vždy jen OTEVŘE potvrzovací dialog – alert se nemaže bez potvrzení.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check } from "lucide-react";
+import { Check, X } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export type AlertLineAlert = {
   id: string;
@@ -58,9 +71,11 @@ type DragState = {
   alertId: string;
   offsetY: number;
   y: number;
+  /** práh na začátku tahu – ušetří zápis, pokud se linka nepohnula */
+  startThreshold: number;
 } | null;
 
-const LABEL_W = 84;
+const LABEL_W = 96; // zvoneček + cena + X (smazat)
 const LABEL_H = 20;
 // Mezera mezi koncem linky/popisku a cenovou osou. Popisek končí PŘÍMO
 // na oddělovací čáře osy (žádná zvláštní mezera) – jen se přidá 1 px,
@@ -91,6 +106,11 @@ export function ChartAlertLines({
   const editValueRef = useRef<string>("");
   // pozice boxu editoru (nastavuje draw imperativně, ~ jako koš)
   const editorRef = useRef<HTMLDivElement | null>(null);
+  // X tlačítka (smazat) – pozice řídí draw imperativně (jako koš/editor)
+  const xBtnsRef = useRef<Map<string, HTMLButtonElement>>(new Map());
+  // alert čekající na potvrzení smazání (X v boxu i puštění na koš)
+  const [confirmDelete, setConfirmDelete] =
+    useState<AlertLineAlert | null>(null);
 
   const priceAlerts = alerts.filter((a) => a.kind === "price");
 
@@ -130,6 +150,7 @@ export function ChartAlertLines({
 
     for (const a of priceAlerts) {
       const y = priceToY(getThreshold(a));
+      const lx = labelX(rect.width);
 
       // interaktivní pás přes linku (drag) – vždy přemístíme na aktuální y
       const strip = stripsRef.current.get(a.id);
@@ -139,6 +160,18 @@ export function ChartAlertLines({
         } else {
           strip.style.display = "block";
           strip.style.top = `${y - 7}px`;
+        }
+      }
+
+      // X (smazat) – uvnitř boxu vpravo od ceny; pozice imperativně
+      const xBtn = xBtnsRef.current.get(a.id);
+      if (xBtn) {
+        if (y == null) {
+          xBtn.style.display = "none";
+        } else {
+          xBtn.style.display = "flex";
+          xBtn.style.left = `${lx + LABEL_W - 18}px`;
+          xBtn.style.top = `${y - 8}px`;
         }
       }
 
@@ -161,7 +194,6 @@ export function ChartAlertLines({
       ctx.setLineDash([]);
 
       // popisek vlevo od cenové osy: zvoneček + cena (nepřekrývá osu)
-      const lx = labelX(rect.width);
       ctx.fillStyle = color;
       ctx.fillRect(lx, y - LABEL_H / 2, LABEL_W, LABEL_H);
       ctx.fillStyle = "rgba(11,18,32,0.9)";
@@ -272,9 +304,8 @@ export function ChartAlertLines({
   const onStripPointerDown = useCallback(
     (a: AlertLineAlert) => (e: React.PointerEvent<HTMLDivElement>) => {
       if (e.button !== 0) return;
-      // Klik na box (zvoneček + cena) – tady se netáhne; dvojklik otevře
-      // editor (onDoubleClick na tomže pásu), jednoduchý klik = nic.
-      if (isOverPriceLabel(a, e)) return;
+      // Tah funguje z celého pásu – i z boxu s cenou (dvojklik tam stále
+      // otevře editor, jednoduché tažení posouvá práh jako z linky).
       const container = containerRef.current;
       if (!container) return;
       const rect = container.getBoundingClientRect();
@@ -284,12 +315,13 @@ export function ChartAlertLines({
         alertId: a.id,
         offsetY: e.clientY - rect.top - ay,
         y: e.clientY - rect.top,
+        startThreshold: getThreshold(a),
       };
       trashForRef.current = a.id;
       e.currentTarget.setPointerCapture(e.pointerId);
       e.preventDefault();
     },
-    [getThreshold, priceToY, isOverPriceLabel]
+    [getThreshold, priceToY]
   );
 
   const onStripPointerMove = useCallback(
@@ -321,6 +353,15 @@ export function ChartAlertLines({
     void onUpdateRule(id, value, alert?.direction ?? "above");
   }, [editingId, onUpdateRule, priceAlerts]);
 
+  /** Smazání alertu – VŽDY přes potvrzovací dialog (X i koš). */
+  const requestDelete = useCallback(
+    (id: string) => {
+      const alert = priceAlerts.find((a) => a.id === id);
+      if (alert) setConfirmDelete(alert);
+    },
+    [priceAlerts]
+  );
+
   /** Puštěno na koš? (geometrický test – pointer capture drží strip) */
   const isOverTrash = useCallback((e: React.PointerEvent) => {
     const trash = trashRef.current;
@@ -341,14 +382,20 @@ export function ChartAlertLines({
       dragRef.current = null;
       trashForRef.current = null;
       const price = yToPrice(drag.y - drag.offsetY);
-      // Puštěno na koš → smazat alert (à la TradingView)
+      // Puštěno na koš → potvrzovací dialog (mazání nikdy bez potvrzení)
       if (save && isOverTrash(e)) {
         previewRef.current.delete(drag.alertId);
-        onDelete(drag.alertId);
+        requestDelete(drag.alertId);
         drawRef.current();
         return;
       }
-      if (save && price != null) {
+      if (
+        save &&
+        price != null &&
+        // Bez posunu (např. dvojklik na cenu) NIC neukládat – dvojklik
+        // jen otevře editor, žádný zbytečný zápis prahu do DB.
+        Math.abs(price - drag.startThreshold) > 1e-9
+      ) {
         // Preview ponecháme – linka zůstane, kde pustíš, dokud nepřijdou
         // čerstvá data z DB (router.refresh → nové alerts → clear výše).
         onThresholdChange(drag.alertId, price);
@@ -357,7 +404,7 @@ export function ChartAlertLines({
       }
       drawRef.current();
     },
-    [isOverTrash, onDelete, onThresholdChange, yToPrice]
+    [isOverTrash, onThresholdChange, requestDelete, yToPrice]
   );
 
   return (
@@ -408,6 +455,29 @@ export function ChartAlertLines({
               : undefined
           }
         />
+      ))}
+
+      {/* X = smazat alert (otevře potvrzovací dialog) – uvnitř boxu vpravo
+          od ceny; pozici řídí draw imperativně (sedí i během zoomu). */}
+      {priceAlerts.map((a) => (
+        <button
+          key={`x-${a.id}`}
+          ref={(el) => {
+            if (el) xBtnsRef.current.set(a.id, el);
+            else xBtnsRef.current.delete(a.id);
+          }}
+          type="button"
+          className="pointer-events-auto absolute z-30 hidden size-4 cursor-pointer items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
+          style={{ display: "none" }}
+          title="Odstranit alert"
+          aria-label="Odstranit alert"
+          onClick={(e) => {
+            e.stopPropagation();
+            requestDelete(a.id);
+          }}
+        >
+          <X className="size-2.5" />
+        </button>
       ))}
 
       {/* Inline editor hodnoty alertu (dvojklik na cenu v boxu) – pozice
@@ -464,7 +534,7 @@ export function ChartAlertLines({
         type="button"
         onClick={(e) => {
           e.stopPropagation();
-          if (trashForRef.current) onDelete(trashForRef.current);
+          if (trashForRef.current) requestDelete(trashForRef.current);
         }}
         className="pointer-events-auto absolute z-30 hidden size-7 cursor-pointer items-center justify-center rounded-md border border-border/80 bg-popover/95 text-muted-foreground shadow-lg backdrop-blur transition-colors hover:bg-secondary hover:text-foreground"
         title="Odstranit alert"
@@ -485,6 +555,51 @@ export function ChartAlertLines({
           <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
         </svg>
       </button>
+
+      {/* Potvrzení smazání alertu – X v boxu i puštění na koš */}
+      <Dialog
+        open={confirmDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmDelete(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-sm" showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Odstranit alert?</DialogTitle>
+            <DialogDescription>
+              {confirmDelete && (
+                <>
+                  Cenový alert na{" "}
+                  <span className="font-medium text-foreground">
+                    {formatThreshold(confirmDelete.threshold)} $
+                  </span>{" "}
+                  (aktivace{" "}
+                  {confirmDelete.direction === "above"
+                    ? "nad"
+                    : confirmDelete.direction === "below"
+                      ? "pod"
+                      : "při překřížení"}
+                  ) bude trvale odstraněn. Tento krok nelze vrátit.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDelete(null)}>
+              Zrušit
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (confirmDelete) onDelete(confirmDelete.id);
+                setConfirmDelete(null);
+              }}
+            >
+              Odstranit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -212,8 +212,11 @@ src/components/            # vizní komponenty (viz níže)
   limitní prodeje řídí portfolio, skóre generuje Signal Engine. V grafu:
   dvojklik na CENU v boxu alert linky (`chart-alert-lines.tsx`) otevře
   inline input nad boxem (Enter/✓ uloží přes `updateAlertRuleAction`,
-  Esc zruší); kurzor nad hodnotou je ↕ (ns-resize); klik do boxu
-  NESPUSTÍ drag prahu. Sloupec/směr `cross` = aktivace při překřížení
+  Esc zruší); kurzor nad hodnotou je ↕ (ns-resize); tah prahu funguje i
+  Z boxu s cenou (celý pás je drag zóna; jednoduchý klik/dvojklik bez
+  posunu nic neuloží, dvojklik otevře editor). X uvnitř boxu (vpravo od
+  ceny) i puštění linky na koš VŽDY jen otevře potvrzovací dialog –
+  alert se nemaže bez potvrzení. Sloupec/směr `cross` = aktivace při překřížení
   prahu v obou směrech; checkbox „Jednorázový" = `one_shot`.
 - **Fullscreen grafu** (`price-chart.tsx`): tlačítko Maximize2 jen vpravo
   nahoře, countdown svíčky sedí vedle něj zleva (ve fullscreen je
