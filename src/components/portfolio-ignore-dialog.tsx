@@ -27,11 +27,15 @@ import { Textarea } from "@/components/ui/textarea";
  */
 export function PortfolioIgnoreDialog({
   itemId,
+  quality,
   itemName,
   quantity,
   trigger,
 }: {
   itemId: number;
+  /** Kvalita vylučovaného aktiva (ignor-list je per položku – hradí
+   *  celou položku, ale dialog ukazuje přesné množství držby). */
+  quality: number;
   itemName: string;
   quantity: number;
   trigger?: React.ReactNode;

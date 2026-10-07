@@ -2,6 +2,7 @@ import postgres, { type JSONValue } from "postgres";
 import { getDb } from "@/lib/db";
 import type { SimcoCertificateKind, SimcoContest, SimcoVwap } from "@/lib/simcotools";
 import { getResources } from "@/lib/simcotools";
+import { getOfficialOrdersAllQualities } from "@/lib/simco-official";
 import {
   TRANSPORT_PCT_FALLBACK,
   estimateMarketFee,
@@ -34,8 +35,6 @@ type RawLatest = {
   quantity: number | null;
   recorded_at: Date;
 };
-
-type RawTick = { recorded_at: Date; price: string };
 
 type RawPosition = {
   id: string;
@@ -401,14 +400,17 @@ export type EditableLot = {
 
 export type PortfolioHolding = {
   item_id: number;
+  /** Kvalita držby (výzkumy/Software/Přeprava = vždy 0). */
+  quality: number;
   name: string;
   db_letter: string | null;
   image_url: string | null;
-  /** Celkem ks napříč pozicemi (všechny kvality dohromady). */
+  /** Celkem ks držby této (položka, kvalita). */
   quantity: number;
-  /** Průměrná pořizovací cena (weighted avg napříč kvalitami). */
+  /** Průměrná pořizovací cena (vážený průměr lotů této kvality). */
   avg_buy_price: number;
-  /** Poslední tržní cena položky (tick kvality 0). */
+  /** Poslední tržní cena TÉTO kvality (tick per kvalitu; null = žádný
+   *  tick dané kvality v price_history). */
   current_price: number | null;
   /** Investováno = avg_buy_price × quantity. */
   invested: number;
@@ -420,11 +422,13 @@ export type PortfolioHolding = {
   unrealized_pl_pct: number | null;
   /** Odhad burzovního poplatku při prodeji (4 % z tržby, záporný). */
   est_fee: number | null;
-  /** Odhad přepravy při prodeji (záporný; exaktní dle poměru položky). */
+  /** Odhad přepravy při prodeji (záporný; exaktní dle poměru položky) –
+   *  jen INFORMATIVNÍ, do netto P/L se nezapočítává. */
   est_transport: number | null;
   /** true = přeprava exaktně (poměr × cena Přepravy ze skladu). */
   transport_exact: boolean;
-  /** Nerealizovaný P/L netto = hrubý + poplatek + přeprava. */
+  /** Nerealizovaný P/L netto = hrubý − poplatek 4 % (herní parita
+   *  „Odhadovaný zisk“ v prodejním dialogu; přeprava se nezapočítává). */
   unrealized_pl_net: number | null;
   /** Nerealizovaný P/L netto v %. */
   unrealized_pl_net_pct: number | null;
@@ -461,29 +465,36 @@ export async function createPortfolioHolding(input: {
 }
 
 /**
- * Smaže držbu z portfolia – odstraní otevřené pozice položky (všechny
- * kvality). Hlídka limitního prodeje se čistí v server akci (actions.ts).
+ * Smaže držbu z portfolia – odstraní otevřené pozice dané POLOŽKY A
+ * KVALITY. Hlídka limitního prodeje se čistí v server akci (actions.ts).
  */
-export async function deletePortfolioHolding(itemId: number): Promise<void> {
+export async function deletePortfolioHolding(
+  itemId: number,
+  quality: number
+): Promise<void> {
   const db = getDb();
   await db`
     delete from positions
-    where item_id = ${itemId} and closed_at is null
+    where item_id = ${itemId} and quality = ${quality}
+      and closed_at is null
   `;
 }
 
 /**
- * Jednotlivé nákupy (lots) aktiva jedné položky – pro dialog úpravy.
- * Sbírá otevřené pozice VŠECHNYCH kvalit (portfolio neeviduje kvality).
+ * Jednotlivé nákupy (lots) aktiva jedné POLOŽKY A KVALITY – pro dialog
+ * úpravy. Portfolio rozlišuje kvality (každá kvalita = vlastní aktum),
+ * proto loty filtrujeme na přesnou kvalitu držby.
  */
 export async function getPositionLots(
-  itemId: number
+  itemId: number,
+  quality: number
 ): Promise<EditableLot[]> {
   const db = getDb();
   const rows = (await db`
     select id, quantity, buy_price, opened_at
     from positions
-    where item_id = ${itemId} and closed_at is null
+    where item_id = ${itemId} and quality = ${quality}
+      and closed_at is null
     order by opened_at asc
   `) as unknown as {
     id: string;
@@ -551,6 +562,7 @@ export async function deletePositionLot(positionId: string): Promise<void> {
  */
 export async function sellPortfolioAsset(input: {
   itemId: number;
+  quality: number;
   quantity: number;
   sellPrice: number;
 }): Promise<{ closedLots: number; partialLot: boolean; realizedPl: number }> {
@@ -567,6 +579,7 @@ export async function sellPortfolioAsset(input: {
     select coalesce(sum(quantity), 0)::int as qty
     from positions
     where item_id = ${input.itemId}
+      and quality = ${input.quality}
       and closed_at is null
   `) as unknown as { qty: number }[];
 
@@ -578,11 +591,12 @@ export async function sellPortfolioAsset(input: {
   }
 
   return db.begin(async (sql) => {
-    // lots od nejstaršího (FIFO) – napříč všemi kvalitami
+    // lots od nejstaršího (FIFO) – vždy v rámci jedné kvality
     const lots = (await sql`
       select id, quantity, buy_price
       from positions
       where item_id = ${input.itemId}
+        and quality = ${input.quality}
         and closed_at is null
       order by opened_at asc
       for update
@@ -624,7 +638,7 @@ export async function sellPortfolioAsset(input: {
           insert into positions
             (item_id, quality, quantity, buy_price, sell_price, opened_at, closed_at)
           values
-            (${input.itemId}, (select quality from positions where id = ${lot.id}), ${take}, ${buyPrice},
+            (${input.itemId}, ${input.quality}, ${take}, ${buyPrice},
              ${input.sellPrice}, (select opened_at from positions where id = ${lot.id}), now())
           returning id
         `) as unknown as { id: string }[];
@@ -647,36 +661,114 @@ export async function sellPortfolioAsset(input: {
 
 /**
  * Zaznamená zadaný limitní prodej („čeká na odklepnutí“) – jen poznámka
- * na otevřených pozicích položky (všechny kvality), ať se v tabulce
- * zobrazí badge. Finanční data se nezmění.
+ * na otevřených pozicích dané POLOŽKY A KVALITY, ať se v tabulce
+ * zobrazí badge u správného aktiva. Finanční data se nezmění.
  */
 export async function setLimitSellNote(
   itemId: number,
+  quality: number,
   limitPrice: number
 ): Promise<void> {
   const db = getDb();
   await db`
     update positions
     set note = ${`limit ${limitPrice.toFixed(3)} $`}
-    where item_id = ${itemId} and closed_at is null
+    where item_id = ${itemId} and quality = ${quality}
+      and closed_at is null
   `;
 }
 
 /**
- * Držby portfolia = otevřené pozice agregované na POLOŽKU (bez rozlišení
- * kvalit) – evidujeme kompletní počet ks napříč Q0/Q1/…, průměrná cena
- * je vážený průměr přes všechny nákupy, aktuální cena = poslední tick
- * kvality 0 (tržní cena položky). Pozice bez dostupné ceny mají P/L null.
+ * Per-kvalitní ceny (poslední ticky) pro držby s Q>0 bez ticku v
+ * price_history (sběr je primárně Q0). Vrací mapu `${itemId}-${q}` →
+ * price. Zdroje v pořadí:
+ *  1) ofiko v3 orderbook (path 0 = VŠECHNY kvality v 1 requestu, cache
+ *     1 min) – nejnižší aktální nabídka dané kvality,
+ *  2) market_vwap_daily (denní cron) – dnešní/včerejší VWAP kvality
+ *     (přibližná fair value, vždy dostupná i pro řídké kvality).
+ */
+const apiQPriceCache = new Map<
+  string,
+  { at: number; map: Map<string, number> }
+>();
+
+async function getApiPricesByQuality(
+  pairs: { id: number; q: number }[]
+): Promise<Map<string, number>> {
+  const ids = [...new Set(pairs.map((p) => p.id))].sort((a, b) => a - b);
+  const cacheKey = ids.join(",");
+  const cached = apiQPriceCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < 60_000) return cached.map;
+
+  const map = new Map<string, number>();
+  for (const id of ids) {
+    try {
+      // RAW orderbook (path 0 = kompletní kniha): jeden request vrátí
+      // nabídky VŠECH kvalit – nízké asky se agregují per (položka,
+      // kvalita). Parametrem filtrovaný getOfficialOrders by tady
+      // vyfiltoval jen Q0 a Q>0 by zůstaly na VWAP fallbacku.
+      const orders = await getOfficialOrdersAllQualities(id);
+      for (const o of orders) {
+        if (!(o.price > 0)) continue;
+        const key = `${id}-${o.quality}`;
+        const prev = map.get(key);
+        // nejnižší nabídka dané kvality = relevantní „za kolik lze prodat“
+        if (prev === undefined || o.price < prev) map.set(key, o.price);
+      }
+    } catch {
+      // API nedostupné (např. 429) – zůstane DB fallback níže
+    }
+  }
+
+  // Doplň kvality bez orderbooku VWAP denního cronu (D-1/D-2) – řídké
+  // kvality mívají obchody jen pár× denně, VWAP je robustní reference.
+  const missing = pairs.filter((p) => !map.has(`${p.id}-${p.q}`));
+  if (missing.length > 0) {
+    try {
+      const db = getDb();
+      const vwaps = (await db`
+        select distinct on (resource_id, quality)
+          resource_id, quality, vwap
+        from market_vwap_daily
+        where day >= current_date - 2
+        order by resource_id, quality, day desc
+      `) as unknown as {
+        resource_id: number;
+        quality: number;
+        vwap: string;
+      }[];
+      for (const v of vwaps) {
+        const key = `${v.resource_id}-${v.quality}`;
+        const price = Number(v.vwap);
+        if (price > 0 && !map.has(key)) map.set(key, price);
+      }
+    } catch {
+      // DB fallback selhal – kvality zůstanou bez ceny (P/L null)
+    }
+  }
+
+  apiQPriceCache.set(cacheKey, { at: Date.now(), map });
+  return map;
+}
+
+/**
+ * Držby portfolia = otevřené pozice agregované na POLOŽKU + KVALITU.
+ * Každá kvalita je vlastní aktum: nákup Q6 za 15 000 $ se musí ohodnotit
+ * cenou ticku Q6 (ne Q0!) – jinak je nerealizovaný P/L nesmysl. Kvality
+ * bez ticku (sběr je Q0) dostanou fallback per-kvalitní cenu z ofiko API;
+ * nenajde-li se ani ta, P/L = null (nikdy nekřížit ceny kvalit).
  */
 export async function getPortfolioHoldings(): Promise<PortfolioHolding[]> {
   const db = getDb();
 
-  // Náklady prodeje pro netto nerealizovaný P/L: poměr přepravy per item
-  // (Simco Tools, cache) + cena Přepravy ze skladu – vyhodnocuje se líně,
-  // jen pro položky s dostupnou cenou (cache v ratioFor).
+  // Netto P/L = HERNÍ PARITA prodejního dialogu („Odhadovaný zisk“):
+  // hrubý − poplatek 4 %; přeprava se nezapočítává (hradí se zbožím ze
+  // skladu, ne hotovostí). Přeprava per item se vyhodnocuje líně – jen
+  // informativně do tooltipu, jen pro položky s dostupnou cenou.
 
   const rows = (await db`
     select p.item_id,
+           p.quality,
            i.name,
            i.db_letter,
            i.image_url,
@@ -693,12 +785,12 @@ export async function getPortfolioHoldings(): Promise<PortfolioHolding[]> {
     left join lateral (
       select min(price) as limit_price
       from game_market_orders g
-      where g.item_id = p.item_id
+      where g.item_id = p.item_id and g.quality = p.quality
     ) gmo on true
     left join lateral (
       select price
       from price_history ph
-      where ph.item_id = p.item_id and ph.quality = 0
+      where ph.item_id = p.item_id and ph.quality = p.quality
       order by ph.recorded_at desc
       limit 1
     ) latest on true
@@ -706,12 +798,13 @@ export async function getPortfolioHoldings(): Promise<PortfolioHolding[]> {
       and not exists (
         select 1 from game_sync_ignored g where g.item_id = p.item_id
       )
-    group by p.item_id, i.name, i.db_letter, i.image_url, latest.price,
+    group by p.item_id, p.quality, i.name, i.db_letter, i.image_url, latest.price,
              gmo.limit_price
     order by (sum(p.buy_price * p.quantity)) desc
     limit 500
   `) as unknown as {
     item_id: number;
+    quality: number;
     name: string;
     db_letter: string | null;
     image_url: string | null;
@@ -728,17 +821,33 @@ export async function getPortfolioHoldings(): Promise<PortfolioHolding[]> {
   // Cena Přepravy (item 13) na skladu – jednou pro všechny aktiva.
   const trUnitCost = await getTransportUnitCost(db);
 
+  // Držby s Q>0 bez ticku té kvality (sběr je primárně Q0) – fallback
+  // cena ofiko API (per-kvalitní ticky), runtime cache 1 min.
+  const needsApiPrice = rows.some(
+    (r) => r.quality > 0 && r.current_price === null
+  );
+  const apiQPrices = needsApiPrice
+    ? await getApiPricesByQuality(
+        rows.filter((r) => r.quality > 0).map((r) => ({ id: r.item_id, q: r.quality }))
+      )
+    : null;
+
   return Promise.all(
     rows.map(async (r) => {
-    const current = r.current_price === null ? null : Number(r.current_price);
+    let current = r.current_price === null ? null : Number(r.current_price);
+    // Fallback: poslední tick dané kvality z ofiko API (jen Q>0 bez ticku).
+    if (current === null && r.quality > 0 && apiQPrices !== null) {
+      current = apiQPrices.get(`${r.item_id}-${r.quality}`) ?? null;
+    }
     const invested = r.avg_buy_price * r.quantity;
     const marketValue = current === null ? null : current * r.quantity;
     const pl = marketValue === null ? null : marketValue - invested;
 
-    // Náklady prodeje (poplatek 4 % + přeprava) – jen když známe cenu,
-    // jinak by netto bylo zavádějící. Přeprava exaktně: poměr položky ×
-    // ks × cena Přepravy ze skladu (stejná metodika jako rozpad
-    // cost_breakdown uzavřených pozic a tabulka limitek).
+    // Náklady prodeje – jen když známe cenu, jinak by netto bylo
+    // zavádějící. Netto = HERNÍ PARITA prodejního dialogu („Odhadovaný
+    // zisk“): hrubý P/L − burzovní poplatek 4 % − přeprava (jen u položek
+    // s poměrem > 0; hra ji v dialogu ukazuje a započítává – kalibrováno
+    // na Dýni Q3 2026-10-07; poměr 0 = přeprava žádná).
     let estFee: number | null = null;
     let estTransport: number | null = null;
     let transportExact = false;
@@ -748,16 +857,24 @@ export async function getPortfolioHoldings(): Promise<PortfolioHolding[]> {
       const fee = estimateMarketFee(marketValue);
       estFee = fee.fee;
       const tr = await getTransportationRatio(r.item_id);
+      // Přeprava – HERNÍ PARITA prodejního dialogu (kalibrováno na Dýni
+      // Q3, 2026-10-07): položky s transportation poměrem > 0 ji hra v
+      // dialogu ZAPOČÍTÁVÁ („Náklady na přepravu“) – 13 500 ks × poměr 1
+      // × 0,3544 ze skladu = 4 784,4 ≈ herních 4 785 $. Poměr 0 = exaktní
+      // nula (výzkumy, energie – přepravu nespotřebují). Neexaktní odhad
+      // (% z tržby, když poměr/cena chybí) do netto NEBEREME.
       const est = estimateTransport(marketValue, Number(r.quantity), tr, trUnitCost);
       estTransport = est.transport;
       transportExact = est.exact;
-      plNet = pl + estFee + estTransport;
+      // Herní parita „Odhadovaného zisku“: hrubý − poplatek − přeprava.
+      plNet = pl + estFee + (transportExact ? estTransport : 0);
       plNetPct =
         invested > 0 ? ((plNet / invested) * 100) : null;
     }
 
     return {
       item_id: r.item_id,
+      quality: r.quality,
       name: r.name,
       db_letter: r.db_letter,
       image_url: r.image_url,
@@ -801,22 +918,25 @@ export async function getPortfolioHoldings(): Promise<PortfolioHolding[]> {
  * roztříštěná – stejný princip kontinuity jako u svíček.
  *
  * Zdroj ceny: market_candles_daily (Simco Tools, ~3 měsíce) pro denní
- * close; je-li pro den chybí, použije se cena z price_history (naše
- * ticky) – fallback kryje i dnešek, který v denních svíčkách není.
+ * close (VŠECHNY kvality – držba Q6 se počítá close Q6); je-li pro den
+ * chybí, použije se cena z price_history (naše ticky) – fallback kryje
+ * i dnešek, který v denních svíčkách není. Kvality bez vlastních cen se
+ * ohodnotí cenou Q0 té položky (hodnota grafu je orientační).
  */
 export async function getPortfolioValueHistory(
   days = 90
 ): Promise<{ time: number; value: number }[]> {
   const db = getDb();
 
-  // 1) Denní close všech potřebných položek (denní svíčky + fallback ticky)
+  // 1) Denní close všech potřebných položek a KVALIT (denní svíčky +
+  // fallback ticky) – per (item, quality), ne jen Q0.
   const closes = (await db`
     select resource_id, quality, day::text as day, close from market_candles_daily
-    where quality = 0 and day >= current_date - ${days}::int
+    where day >= current_date - ${days}::int
     union all
     select item_id, quality, recorded_at::date::text as day, max(price) as close
     from price_history
-    where quality = 0 and recorded_at::date >= current_date - ${days}::int
+    where recorded_at::date >= current_date - ${days}::int
     group by item_id, quality, recorded_at::date
     having max(price) > 0
   `) as unknown as {
@@ -874,6 +994,13 @@ export async function getPortfolioValueHistory(
     byDay.set(c.day, price);
   }
 
+  // Kvality bez vlastních cen (Q>0 bez ticků/svíček) se v grafu ohodnotí
+  // Q0 close dané položky – orientační hodnota, ne účetní.
+  const q0Map = new Map<string, Map<string, number>>();
+  for (const [key, byDay] of priceMap) {
+    if (key.endsWith("-0")) q0Map.set(key.slice(0, -2), byDay);
+  }
+
   // 4) Per (item,quality) denní změny množství (nákupy +, prodeje −)
   const qtyChanges = new Map<string, Map<string, number>>();
   for (const l of lots) {
@@ -884,6 +1011,10 @@ export async function getPortfolioValueHistory(
       qtyChanges.set(itemKey, byDay);
     }
     byDay.set(l.day, (byDay.get(l.day) ?? 0) + l.qty);
+    // Q>0 bez vlastní cenové řady → přemapuj na Q0 ceny položky
+    if (l.quality > 0 && !priceMap.has(itemKey) && q0Map.has(String(l.item_id))) {
+      priceMap.set(itemKey, q0Map.get(String(l.item_id))!);
+    }
   }
 
   // 5) Rekonstrukce hodnoty po dnech (kumulativní množství × close)
@@ -1268,6 +1399,7 @@ export async function getActiveAlerts(): Promise<AlertRow[]> {
  */
 export async function upsertLimitSellAlert(
   itemId: number,
+  quality: number,
   limitPrice: number
 ): Promise<void> {
   const db = getDb();
@@ -1275,7 +1407,7 @@ export async function upsertLimitSellAlert(
     insert into alerts
       (item_id, quality, kind, direction, threshold, note)
     values
-      (${itemId}, 0, 'limit_sell', 'above', ${limitPrice},
+      (${itemId}, ${quality}, 'limit_sell', 'above', ${limitPrice},
        'Limitní prodej z portfolia')
     on conflict (item_id, quality, kind) where kind = 'limit_sell' do update
       set threshold = ${limitPrice},
@@ -1286,11 +1418,15 @@ export async function upsertLimitSellAlert(
 }
 
 /** Odstraní hlídku limitního prodeje aktiva (po odklepnutí/smazání). */
-export async function deleteLimitSellAlert(itemId: number): Promise<void> {
+export async function deleteLimitSellAlert(
+  itemId: number,
+  quality: number
+): Promise<void> {
   const db = getDb();
   await db`
     delete from alerts
-    where item_id = ${itemId} and kind = 'limit_sell'
+    where item_id = ${itemId} and quality = ${quality}
+      and kind = 'limit_sell'
   `;
 }
 

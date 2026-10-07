@@ -37,6 +37,7 @@ import { cn } from "@/lib/utils";
  */
 export function PortfolioSellDialog({
   itemId,
+  quality,
   itemName,
   quantity,
   avgBuyPrice,
@@ -45,6 +46,8 @@ export function PortfolioSellDialog({
   trigger,
 }: {
   itemId: number;
+  /** Kvalita prodávaného aktiva (prodej i limit běží per kvalitu). */
+  quality: number;
   itemName: string;
   quantity: number;
   avgBuyPrice: number;
@@ -113,6 +116,7 @@ export function PortfolioSellDialog({
     setPending(true);
     const res = await sellPortfolioAssetAction({
       itemId,
+      quality,
       quantity: qtyNum,
       sellPrice: priceNum,
     });
@@ -136,6 +140,7 @@ export function PortfolioSellDialog({
     setPending(true);
     const res = await setLimitSellAction({
       itemId,
+      quality,
       limitPrice: priceNum,
     });
     setPending(false);

@@ -231,12 +231,13 @@ export async function addToPortfolioAction(
   }
 }
 
-/** Smaže držbu z portfolia (všechny otevřené pozice dané položky). */
+/** Smaže držbu z portfolia (otevřené pozice dané položky a kvality). */
 export async function deletePortfolioHoldingAction(
-  itemId: number
+  itemId: number,
+  quality: number
 ): Promise<void> {
-  await deletePortfolioHolding(itemId);
-  await deleteLimitSellAlert(itemId);
+  await deletePortfolioHolding(itemId, quality);
+  await deleteLimitSellAlert(itemId, quality);
   revalidatePath("/portfolio");
 }
 
@@ -275,6 +276,7 @@ export async function unignoreGameSyncItemAction(
  */
 export async function sellPortfolioAssetAction(input: {
   itemId: number;
+  quality: number;
   quantity: number;
   sellPrice: number;
 }): Promise<{ ok: boolean; error?: string; realizedPl?: number }> {
@@ -282,7 +284,7 @@ export async function sellPortfolioAssetAction(input: {
     const res = await sellPortfolioAsset(input);
     // Hlídka limitu už není potřeba – prodej je odklepnutý (ať to byl
     // celý aktivum, nebo jen část).
-    await deleteLimitSellAlert(input.itemId);
+    await deleteLimitSellAlert(input.itemId, input.quality);
     revalidatePath("/portfolio");
     revalidatePath("/");
     return { ok: true, realizedPl: res.realizedPl };
@@ -302,13 +304,14 @@ export async function sellPortfolioAssetAction(input: {
  */
 export async function setLimitSellAction(input: {
   itemId: number;
+  quality: number;
   limitPrice: number;
 }): Promise<{ ok: boolean; error?: string }> {
   try {
     if (!Number.isFinite(input.limitPrice) || input.limitPrice <= 0)
       return { ok: false, error: "Limitní cena musí být kladné číslo." };
-    await setLimitSellNote(input.itemId, input.limitPrice);
-    await upsertLimitSellAlert(input.itemId, input.limitPrice);
+    await setLimitSellNote(input.itemId, input.quality, input.limitPrice);
+    await upsertLimitSellAlert(input.itemId, input.quality, input.limitPrice);
     revalidatePath("/portfolio");
     revalidatePath("/alerts");
     return { ok: true };
