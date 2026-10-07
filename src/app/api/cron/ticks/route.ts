@@ -8,7 +8,10 @@ export const dynamic = "force-dynamic";
  * Poller ticků – volá externí cron (cron-job.org) každých 5 minut.
  *
  * 1 request do Simco Tools = poslední skutečný obchod pro VŠECHNY
- * resource+kvality. Ukládáme jen kvalitu 0 položek s track_ticks=true.
+ * resource+kvality. Ukládáme:
+ *  - kvalitu 0 položek s track_ticks=true (hlavní sběr – tabulky, grafy),
+ *  - KVality > 0, na které portfolio drží pozice nebo visí limitka
+ *    (limit_sell) – jinak by držba Q6 neměla cenu a P/L by bylo null.
  * Chráněno hlavičkou Authorization: Bearer CRON_SECRET.
  */
 export async function GET(req: Request) {
@@ -43,16 +46,31 @@ export async function GET(req: Request) {
       // Objemy jsou bonus – výpadek nesmí zablokovat ukládání cen
     }
 
+    // Per-kvalitní hlídky: otevřené pozice s Q>0 + limitky (limit_sell)
+    // s Q>0 – jejich ceny se ukládají taky (jinak držba Q6 nemá cenu).
+    const heldQRows = await db`
+      select distinct item_id, quality from positions
+      where closed_at is null and quality > 0
+      union
+      select distinct item_id, quality from alerts
+      where active = true and kind = 'limit_sell' and quality > 0
+    `;
+    const heldPairs = new Set(
+      heldQRows.map((r) => `${r.item_id}#${r.quality}`)
+    );
+
     const rows = ticks
-      .filter(
-        (t) => t.quality === 0 && trackedIds.has(t.resourceId) && t.price > 0
-      )
+      .filter((t) => {
+        if (!(t.price > 0)) return false;
+        if (t.quality === 0) return trackedIds.has(t.resourceId);
+        return heldPairs.has(`${t.resourceId}#${t.quality}`);
+      })
       .map((t) => ({
         item_id: t.resourceId,
-        quality: 0,
+        quality: t.quality,
         price: t.price,
         quantity: null,
-        volume: volumeByItem.get(t.resourceId) ?? null,
+        volume: t.quality === 0 ? (volumeByItem.get(t.resourceId) ?? null) : null,
         recorded_at: t.datetime,
         source: "simcotools",
       }));
