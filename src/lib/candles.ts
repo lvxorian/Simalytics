@@ -57,6 +57,7 @@ export function applyContinuity(raw: Candle[]): Candle[] {
       high: Math.max(c.high, open),
       low: Math.min(c.low, open),
       close: c.close,
+      volume: c.volume,
     });
     prevClose = c.close;
   }
@@ -259,6 +260,8 @@ function aggregateDailyRaw(
       existing.high = Math.max(existing.high, c.high);
       existing.low = Math.min(existing.low, c.low);
       existing.close = c.close; // poslední den = close
+      // Objemy se SČÍTAJÍ (týdenní/měsíční objem = součet denních, ne jen poslední den)
+      existing.volume = (existing.volume ?? 0) + (c.volume ?? 0);
     }
   }
 

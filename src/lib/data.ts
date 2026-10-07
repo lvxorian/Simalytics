@@ -1753,7 +1753,12 @@ export type DailyCandle = {
   vwap: number | null;
 };
 
-/** Denní svíčky z market_candles_daily (historie ~3 měsíce). */
+/**
+ * Denní svíčky z market_candles_daily.
+ *
+ * Hloubka závisí na backfillu: bez parametrů vrací Simco Tools jen ~91 dní,
+ * s granularity/start/end parametry ~365 dní (viz getCandlesticksDeep).
+ */
 export async function getDailyCandles(
   itemId: number,
   quality = 0
@@ -1783,6 +1788,107 @@ export async function getDailyCandles(
     volume: r.volume === null ? null : Number(r.volume),
     vwap: r.vwap === null ? null : Number(r.vwap),
   }));
+}
+
+// ── ARCHIVNÍ TÝDENNÍ/MĚSÍČNÍ SVÍČKY (Simco Tools archiv 1W/1M) ──────
+
+export type ArchiveCandle = {
+  bucket_start: string; // YYYY-MM-DD
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number | null;
+};
+
+/** Archivní weekly/monthly svíčky pro položku (bucket_start rostoucí). */
+export async function getArchiveCandles(
+  itemId: number,
+  granularity: "1w" | "1M",
+  quality = 0
+): Promise<ArchiveCandle[]> {
+  const db = getDb();
+  const gran = granularity === "1w" ? "1w" : "1M";
+  const rows = (await db`
+    select bucket_start::text as bucket_start, open, high, low, close, volume
+    from market_candles_archive
+    where resource_id = ${itemId}
+      and quality = ${quality}
+      and granularity = ${gran}
+    order by bucket_start asc
+  `) as unknown as {
+    bucket_start: string;
+    open: string;
+    high: string;
+    low: string;
+    close: string;
+    volume: string | null;
+  }[];
+
+  return rows.map((r) => ({
+    bucket_start: r.bucket_start,
+    open: Number(r.open),
+    high: Number(r.high),
+    low: Number(r.low),
+    close: Number(r.close),
+    volume: r.volume === null ? null : Number(r.volume),
+  }));
+}
+
+/**
+ * Uloží archivní svíčky (upsert per bucket) – volá backfill skript.
+ * Vrací počet zapsaných řádků. (Objem null = archivní svíčka bez objemu;
+ * `coalesce` při upsertu nesmaže objem, pokud už byl známý.)
+ */
+export async function upsertArchiveCandles(
+  rows: {
+    resourceId: number;
+    quality: number;
+    granularity: "1w" | "1M";
+    bucketStart: string; // YYYY-MM-DD
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number | null;
+  }[]
+): Promise<number> {
+  if (rows.length === 0) return 0;
+  const db = getDb();
+  // postgres.js helper mapuje klíče objektu 1:1 na sloupce → snake_case
+  const mapped = rows.map((r) => ({
+    resource_id: r.resourceId,
+    quality: r.quality,
+    granularity: r.granularity,
+    bucket_start: r.bucketStart,
+    open: r.open,
+    high: r.high,
+    low: r.low,
+    close: r.close,
+    volume: r.volume,
+  }));
+  const result = await db`
+    insert into market_candles_archive
+      ${db(
+        mapped,
+        "resource_id",
+        "quality",
+        "granularity",
+        "bucket_start",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      )}
+    on conflict (resource_id, quality, granularity, bucket_start) do update set
+      open = excluded.open,
+      high = excluded.high,
+      low = excluded.low,
+      close = excluded.close,
+      volume = coalesce(excluded.volume, market_candles_archive.volume)
+  `;
+  return result.count;
 }
 
 /** Sbírá poller pro tuto položku intraday ticky? */

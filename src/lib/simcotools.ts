@@ -228,15 +228,90 @@ export type SimcoBuildingCount = {
 
 // ── Endpointy ───────────────────────────────────────────────────────
 
-/** Denní svíčky (OHLC + objem + VWAP) pro resource a kvalitu. */
+/**
+ * Denní svíčky (OHLC + objem + VWAP) pro resource a kvalitu.
+ *
+ * POZOR: bez parametrů vrací endpoint jen ~posledních 91 dní! Pro hlubší
+ * historii je potřeba `start`/`end` (unix milisekundy) – retence je ~365 dní.
+ * Granularita se poskytuje kvůli dokumentaci chyb (must be one of:
+ * 1M, 1W, 1d, 4h, 1h, 5m).
+ */
 export async function getCandlesticks(
   resourceId: number,
   quality = 0
 ): Promise<SimcoCandlestick[]> {
   const data = await simcoFetch<{ candlesticks: SimcoCandlestick[] }>(
-    `/v1/realms/${REALM_ID}/market/resources/${resourceId}/${quality}/candlesticks`
+    `/v1/realms/${REALM_ID}/market/resources/${resourceId}/${quality}/candlesticks?granularity=1d`
   );
   return data.candlesticks ?? [];
+}
+
+/**
+ * Svíčky s parametry granularity + časového okna (unix ms) – plná síla
+ * endpointu, kterou používá i web simcotools.com:
+ *   - `1d`: retence ~365 dní (když se dotáže po 180denních oknech),
+ *   - `1W`: ARCHIV od 2022 + recent okno (zvlášť, viz archivSimcoCandles),
+ *   - `1M`: ARCHIV od 2022 až po aktuální měsíc (v jednom volání),
+ *   - `1h`/`4h`/`5m`: krátká retence (~7 dní / ~1 den).
+ *
+ * Okno může být libovolně široké (API vrátí co má v rozsahu) – stránkování
+ * řeší volající rozdělením na menší okna, pokud potřebuje jistotu.
+ */
+export type SimcoGranularity = "1M" | "1W" | "1d" | "4h" | "1h" | "5m";
+
+export async function getCandlesticksRange(
+  resourceId: number,
+  quality: number,
+  granularity: SimcoGranularity,
+  startMs: number,
+  endMs: number
+): Promise<SimcoCandlestick[]> {
+  const data = await simcoFetch<{ candlesticks: SimcoCandlestick[] }>(
+    `/v1/realms/${REALM_ID}/market/resources/${resourceId}/${quality}/candlesticks?granularity=${granularity}&start=${Math.floor(
+      startMs
+    )}&end=${Math.floor(endMs)}`
+  );
+  return data.candlesticks ?? [];
+}
+
+/**
+ * Úplná dostupná historie denních svíček (~365 dní) – endpoint dotáže
+ * po 180denních oknech od `daysBack` do minulosti a deduplikuje dle data.
+ * Vrací svíčky rostoucí dle času (od nejstarší).
+ */
+export async function getCandlesticksDeep(
+  resourceId: number,
+  quality = 0,
+  daysBack = 365
+): Promise<SimcoCandlestick[]> {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const WINDOW_MS = 180 * DAY_MS;
+  const now = Date.now();
+  const from = now - daysBack * DAY_MS;
+
+  const byDate = new Map<string, SimcoCandlestick>();
+  for (let start = from; start < now; start += WINDOW_MS) {
+    const end = Math.min(start + WINDOW_MS, now);
+    try {
+      const candles = await getCandlesticksRange(
+        resourceId,
+        quality,
+        "1d",
+        start,
+        end
+      );
+      for (const c of candles) {
+        // dedupe dle data – okna se mohou překrývat
+        byDate.set(c.date.slice(0, 10), c);
+      }
+    } catch {
+      // jedno okno selhalo (ratelimit apod.) – zbytek historie zůstává
+    }
+  }
+
+  return [...byDate.values()].sort(
+    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+  );
 }
 
 /** Poslední skutečný obchod pro všechny resource+kvality (1 request!).

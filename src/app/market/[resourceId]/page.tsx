@@ -18,8 +18,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import {
   aggregateDaily,
-  aggregateDailyWithVolume,
-  aggregateVolumePoints,
   applyContinuity,
   resolveIntervalOption,
   toCandles,
@@ -28,6 +26,7 @@ import {
 import {
   getActiveContests,
   getAlertsForItem,
+  getArchiveCandles,
   getDailyCandles,
   getItem,
   getPriceHistory,
@@ -99,7 +98,7 @@ export default async function MarketItemPage({
   let vpCandles: Candle[] = [];
 
   if (opt.key === "1d" || opt.key === "1w" || opt.key === "1M") {
-    // Denní svíčky z backfillu (Simco Tools, ~3 měsíce, s objemem a VWAP)
+    // Denní svíčky z backfillu (Simco Tools deep ~365 dní, s objemem a VWAP)
     const daily = await getDailyCandles(id);
     const dailyCandles: Candle[] = daily.map((c) => ({
       time: dayToUnix(c.day),
@@ -144,10 +143,63 @@ export default async function MarketItemPage({
         .map((c) => ({ time: dayToUnix(c.day), value: c.vwap! }));
       if (today) dataSource = "denní svíčky + dnešní ticky";
     } else {
-      // weekly / monthly agregace (aggregateDaily už vrací svíčky s kontinuitou)
-      candles = aggregateDaily(dailyCandles, opt.key);
+      // Weekly/monthly: ARCHIV ze Simco Tools (1W/1M granularity od 2022)
+      // + recentní agregace z denních svíček (dedupe dle bucketu – recent
+      // přebije archiv tam, kde se překrývají).
+      const gran = opt.key === "1w" ? "1w" : "1M";
+      const archive = await getArchiveCandles(id, gran);
+      const archiveCandles: Candle[] = archive.map((c) => ({
+        time: dayToUnix(c.bucket_start),
+        open: c.open,
+        high: c.high,
+        low: c.low,
+        close: c.close,
+        volume: c.volume ?? undefined,
+      }));
+
+      // Recentní agregace z denních svíček (+ dnešní rozpracovaná svíčka)
+      const recentAgg = aggregateDaily(dailyCandles, opt.key);
+      const recentByTime = new Map(recentAgg.map((c) => [c.time, c]));
+
+      // Sloučení: archivní svíčky doplněné recentem (recent má přednost –
+      // má čerstvější data). Kontinuita (open = prev close) se aplikuje
+      // NA CELOU sloučenou řadu – jinak by graf na hranici archiv/recent
+      // i mezi starými týdny působil „odtrženě“ (konvence projektu).
+      const merged = new Map(archiveCandles.map((c) => [c.time, c]));
+      for (const c of recentByTime.values()) {
+        merged.set(c.time, c);
+      }
+      candles = applyContinuity(
+        [...merged.values()].sort((a, b) => a.time - b.time)
+      );
+
+      // Objemy pro histogram: archiv + recent v BUCKET granularitě
+      // (weekly/monthly součty – dedupe dle bucketu, recent přebíjí archiv)
+      const archiveVolume = archiveCandles
+        .filter((c) => c.volume != null)
+        .map((c) => ({ time: c.time, value: c.volume! }));
+      const recentVolume = recentAgg
+        .filter((c) => c.volume != null)
+        .map((c) => ({ time: c.time, value: c.volume! }));
+      const volMerged = new Map(
+        archiveVolume.map((v) => [v.time, v.value])
+      );
+      for (const v of recentVolume) {
+        volMerged.set(v.time, v.value);
+      }
+      volume = [...volMerged.entries()]
+        .map(([time, value]) => ({ time, value }))
+        .sort((a, b) => a.time - b.time);
+
       dataSource =
-        opt.key === "1w" ? "týdenní svíčky · agregace z denních" : "měsíční svíčky · agregace z denních";
+        opt.key === "1w"
+          ? `týdenní svíčky · archiv + recent (${archiveCandles.length} + ${recentAgg.length})`
+          : `měsíční svíčky · archiv + recent (${archiveCandles.length} + ${recentAgg.length})`;
+
+      // Volume profile dostane sloučené svíčky přímo (už jsou v bucket
+      // granularitě a nesou objemy) – aggregateDailyWithVolume nad nimi
+      // by byl no-op.
+      vpCandles = candles;
     }
   } else {
     ticks = await getPriceHistory(id, 0, opt.days);
@@ -182,11 +234,9 @@ export default async function MarketItemPage({
       ? new Date(ticks[ticks.length - 1].recorded_at).getTime()
       : null;
 
-  // Objemy pro 1W/1M (agregace denních objemů)
-  let displayVolume = volume;
-  if ((opt.key === "1w" || opt.key === "1M") && volume) {
-    displayVolume = aggregateVolumePoints(volume, opt.key);
-  }
+  // Objemy pro 1W/1M už jsou sloučené v BUCKET granularitě (archiv + recent
+  // agregace) – žádná další agregace se neaplikuje.
+  const displayVolume = volume;
 
   // Intraday: reálné obchodované objemy z ticků (poller je ukládá od
   // migrace 004 z market/followed – fiveMinutesCandlestick.volume)
@@ -463,11 +513,7 @@ export default async function MarketItemPage({
                 low: periodLow ?? undefined,
                 average: periodAvg ?? undefined,
               }}
-              volumeProfile={
-                opt.key === "1w" || opt.key === "1M"
-                  ? aggregateDailyWithVolume(vpCandles, opt.key)
-                  : vpCandles
-              }
+              volumeProfile={vpCandles}
             />
           ) : (
             <div className="flex h-72 flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
