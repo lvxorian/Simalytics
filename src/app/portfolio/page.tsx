@@ -80,7 +80,7 @@ export default async function PortfolioPage({
 
   // Lots (jednotlivé nákupy) pro každé aktivum – paralelně
   const lotsPerAsset = await Promise.all(
-    holdings.map((h) => getPositionLots(h.item_id).catch(() => []))
+    holdings.map((h) => getPositionLots(h.item_id, h.quality).catch(() => []))
   );
   const assets: AssetRow[] = holdings.map((h, i) => ({
     ...h,
@@ -96,9 +96,9 @@ export default async function PortfolioPage({
     (s, h) => s + (h.market_value ?? h.invested),
     0
   );
-  // Netto nerealizovaný P/L = hrubý − poplatek (4 %) − přeprava (per
-  // položka; exaktní ze skladu, fallback % z tržby) – současný stav by
-  // ukazoval optimistické číslo, které se při prodeji nikdy nezmění.
+  // Netto nerealizovaný P/L = hrubý − poplatek (4 %) − přeprava (jen
+  // položky s poměrem > 0) – HERNÍ PARITA prodejního dialogu
+  // („Odhadovaný zisk“, kalibrováno na Dýni Q3 2026-10-07).
   const totalPl = assets.reduce(
     (s, h) => s + (h.unrealized_pl_net ?? h.unrealized_pl ?? 0),
     0
@@ -124,7 +124,8 @@ export default async function PortfolioPage({
   const slices: DonutSlice[] = assets
     .filter((h) => h.market_value !== null)
     .map((h) => ({
-      key: `${h.item_id}`,
+      // aktivum = (položka, kvalita) – stejná položka může mít Q0 i Q6 řez
+      key: `${h.item_id}-${h.quality}`,
       label: h.name,
       value: h.market_value ?? 0,
       href: `/market/${h.item_id}`,
@@ -200,7 +201,7 @@ export default async function PortfolioPage({
                 tone={
                   totalPl > 0 ? "up" : totalPl < 0 ? "down" : "neutral"
                 }
-                hint="zisk/ztráta aktiv při prodeji za aktuální cenu PO odečtení burzovního poplatku (4 %) a přepravy"
+                hint="zisk/ztráta při prodeji za aktuální cenu po odečtení burzovního poplatku (4 %) – stejná metodika jako „Odhadovaný zisk“ v herním prodejním dialogu"
               />
               <SummaryCard
                 label="Realizovaný P/L"
@@ -276,7 +277,7 @@ export default async function PortfolioPage({
                       <TableHead className="text-right">Množství</TableHead>
                       <TableHead className="text-right">Limit</TableHead>
                       <TableHead className="text-right">Ø nákup</TableHead>
-                      <TableHead className="text-right">Popl. + přepr.</TableHead>
+                      <TableHead className="text-right">Poplatek 4 %</TableHead>
                       <TableHead className="text-right">Netto</TableHead>
                       <TableHead className="text-right">Oček. zisk</TableHead>
                       <TableHead className="pr-4 text-right">Vloženo</TableHead>
@@ -329,9 +330,9 @@ export default async function PortfolioPage({
                           </TableCell>
                           <TableCell
                             className="text-right font-mono tabular-nums text-muted-foreground"
-                            title={`Poplatek ${formatPrice(o.est_fee)} (${o.fee_from_game ? "hlášený hrou" : "odhad 4 % z tržby"}) + přeprava ${formatPrice(o.est_transport)} (${o.transport_exact ? "exaktně ze skladu" : "odhad % z tržby"})`}
+                            title={`Poplatek ${formatPrice(o.est_fee)} (${o.fee_from_game ? "hlášený hrou" : "odhad 4 % z tržby"}). Přeprava ${formatPrice(o.est_transport)} (${o.transport_exact ? "exaktně ze skladu, započítána do netto" : "odhad % z tržby, nezapočítána"}).`}
                           >
-                            {formatPrice(o.est_fee + o.est_transport)}
+                            {formatPrice(o.est_fee)}
                           </TableCell>
                           <TableCell className="text-right font-mono tabular-nums">
                             {formatPrice(o.net_total)}
@@ -372,8 +373,9 @@ export default async function PortfolioPage({
                 Vlastní nabídky vložené na burzu ve hře (limitní prodeje) –
                 sync ze stránky statistiky skladu. Netto = hrubá tržba −
                 burzovní poplatek (4 % z tržby; přesnou částku, hlásí-li ji
-                hra u nabídky, bereme z ní) − přeprava (exaktně poměr × cena
-                Přepravy ze skladu, jinak odhad % z tržby). Oček. zisk =
+                hra u nabídky, bereme z ní) − přeprava (jen položky s
+                poměrem nad 0, exaktně ze skladu) – stejná metodika jako
+                „Odhadovaný zisk“ v herním prodejním dialogu. Oček. zisk =
                 netto − Ø pořizovací cena otevřených lotů (FIFO dle
                 kvality). Po odklepnutí se pozice uzavřou automaticky s
                 reálnou netto cenou (cashflow).

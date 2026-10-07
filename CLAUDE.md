@@ -73,12 +73,15 @@ src/app/
   positions/               # pozice + P/L + condition logging (držba z portfolio
                            # page se ukládá jako otevřená pozice do positions)
   watchlist/               # karty se sparklinami
-  portfolio/               # aktiva = agregace otevřených pozic na POLOŽKU
-                           # (kvality se nerozlišují; víc nákupů = 1 aktivum
-                           # s váženým průměrem); koláč alokace, vývoj hodnoty
+  portfolio/               # aktiva = agregace otevřených pozic na POLOŽKU +
+                           # KVALITU (nákup Q6 se ohodnotí cenou ticku Q6, ne
+                           # Q0! fallback: orderbook ofiko API → market_vwap_daily;
+                           # poller ukládá ticky kvalit s otevřenými pozicemi/
+                           # limitkami); koláč alokace, vývoj hodnoty
                            # v čase, P/L, editace nákupů (lots) tužkou, prodej
-                           # (FIFO odklepnutí) + limitní prodej = alert kind
-                           # 'limit_sell' (poller notifikuje při dosažení limitu)
+                           # (FIFO odklepnutí, uvnitř kvality) + limitní prodej =
+                           # alert kind 'limit_sell' per kvalita (poller
+                           # notifikuje při dosažení limitu)
   skener/                  # Signal Engine skener příležitostí (BUY/SELL skóre)
   alerts/                  # přehled alertů + stav notifikačních kanálů
   statistiky/              # fáze ekonomiky, eventy, vládní zakázky, makro, budovy
@@ -257,9 +260,25 @@ src/components/            # vizní komponenty (viz níže)
     triggeruje i ASK ≤ práh (nabídka na úrovni = příležitost koupit hned,
     nemusí čekat na obchod). Sell strana zůstává na posledním obchodě
     (prodej se řídí bidem, který API nevidí).
-  - **Cena vs. ask**: velká cena v hero = POSLEDNÍ OBCHOD (kanonická,
-    konzistentní s grafem/VWAP/P/L); ask = za kolik lze koupit HNED
-    (orderbook). Nezaměňovat – ask nemá historii a je křehký (1 prodávající).
+  - **Cena vs. ask (AKTUALIZOVÁNO)**: market page hero i fullscreen hlavička
+    grafu ukazují jako HLAVNÍ cenu ASK (nejnižší aktivní nabídka – za kolik
+    lze koupit HNED; badge „ask“/fallback „obchod“); poslední obchod je jen
+    sekundární řádek (s spreadem vs. ask a stářím). Graf kreslí přerušovanou
+    ORANŽOVOU ask linku (`showAskLine` v price-chart, barva #e3a008 –
+    odlišná od alertů i Max/Min), aktualizace přes `priceLine.applyOptions`
+    – graf se NEREKONSTRUUJE. Ask teče z useLiveAsk (lib/live-prices):
+    SSE orderbook eventy z hubu, SSR prop z getLowestAsk; ŽÁDNÝ vlastní
+    polling proti ofiko API (limit 1 req/s). DASHBOARD/TABULKY/watchlist
+    ZŮSTÁVAJÍ na posledním obchodě (ask pro 151 položek by byl starý o
+    minuty). VÝJIMKA: tabulka aktiv v portfoliu si asky držeb dotahuje
+    KLIENTSKY (/api/live/ask per pár (položka,kvalita), 60 s – držeb je
+    málo) a nerealizovaný P/L počítá od ASKU – herní parita prodejního
+    dialogu (hra předvyplňuje cenu askem; kalibrováno na Dýni Q3
+    2026-10-07), fallback poslední obchod. Alerty: 'below' ask-aware
+    (spustí při nabídce ≤ práh), 'above'
+    i limitní prodeje zůstávají na obchodní ceně (prodej se řídí bidem,
+    který API nevidí). Ask nemá historii a je křehký (1 prodávající) –
+    proto fallback na obchod, když orderbook není dostupný.
   - **Graf**: živý tick se aplikuje přes `series.update()` (NE rekonstrukce)
     pomocí `mergeLiveTick()` z lib/candles – kontinuita bucketů zachována
     (nový bucket = doplnit ploché svíčky, open = předchozí close).
@@ -283,23 +302,37 @@ src/components/            # vizní komponenty (viz níže)
   Denní svíčky pro obrat se u intraday TF dotahují zvlášť
   (`getDailyCandles`).
 - **Portfolio** (`app/portfolio`, `lib/data.ts`): aktivum = otevřené pozice
-  agregované na POLOŽKU (kvality se NEROZLIŠUJÍ – Q0 i Q1 je jedno aktivum;
-  aktuální cena = tick kvality 0, prodej i limit běží FIFO přes všechny
-  nákupy). Uložení: dialog „Přidat do portfolia“ z market page (action
-  `addToPortfolioAction`, nové pozice s quality 0). Editace: tužka v
+  agregované na POLOŽKU + KVALITU (od 2026-10-06! nákup Q6 @ 15 000 se
+  ohodnotí cenou ticku Q6 – dřívější hodnocení po Q0 dávalo nesmyslný P/L;
+  cena držby: tick dané kvality → orderbook ofiko API → market_vwap_daily,
+  nikdy nekřížit kvality; prodej FIFO i limitky běží uvnitř kvality).
+  Uložení: dialog „Přidat do portfolia“ z market page (action
+  `addToPortfolioAction`). Editace: tužka v
   tabulce → `PortfolioEditLotsDialog` upraví množství/cenu per lot
   (`updatePortfolioLotsAction`). `getPortfolioHoldings()` agreguje,
-  `getPositionLots(itemId)` vrací nákupy aktiva,
+  `getPositionLots(itemId, quality)` vrací nákupy aktiva,
+  položka držená ve VÍCE KVALITÁCH má v tabulce součtový řádek (Σ P/L
+  všech kvalit, vážený průměr pořizovací ceny) a pod ním podřádky
+  Q1, Q2, … s vlastními akcemi (akce per kvalitu, ne per položku);
   `getPortfolioValueHistory()` rekonstruuje denní hodnotu (kumulativní
-  množství k dni × close z market_candles_daily, fallback ticky).
+  množství k dni × close z market_candles_daily per kvalitu, fallback
+  ticky; Q>0 bez vlastní ceny řady se v grafu ohodnotí Q0).
   Limitní prodej: `upsertLimitSellAlert`/`deleteLimitSellAlert` udržují
-  hlídku alerts kind='limit_sell' (poller notifikuje při dosažení limitu).
+  hlídku alerts kind='limit_sell' per kvalita (poller notifikuje při
+  dosažení limitu; 5min poller ukládá i ticky kvalit držeb/limitků).
   Terminologie v UI: „aktivum/aktiva“ (ne držba), nákup = „lot“.
-  Nerealizovaný P/L je NETTO (lib/sale-costs.ts): hrubý − poplatek 4 %
-  (hra hlásí-li částku v `fees`, bereme ji) − přeprava exaktně (poměr
-  položky × cena Přepravy ze skladu, fallback % z tržby); pole
-  est_fee/est_transport/unrealized_pl_net. UI: netto jako hlavní číslo,
-  hrubý + rozpad v tooltipu, metodika pod tabulkou. Souhrn = mřížka 2×2
+  Nerealizovaný P/L je NETTO = HERNÍ PARITA prodejního dialogu („Odhadovaný
+  zisk“; kalibrace doplněna 2026-10-07 na Dýni Q3): hrubý − poplatek 4 %
+  − PŘERAVA, ale jen u položek s transportation poměrem > 0 – u nich hra
+  přepravu v dialogu UKAZUJE a ODEČÍTÁ („Náklady na přepravu“ = ks ×
+  poměr × cena Přepravy ze skladu; Dýně: 13 500 × 1 × 0,3544 = 4 784,4 ≈
+  herních 4 785). Poměr 0 (výzkumy, energie, Recepty 145) = přeprava
+  žádná, netto = hrubý − poplatek. Neexaktní % odhad (chybí poměr/cena)
+  se do netto NEBERE. Referenční cena = ask dané kvality (klientský
+  enrichment přes /api/live/ask, 60 s), fallback poslední obchod –
+  viz výše „Cena vs. ask“. Pole est_fee/est_transport/unrealized_pl_net.
+  UI: netto jako hlavní číslo, hrubý + rozpad v tooltipu, metodika pod
+  tabulkou. Souhrn = mřížka 2×2
   (žádné vnořené gridy – kvůli přetékání) + karty „Nejlepší/Nejhorší
   aktivum“ s ikonou a CELÝM názvem (container queries/clamp, nikdy „…“).
   Přesun aktiva do „Mimo portfolio“: ikona archivu v tabulce aktiv →
@@ -309,11 +342,15 @@ src/components/            # vizní komponenty (viz níže)
   Sekce „Limitky na burze“ (`getGameMarketOrders`) leží MEZI Aktiva a
   Uzavřené pozice (ne až dole) a tabulka ukazuje ekonomiku realizace:
   Ø nákup lotů (FIFO dle kvality nabídky, fallback průměr přes všechny
-  kvality), vzdálenost limitu od trhu v %, odhad poplatku + přepravy,
-  netto tržbu a očekávaný zisk ($ i %) vs. nákup. Metodika = rozpad
-  nákladů uzavřených pozic: poplatek 4 % z tržby (sazba v `lib/sale-costs.ts`; přesnou částku,
-  hlásí-li ji hra u nabídky v `fees`, bereme z ní), přeprava exaktně
-  (poměr položky × cena Přepravy ze skladu, fallback GAME_TRANSPORT_PCT).
+  kvality), vzdálenost limitu od trhu v %, poplatek + přeprava, netto
+  tržbu (hrubá − fee − přeprava u položek s poměrem > 0 – stejná
+  herní parita jako aktiva) a očekávaný zisk ($ i %) vs. nákup.
+  Metodika = rozpad nákladů uzavřených pozic: poplatek 4 % z tržby
+  (sazba v `lib/sale-costs.ts`; přesnou částku, hlásí-li ji hra u
+  nabídky v `fees`, bereme z ní), přeprava exaktně (poměr položky ×
+  cena Přepravy ze skladu, fallback GAME_TRANSPORT_PCT) – transport
+  ZŮSTÁVÁ v cost_breakdown uzavřených pozic (skutečné účetnictví z
+  cashflow).
   Badge „limit X,XX $“ v tabulce aktiv záměrně NEEXISTUJE – limitní
   info je kompletní v tabulce limitek, znovu ho nepřidávat.
 - **Fáze ekonomiky**: dle hry `recession` = „Recese 📉", `normal` =
@@ -324,8 +361,10 @@ src/components/            # vizní komponenty (viz níže)
   (medián ~100 min). Intraday graf proto protahuje plochou rozpracovanou
   svíčku až do aktuálního bucketu (market page) a hero ukazuje „poslední
   obchod před X min“ (`formatRelativeAge`). Není to zastaralá data.
-- **Live komponenty v UI**: `HeroLivePrice` (market page hero: cena +
-  ask se spreadem + LIVE badge), `LivePrice`/`LiveChangeBadge`
+- **Live komponenty v UI**: `HeroLivePrice` (market page hero: HLAVNÍ
+  cena = ask + badge „ask“, sekundárně poslední obchod se spreadem
+  + LIVE badge), `useLiveAsk` (lib/live-prices – živý ask z SSE orderbook
+  eventů, SSR fallback), `LivePrice`/`LiveChangeBadge`
   (`live-price-text.tsx` – watchlist karty, market table, movers),
   `LiveUpdatedCell` (čas posledního obchodu v market table),
   `LiveCurrentPriceCell` (tabulka alertů), `OrderbookPanel` (top 5 asků
@@ -360,7 +399,10 @@ src/components/            # vizní komponenty (viz níže)
   rozdíl sklad vs. otevřené pozice source='game' per (položka, kvalita) =
   nový lot (buy_price = unit_cost ze hry) nebo FIFO prodej (sell_price
   odhad z posledního ticku Q0); položka zmizelá ze skladu = prodej vše;
-  manuální pozice se NESAHAJÍ.  Payloady se ukládají raw do `game_imports`
+  manuální pozice se NESAHAJÍ. Krok 1a: buy_price otevřených game lotů
+  se PŘI KAŽDÉM syncu re-alignuje na aktuální unit_cost snapshotu (hra
+  průběžně přepočítává cost šarží – výroba, FIFO spotřeba; bez toho
+  pořizovací cena v portfoliu věčně zaostává za herním dialogem).  Payloady se ukládají raw do `game_imports`
   (audit), snapshot s unit_cost do `game_warehouse`.
   Fáze 3 – OKAMŽITÉ UZAVÍRÁNÍ + KONTRAKTY + EXAKTNÍ NÁKLADY: prodeje
   (kind retail_sale / market_sale / contract_sale) uzavírají loty hned
@@ -405,10 +447,19 @@ src/components/            # vizní komponenty (viz níže)
 ## Externí API
 
 1. **SimCompanies** (`www.simcompanies.com/api/v3`) — oficiální, jen GET;
-   limit 1 req/s (throttle 1,1 s v `simco-official.ts`). Používá se pro
-   ORDERBOOK (aktivní nabídky): `market/{quality}/{id}/` → nejnižší ask
-   + top N nabídek (hero, mini orderbook, buy-alert hlídka). Dále
-   GitHub Actions cron `*/15 * * * *` (`fetch-market.mjs`, 1 req/5 s).
+   limit 1 req/s (throttle 1,1 s v `simco-official.ts`). Používá se pro    ORDERBOOK (aktivní nabídky): `market/{quality}/{id}/` → nejnižší ask
+    + top N nabídek (hero, mini orderbook, buy-alert hlídka). QUIRK (změřeno
+    2026-10-06): endpoint IGNORUJE kvalitu v path (path Q3 vrací prázdný
+    objekt `{}`) a vrací JEDNU odpověď se VŠEMI kvalitami Q0–Q10 – cena per
+    kvalita se musí FILTROVAT na `quality` v datech (getOfficialOrders volá
+    vždy path 0 a filtruje; bez toho „nejnižší ask“ míchá kvality). Dále
+    GitHub Actions cron `*/15 * * * *` (`fetch-market.mjs`, 1 req/5 s).
+    Položky BEZ KVALIT (jen univerzální Q0, jak funguje hra): výzkumy
+    (29–34, 58, 59, 100, 113), Software (35), Přeprava (13) – ověřeno
+    v orderbooku (path 0 vrací výhradně quality=0); whitelist
+    NO_QUALITY_ITEMS v data.ts řídí skrytí selektoru kvality
+    v kalkulačce (ContractCalculator, effQuality=0). Simco Tools flag
+    isResearch u výzkumů lže (false) – nespoléhat na něj.
 2. **Simco Tools** (`api.simcotools.com`) —OpenAPI spec:
    `https://api.simcotools.com/docs/simcotools.yaml`. Používané endpointy:
    candlesticks, prices (fetch cache 5 s – sdílí všichni diváci),
