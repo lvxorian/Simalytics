@@ -60,7 +60,7 @@ export default async function PortfolioPage({
   const { range } = await searchParams;
   const historyDays = range === "7" ? 7 : range === "90" ? 90 : 30;
 
-  const [holdings, closedPositions, log, ignoredItems, marketOrders] =
+  const [holdings, closedPositions, log, ignoredItems, marketOrders, valueHistory] =
     await Promise.all([
       getPortfolioHoldings().catch((err) => {
         // prázdné portfolio nesmí vypadat jako „0 ks držby“ bez stopy –
@@ -76,6 +76,11 @@ export default async function PortfolioPage({
       getGameMarketOrders().catch(
         () => [] as Awaited<ReturnType<typeof getGameMarketOrders>>
       ),
+      // Historie hodnoty nezávisí na holdings – jde paralelně s ostatními
+      // dotazy (dřív sekvenčně PO nich, což stránku zbytečně prodlužovalo).
+      getPortfolioValueHistory(historyDays).catch(
+        () => [] as { time: number; value: number }[]
+      ),
     ]);
 
   // Lots (jednotlivé nákupy) pro každé aktivum – paralelně
@@ -86,10 +91,6 @@ export default async function PortfolioPage({
     ...h,
     lots: lotsPerAsset[i],
   }));
-
-  const valueHistory = await getPortfolioValueHistory(historyDays).catch(
-    () => [] as { time: number; value: number }[]
-  );
 
   const invested = assets.reduce((s, h) => s + h.invested, 0);
   const marketValue = assets.reduce(

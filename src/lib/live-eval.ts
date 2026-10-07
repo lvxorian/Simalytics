@@ -147,17 +147,31 @@ export async function evaluateLiveAlerts(
       kind: a.kind,
     };
 
-    // Fire-and-forget – nesmí zpomalit evaluaci
-    notifyAlert(notification, process.env.ALERT_EMAIL_TO ?? null).catch(
-      () => {}
-    );
-
-    // One-shot: po první aktivaci se alert SMAŽE (atomicky po cooldown
-    // guardu – tedy jen když tenhle běh notifikaci skutečně dostal).
+    // One-shot: notifikaci ČEKÁME (s timeoutem 5 s) a alert mažeme jen
+    // po úspěšném doručení – fire-and-forget by při výpadku webhooku/
+    // Resendu ztratil alert navždy (smazaný, nikdo nedozvěděl).
     let oneShot = false;
     if (a.one_shot) {
-      await db`delete from alerts where id = ${a.id}::uuid`;
-      oneShot = true;
+      const delivered = await Promise.race([
+        notifyAlert(notification, process.env.ALERT_EMAIL_TO ?? null),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 5_000)),
+      ]);
+      if (delivered) {
+        await db`delete from alerts where id = ${a.id}::uuid`;
+        oneShot = true;
+      } else {
+        // Nedoručeno – alert zůstává, zkusí se při příští evaluaci
+        // (cooldown guard už proběhl, takže hned znovu nevytriggeruje;
+        // po 60 min se zkusí znovu – to je správné, radši pozdě než nikdy).
+        console.error(
+          `[live-eval] one_shot alert ${a.id} (${a.item_name}) – notifikace se nepodařila doručit, alert zůstává aktivní`
+        );
+      }
+    } else {
+      // Běžný alert: fire-and-forget – nesmí zpomalit evaluaci.
+      notifyAlert(notification, process.env.ALERT_EMAIL_TO ?? null).catch(
+        () => {}
+      );
     }
 
     triggered.push({

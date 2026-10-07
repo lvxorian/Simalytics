@@ -29,6 +29,16 @@ export type CertDemandRow = {
  * 2 req/s zvládneme s malými pauzami.
  */
 export async function getCertDemand(): Promise<Map<number, CertDemandRow>> {
+  // In-memory TTL cache (15 min): cert demand se mění pomalu a výpočet
+  // dělá 5 SEKVENČNÍCH upstream volání (600 ms pauza kvůli 2 req/s)
+  // ≈ 8 s – bez cache stálo každé načtení /statistiky těchto 8 s.
+  // next.revalidate se u force-dynamic stránek neprojevil, proto pevná
+  // paměťová cache (vzor /api/live/asks).
+  const now = Date.now();
+  if (certDemandCache && now - certDemandCacheAtMs < CERT_DEMAND_TTL_MS) {
+    return certDemandCache;
+  }
+
   const db = getDb();
   const kinds = (await db`
     select kind from cert_kinds where relevant = true order by kind
@@ -90,8 +100,14 @@ export async function getCertDemand(): Promise<Map<number, CertDemandRow>> {
     }
   }
 
+  certDemandCache = demand;
+  certDemandCacheAtMs = now;
   return demand;
 }
+
+const CERT_DEMAND_TTL_MS = 15 * 60 * 1000;
+let certDemandCache: Map<number, CertDemandRow> | null = null;
+let certDemandCacheAtMs = 0;
 
 /** Volitelné: vrátí i relevantní druhy pro UI tooltip. */
 export async function getRelevantKinds(): Promise<number[]> {

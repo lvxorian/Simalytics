@@ -344,25 +344,17 @@ export async function getFollowedSummaries(
   return data.summaries ?? [];
 }
 
-/** Poslední obchod pro konkrétní resource a kvalitu. */
-export async function getMarketPrice(
-  resourceId: number,
-  quality = 0
-): Promise<SimcoTradeTick[]> {
-  const data = await simcoFetch<{ prices: SimcoTradeTick[] }>(
-    `/v1/realms/${REALM_ID}/market/prices/${resourceId}/${quality}`
-  );
-  return data.prices ?? [];
-}
-
-/** Kompletní market summary (5m svíčka, denní svíčka, VWAP, změny). */
+/** Kompletní market summary (5m svíčka, denní svíčka, VWAP, změny).
+ *  Cache 30 s – data jde na market page MiniStats; živé ceny dorážejí
+ *  přes SSE, takže krátká cache neublíží a šetří ratelimit. */
 export async function getMarketSummary(
   resourceId: number,
   quality = 0
 ): Promise<SimcoMarketSummary | null> {
   try {
     const data = await simcoFetch<{ summary: SimcoMarketSummary }>(
-      `/v1/realms/${REALM_ID}/market/resources/${resourceId}/${quality}`
+      `/v1/realms/${REALM_ID}/market/resources/${resourceId}/${quality}`,
+      30
     );
     return data.summary ?? null;
   } catch {
@@ -370,47 +362,56 @@ export async function getMarketSummary(
   }
 }
 
-/** Ekonomické eventy (random events) ovlivňující produkci. */
+/** Ekonomické eventy (random events) ovlivňující produkci.
+ *  Cache 60 s – eventy přibývají/bývají v hodinovém rytmu. */
 export async function getEvents(): Promise<SimcoEvent[]> {
   const data = await simcoFetch<{ events: SimcoEvent[] }>(
-    `/v1/realms/${REALM_ID}/events`
+    `/v1/realms/${REALM_ID}/events`,
+    60
   );
   return data.events ?? [];
 }
 
-/** Vládní zakázky (stránkované) – obrovský poptávkový signál. */
+/** Vládní zakázky (stránkované) – obrovský poptávkový signál.
+ *  Cache 5 min – zakázky se vypisují v řádu dní. */
 export async function getGovernmentOrders(pageSize = 25): Promise<
   SimcoGovernmentOrder[]
 > {
   const data = await simcoFetch<{
     orders: SimcoGovernmentOrder[];
-  }>(`/v1/realms/${REALM_ID}/government-orders?page_size=${pageSize}`);
+  }>(`/v1/realms/${REALM_ID}/government-orders?page_size=${pageSize}`, 300);
   return data.orders ?? [];
 }
 
-/** Historie fází ekonomiky (normal/boom/recession) – první řádek = aktuální. */
+/** Historie fází ekonomiky (normal/boom/recession) – první řádek = aktuální.
+ *  Cache 15 min – fáze se mění jednou za ~7 dní. */
 export async function getPhaseRanges(): Promise<SimcoPhaseRange[]> {
   const data = await simcoFetch<{ ranges: SimcoPhaseRange[] }>(
-    `/v1/realms/${REALM_ID}/phases`
+    `/v1/realms/${REALM_ID}/phases`,
+    900
   );
   return data.ranges ?? [];
 }
 
-/** Kompletní katalog zdrojů realmu (jména v požadovaném jazyce). */
+/** Kompletní katalog zdrojů realmu (jména v požadovaném jazyce).
+ *  Cache 1 h – katalog je prakticky neměnný (transportation poměry,
+ *  mzdy se mění výjimečně); volá se i per-položka z datové vrstvy. */
 export async function getResources(): Promise<SimcoResource[]> {
   const data = await simcoFetch<{ resources: SimcoResource[] }>(
-    `/v1/realms/${REALM_ID}/resources?disable_pagination=true`
+    `/v1/realms/${REALM_ID}/resources?disable_pagination=true`,
+    3600
   );
   return data.resources ?? [];
 }
 
-/** Denní makro summary realmu (historie ~481 dní, stránkované). */
+/** Denní makro summary realmu (historie ~481 dní, stránkované).
+ *  Cache 15 min – nový řádek přibývá jednou denně. */
 export async function getRealmSummaries(
   pageSize = 30
 ): Promise<SimcoRealmSummary[]> {
   const data = await simcoFetch<{
     summaries: SimcoRealmSummary[];
-  }>(`/v1/realms/${REALM_ID}/summaries?page_size=${pageSize}`);
+  }>(`/v1/realms/${REALM_ID}/summaries?page_size=${pageSize}`, 900);
   return data.summaries ?? [];
 }
 
@@ -441,22 +442,24 @@ export async function getCertificateKinds(): Promise<SimcoCertificateKind[]> {
 /**
  * Žebříček firem realmu (25 905 firem, stránkované).
  * Denní valuace – hodnota, patenty, pracovníci, bondy, pohyby v žebříčku.
+ * Cache 15 min – valuace se přepočítává jednou denně.
  */
 export async function getRanking(pageSize = 50): Promise<SimcoRankingEntry[]> {
   const data = await simcoFetch<{
     ranking: SimcoRankingEntry[];
-  }>(`/v1/realms/${REALM_ID}/ranking?page_size=${pageSize}`);
+  }>(`/v1/realms/${REALM_ID}/ranking?page_size=${pageSize}`, 900);
   return data.ranking ?? [];
 }
 
 /**
  * Statistiky zemí – počty firem, hodnota a top-3 firmy v každé zemi.
+ * Cache 15 min – denní agregace.
  * Odpověď je mapa { CC: stat } → převedeme na pole.
  */
 export async function getCountryStats(): Promise<SimcoCountryStat[]> {
   const data = await simcoFetch<{
     countries: Record<string, Omit<SimcoCountryStat, "countryCode">>;
-  }>(`/v1/realms/${REALM_ID}/stats/countries`);
+  }>(`/v1/realms/${REALM_ID}/stats/countries`, 900);
 
   return Object.entries(data.countries ?? {}).map(([code, stat]) => ({
     countryCode: code,
@@ -466,17 +469,22 @@ export async function getCountryStats(): Promise<SimcoCountryStat[]> {
   }));
 }
 
-/** Certifikáty jednoho druhu (držitelé + objemy). */
+/** Certifikáty jednoho druhu (držitelé + objemy).
+ *  Cache 15 min – cert demand se mění pomalu; bez cache stála sekce
+ *  „Cert demand“ 5 × (600 ms pauza + request) ≈ 8 s při každém načtení
+ *  /statistiky. */
 export async function getCertificatesByKind(
   kind: number
 ): Promise<SimcoCertificate[]> {
   const data = await simcoFetch<{ certificates: SimcoCertificate[] }>(
-    `/v1/realms/${REALM_ID}/certificates/${kind}`
+    `/v1/realms/${REALM_ID}/certificates/${kind}`,
+    900
   );
   return data.certificates ?? [];
 }
 
-/** Počty budov v realmu dle typu (production/sales/recreation/research). */
+/** Počty budov v realmu dle typu (production/sales/recreation/research).
+ *  Cache 15 min – denní agregace. */
 export async function getBuildingCounts(
   type: "all" | "production" | "sales" | "recreation" | "research" = "all"
 ): Promise<{ buildings: SimcoBuildingCount[]; total: number }> {
@@ -484,7 +492,8 @@ export async function getBuildingCounts(
     buildings: SimcoBuildingCount[];
     total_buildings: number;
   }>(
-    `/v1/realms/${REALM_ID}/stats/buildings?type=${type}&disable_pagination=true`
+    `/v1/realms/${REALM_ID}/stats/buildings?type=${type}&disable_pagination=true`,
+    900
   );
   return { buildings: data.buildings ?? [], total: data.total_buildings ?? 0 };
 }
