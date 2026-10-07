@@ -258,6 +258,12 @@ export default async function MarketItemPage({
   // ── Market summary ze Simco Tools (objem, 5m svíčka, denní VWAP) ──
   const summary = await getMarketSummary(id, 0);
 
+  // Nejnižší aktivní nabídka ze SSR – hlavní cena hero i ask linka grafu
+  // (ofiko v3 orderbook, throttle 1,1 s v simco-official)
+  const heroAsk = await getLowestAsk(id, 0)
+    .then((r) => r?.price ?? null)
+    .catch(() => null);
+
   // ── Signal Engine badge (eventy / soutěž / VWAP divergence) ──────
   const [contests, events, latestVwap] = await Promise.all([
     getActiveContests(),
@@ -372,7 +378,7 @@ export default async function MarketItemPage({
               initialPrice={lastTick}
               initialChange24h={change24h}
               initialLastTradeMs={lastTradeMs}
-              initialAsk={await getLowestAsk(id, 0).then((r) => r?.price ?? null).catch(() => null)}
+              initialAsk={heroAsk}
             />
           </div>
         </div>
@@ -463,6 +469,8 @@ export default async function MarketItemPage({
               itemName={item.name}
               itemImageUrl={img}
               currentPrice={lastTick}
+              currentAsk={heroAsk}
+              showAskLine
               change24h={change24h}
               itemTicker={item.db_letter}
               live

@@ -14,6 +14,7 @@ import {
   createChart,
   type Time,
   type IChartApi,
+  type IPriceLine,
   type ISeriesApi,
   type LogicalRange,
   type MouseEventParams,
@@ -30,7 +31,11 @@ import {
 import type { Candle, LinePoint } from "@/lib/candles";
 import { mergeLiveTick } from "@/lib/candles";
 import type { IntervalKey } from "@/lib/candles";
-import { useLiveTick, impliedBase24h } from "@/lib/live-prices";
+import {
+  useLiveTick,
+  useLiveAsk,
+  impliedBase24h,
+} from "@/lib/live-prices";
 import { ChangeBadge } from "@/components/change-badge";
 import { CandleCountdown } from "@/components/candle-countdown";
 import {
@@ -177,6 +182,8 @@ export function PriceChart({
   itemName,
   itemImageUrl,
   currentPrice,
+  currentAsk,
+  showAskLine,
   change24h,
   itemTicker,
   alerts,
@@ -244,6 +251,12 @@ export function PriceChart({
     livePrice != null && liveBase != null && liveBase > 0
       ? ((livePrice - liveBase) / liveBase) * 100
       : change24h;
+
+  // Živý ask (orderbook přes SSE store) – hlavní cena fullscreen hlavičky
+  // a přerušovaná linka v grafu; SSR prop jen jako počáteční hodnota.
+  // Fallback: bez asku se hlavička drží posledního obchodu (livePrice).
+  const { ask: liveAsk } = useLiveAsk(itemId ?? 0, currentAsk ?? null);
+  const headerPrice = liveAsk ?? livePrice;
 
   const [visible, setVisible] = useState<Record<OverlayKey, boolean>>({
     volume: true,
@@ -582,6 +595,8 @@ export function PriceChart({
       mainSeries = series;
     }
     mainSeriesRef.current = mainSeries;
+    // Ask linka patří k nové sérii (stará zemřela s předchozím chartem)
+    askSyncRef.current();
 
     // Plovoucí cenovka u přichyceného bodu (jen režim Linie) – ukáže cenu
     // bodu, na který se crosshair přichytil
@@ -739,6 +754,69 @@ export function PriceChart({
   const savedLogicalRange = useRef<{ from: number; to: number } | null>(null);
   const prevIntervalRef = useRef(intervalKey);
 
+  // ── Ask linka (nejnižší aktivní nabídka) ────────────────────────
+  // Přerušovaná oranžová linka à la TradingView: ukazuje cenu, za kterou
+  // lze koupit HNED (orderbook) – aktuálnější než hladina posledního
+  // obchodu. Popisek na cenové ose drží Lightweight Charts.
+  // POZOR: ask/showAskLine NESMÍ být v deps vytvářejícího efektu grafu –
+  // změna by rekonstruovala graf na každou změnu orderbooku. Update jde
+  // přes priceLine.applyOptions; po rekonstrukci grafu (přepnutí TF /
+  // overlaye) volá vytvářející efekt askSyncRef() a linka se vytvoří
+  // na nové sérii (stará patřila zrušenému chart objektu).
+  const askLineRef = useRef<IPriceLine | null>(null);
+  const askLineSeriesRef = useRef<
+    ISeriesApi<"Candlestick"> | ISeriesApi<"Area"> | null
+  >(null);
+  const askRef = useRef<number | null>(null);
+  askRef.current = liveAsk;
+  const showAskLineRef = useRef(showAskLine);
+  showAskLineRef.current = showAskLine;
+  const askSyncRef = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    const syncAskLine = () => {
+      const series = mainSeriesRef.current;
+      if (!series) return;
+      // rekonstrukce grafu → stará linka je mrtvá, zahodit
+      if (askLineRef.current && askLineSeriesRef.current !== series) {
+        askLineRef.current = null;
+      }
+      askLineSeriesRef.current = series;
+
+      const ask = askRef.current;
+      if (ask == null || !showAskLineRef.current || !(ask > 0)) {
+        if (askLineRef.current) {
+          try {
+            series.removePriceLine(askLineRef.current);
+          } catch {
+            // série už je odstraněná – nic
+          }
+          askLineRef.current = null;
+        }
+        return;
+      }
+      try {
+        if (askLineRef.current) {
+          askLineRef.current.applyOptions({ price: ask });
+        } else {
+          askLineRef.current = series.createPriceLine({
+            price: ask,
+            color: "#e3a008", // oranžová – „realizovatelná nabídka", odlišná od alertů (modrá) a Max/Min
+            lineWidth: 1,
+            lineStyle: LineStyle.Dashed,
+            axisLabelVisible: true,
+            title: "ask",
+          });
+        }
+      } catch {
+        // série zrovna neexistuje – příští tick/efekt to dorazí
+      }
+    };
+
+    askSyncRef.current = syncAskLine;
+    syncAskLine();
+  }, [liveAsk, showAskLine]);
+
   // Nástroje VP/pravítko: jen během AKTIVNÍHO kreslení se vypne pan tažením
   // (kolečko/pinch zoomují vždy). Připnutý VP objekt pan/zoomu nebrání –
   // profil se přemalovává synchronně, takže fituje plynule jako ve TV.
@@ -847,6 +925,9 @@ export function PriceChart({
       document.body.style.overflow = "";
     };
   }, [isFullscreen]);
+
+  // Fullscreen re-parent nemění sérii – ask linka zůstává; jen pro jistotu
+  // zkontrolujeme geometrii (priceToCoordinate po resize se přepočítá samo).
 
   // ── VP overlay: imperativní canvas místo React/SVG ──────────────
   // SVG overlay se přemalovával přes React state (vpEpoch) – během
@@ -1516,9 +1597,24 @@ export function PriceChart({
                 <span className="rounded-md border border-border px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
                   Q0
                 </span>
-                {livePrice != null && (
-                  <span className="font-mono text-lg font-semibold tabular-nums text-foreground">
-                    {formatPrice(livePrice)}
+                {headerPrice != null && (
+                  <span
+                    className="font-mono text-lg font-semibold tabular-nums text-foreground"
+                    title={
+                      liveAsk != null
+                        ? "Nejnižší aktivní nabídka (ask) – za kolik lze koupit hned"
+                        : "Poslední realizovaný obchod (orderbook teď není dostupný)"
+                    }
+                  >
+                    {formatPrice(headerPrice)}
+                  </span>
+                )}
+                {liveAsk != null && (
+                  <span
+                    className="rounded-md border border-border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
+                    title="Hlavní cena = nejnižší aktivní nabídka (ask) – realizovatelná okamžitě"
+                  >
+                    ask
                   </span>
                 )}
                 <ChangeBadge value={liveChange} size="sm" />
@@ -1586,8 +1682,13 @@ export function PriceChart({
 }
 
 type PriceChartProps = {
-  /** Hlavní cena (last tick) – pro fullscreen hlavičku. */
+  /** Poslední obchod (fallback ceny ve fullscreen hlavičce). */
   currentPrice?: number | null;
+  /** Nejnižší aktivní nabídka (ask) – hlavní cena fullscreen hlavičky
+   *  a přerušovaná linka v grafu (showAskLine). Živě přes SSE store. */
+  currentAsk?: number | null;
+  /** Přerušovaná ask linka v grafu – zapnutá jen na market page. */
+  showAskLine?: boolean;
   /** 24h změna v % – pro fullscreen hlavičku. */
   change24h?: number | null;
   /** Herní zkratka komodity (např. „BXC"). */

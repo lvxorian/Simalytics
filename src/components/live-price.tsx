@@ -8,14 +8,14 @@ import { useLiveTick, useLiveSnapshot, impliedBase24h } from "@/lib/live-prices"
 import { cn } from "@/lib/utils";
 
 /**
- * Live hero cena (market page): SSR cena se po připojení live pollu
- * nahradí čerstvým tickem (SSE push, latence ~1–2 s od obchodu).
- * Zelený/barevný záblesk signalizuje změnu ceny proti předchozí hodnotě;
- * „poslední obchod před X min" se přepočítává každou sekundu.
+ * Live hero cena (market page): HLAVNÍ cena = AKTIVNÍ NABÍDKA (nejnižší
+ * ask z orderbooku) – za kolik lze koupit HNED; poslední obchod je
+ * zpožděný údaj a ukazuje se jen jako sekundární řádek. Ask se dotahuje
+ * z /api/live/ask (ofiko v3 API, cache 3 s) každých 5 s; když orderbook
+ * selže/prázdný, jako hlavní cena fallbackne poslední obchod.
  *
- * Fáze 3C: navíc AKTIVNÍ NABÍDKA (nejnižší ask z orderbooku) – co
- * reálně stojí koupit hned. Dotahuje se z /api/live/ask (ofiko v3 API,
- * cache 3 s) a žije s vlastními živými ticky.
+ * Živé ticky (SSE, ~1–2 s od obchodu) ženou „poslední obchod“ řádek;
+ * „před X min" se přepočítává každou sekundu.
  */
 export function HeroLivePrice({
   itemId,
@@ -38,15 +38,12 @@ export function HeroLivePrice({
   const lastTradeMs = tick ? Date.parse(tick.datetime) : initialLastTradeMs;
 
   // 24h změna přepočítaná proti base ceně odvozené ze SSR hodnot:
-  // base = impliedBase24h(initialPrice, initialChange24h) – mění se jen čitatel
+  // base = impliedBase24h(initialPrice, initialChange24h) – mění se jen čitatel.
+  // Počítá se z HLAVNÍ ceny (ask, fallback poslední obchod).
   const base24h =
     initialPrice !== null && initialChange24h !== null
       ? impliedBase24h(initialPrice, initialChange24h)
       : null;
-  const change24h =
-    price !== null && base24h !== null && base24h > 0
-      ? ((price - base24h) / base24h) * 100
-      : initialChange24h;
 
   // Stáří obchodu – ticking každou sekundu
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
@@ -55,7 +52,28 @@ export function HeroLivePrice({
     return () => clearInterval(id);
   }, []);
 
-  // Záblesk při změně ceny
+  // ── Live ask (orderbook) – HLAVNÍ cena ───────────────────────────
+  const { ask } = useLiveAsk(itemId, initialAsk ?? null);
+  const mainPrice = ask ?? price;
+  const mainChange24h =
+    mainPrice !== null && base24h !== null && base24h > 0
+      ? ((mainPrice - base24h) / base24h) * 100
+      : initialChange24h;
+
+  // Záblesk hlavní ceny při změně (standardní tržní semantika:
+  // nahoru = zelená, dolů = červená)
+  const [mainFlash, setMainFlash] = useState<"up" | "down" | null>(null);
+  const prevMainRef = useRef<number | null>(mainPrice);
+  useEffect(() => {
+    const prev = prevMainRef.current;
+    prevMainRef.current = mainPrice;
+    if (prev === null || mainPrice === null || prev === mainPrice) return;
+    setMainFlash(mainPrice > prev ? "up" : "down");
+    const t = setTimeout(() => setMainFlash(null), 900);
+    return () => clearTimeout(t);
+  }, [mainPrice]);
+
+  // Záblesk ceny obchodu (sekundární řádek)
   const [flash, setFlash] = useState<"up" | "down" | null>(null);
   const prevPriceRef = useRef<number | null>(price);
   useEffect(() => {
@@ -67,75 +85,73 @@ export function HeroLivePrice({
     return () => clearTimeout(t);
   }, [price]);
 
-  // ── Live ask (orderbook) ─────────────────────────────────────────
-  const { ask, askMs } = useLiveAsk(itemId, initialAsk ?? null);
-
-  // Záblesk asku při změně
-  const [askFlash, setAskFlash] = useState<"up" | "down" | null>(null);
-  const prevAskRef = useRef<number | null>(ask);
-  useEffect(() => {
-    const prev = prevAskRef.current;
-    prevAskRef.current = ask;
-    if (prev === null || ask === null || prev === ask) return;
-    setAskFlash(ask > prev ? "up" : "down");
-    const t = setTimeout(() => setAskFlash(null), 900);
-    return () => clearTimeout(t);
-  }, [ask]);
-
   return (
     <div className="flex flex-wrap items-center gap-3">
       <span
         className={cn(
           "font-mono text-3xl font-semibold tabular-nums transition-colors duration-500",
-          flash === "up" && "text-up",
-          flash === "down" && "text-down",
-          !flash && "text-foreground"
+          mainFlash === "up" && "text-up",
+          mainFlash === "down" && "text-down",
+          !mainFlash && "text-foreground"
         )}
+        title={
+          ask !== null
+            ? "Nejnižší aktivní nabídka na burze (orderbook) – za kolik lze koupit hned. Aktuálnější než poslední obchod, který vzniká až realizovaným obchodem."
+            : undefined
+        }
       >
-        {formatPrice(price)}
+        {formatPrice(mainPrice)}
       </span>
-      <ChangeBadge value={change24h} />
+      {ask !== null ? (
+        <span
+          className="rounded-lg border border-border/60 bg-secondary/40 px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
+          title="Hlavní cena = nejnižší aktivní nabídka (ask) – realizovatelná okamžitě"
+        >
+          ask
+        </span>
+      ) : (
+        price !== null && (
+          <span
+            className="rounded-lg border border-border/60 bg-secondary/40 px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
+            title="Orderbook teď není dostupný – ukazuji poslední realizovaný obchod"
+          >
+            obchod
+          </span>
+        )
+      )}
+      <ChangeBadge value={mainChange24h} />
       <span className="text-xs text-muted-foreground">24h změna</span>
       {lastTradeMs != null && (
         <span
-          className="text-xs text-muted-foreground"
+          className={cn(
+            "font-mono text-xs tabular-nums transition-colors duration-500",
+            flash === "up" && "text-up",
+            flash === "down" && "text-down",
+            !flash && "text-muted-foreground"
+          )}
           title="Čas posledního obchodu této komodity. Na klidném trhu cena dlouho nezmizí – není to zastaralá data."
         >
           · poslední obchod{" "}
+          {ask !== null && price != null && price > 0 ? (
+            <>
+              {formatPrice(price)}
+              <span
+                className={cn(
+                  "ml-1 text-[10px] font-medium",
+                  ask < price
+                    ? "text-up" // ask pod obchodem = koupíš levněji
+                    : ask > price
+                      ? "text-down"
+                      : "text-muted-foreground"
+                )}
+              >
+                ({ask < price ? "" : "+"}
+                {(((ask - price) / price) * 100).toFixed(1)} %)
+              </span>
+              {" · "}
+            </>
+          ) : null}
           {formatRelativeAgeFromMs(lastTradeMs, nowMs)}
-        </span>
-      )}
-      {ask !== null && (
-        <span
-          className={cn(
-            "flex items-baseline gap-1.5 rounded-lg border border-border/60 bg-secondary/40 px-2 py-0.5 font-mono text-xs transition-colors duration-500",
-            askFlash === "up" && "text-down", // ask nahoru = dražší nákup (červeně)
-            askFlash === "down" && "text-up", // ask dolů = levnější nákup (zeleně)
-            !askFlash && "text-foreground"
-          )}
-          title="Nejnižší aktivní nabídka na burze (orderbook) – za kolik lze koupit hned. Liší se od posledního obchodu: nabídka je ještě nerealizovaná, obchod už ano."
-        >
-          <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            ask
-          </span>
-          <span className="font-semibold tabular-nums">{formatPrice(ask)}</span>
-          {price != null && price > 0 && (
-            <span
-              className={cn(
-                "text-[10px] font-medium",
-                ask < price ? "text-up" : ask > price ? "text-down" : "text-muted-foreground"
-              )}
-              title="Spread asku proti poslednímu obchodu – záporný = koupíš levněji než poslední obchod"
-            >
-              ({ask < price ? "" : "+"}
-              {(((ask - price) / price) * 100).toFixed(1)} %)
-            </span>
-          )}
-          {askMs !== null && (
-            <span className="text-[10px] text-muted-foreground">
-              · {formatRelativeAgeFromMs(askMs, nowMs)}
-            </span>
-          )}
         </span>
       )}
       {status === "live" && (

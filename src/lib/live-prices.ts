@@ -534,3 +534,50 @@ export function useLivePriceOverride(
 
   return { price: tick.price, change24h };
 }
+
+/**
+ * Živá nejnižší aktivní nabídka (ask) jedné položky.
+ *
+ * Data tečou z price hubu: market page má otevřený orderbook
+ * (OrderbookPanel → useLiveOrderbook), takže hub polluje položku
+ * s předností a SSE push 'orderbook' event při každé změně.
+ * Tady jen čteme store – ŽÁDNÝ vlastní polling proti ofiko API
+ * (limit 1 req/s), hloubka zůstává na hubu.
+ *
+ * SSR fallback: initialAsk (orderbook na serveru); žádný klientský
+ * polling – hero komponenta si řeší vlastní dotaz (/api/live/ask),
+ * tady je cílem graf/fullscreen, kde SSR hodnota + SSE stačí.
+ */
+export function useLiveAsk(
+  itemId: number,
+  initialAsk: number | null | undefined
+): { ask: number | null; askMs: number | null } {
+  const [ask, setAsk] = useState<number | null>(initialAsk ?? null);
+  const [askMs, setAskMs] = useState<number | null>(
+    initialAsk != null ? Date.now() : null
+  );
+
+  // SSE orderbook: top asky položky ze snapshotu (reference per položka)
+  const ob = useSyncExternalStore(
+    livePrices.subscribe,
+    () => livePrices.getSnapshot().orderbooks.get(itemId) ?? null,
+    () => null
+  );
+
+  useEffect(() => {
+    if (ob === null || ob.length === 0) return;
+    const best = ob[0]; // vzestupně seřazené – první = nejnižší ask
+    if (best && best.price > 0) {
+      setAsk(best.price);
+      setAskMs(Date.now());
+    }
+  }, [ob]);
+
+  // SSR hodnota platí, dokud SSE nepošle čerstvější orderbook
+  useEffect(() => {
+    setAsk(initialAsk ?? null);
+    setAskMs(initialAsk != null ? Date.now() : null);
+  }, [initialAsk, itemId]);
+
+  return { ask, askMs };
+}
