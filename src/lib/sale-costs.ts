@@ -41,6 +41,10 @@ export function estimateMarketFee(
  * Odhad nákladu přepravy (záporná částka) pro prodej `quantity` ks.
  * `ratio` = transportation poměr položky (Simco Tools), `unitCost` =
  * cena 1 ks Přepravy na skladu. Bez nich fallback % z tržby.
+ *
+ * POZOR: poměr 0 je ZNÁMÁ hodnota (energie, research položky – přepravu
+ * nespotřebují vůbec), ne chybějící data! Vrací exaktní nulu; fallback
+ * (% z tržby) jen když je poměr/cena skutečně nedostupná (null).
  */
 export function estimateTransport(
   gross: number,
@@ -48,6 +52,9 @@ export function estimateTransport(
   ratio: number | null,
   unitCost: number | null
 ): { transport: number; exact: boolean } {
+  if (ratio !== null && ratio === 0) {
+    return { transport: 0, exact: true };
+  }
   if (ratio !== null && unitCost !== null && ratio > 0 && unitCost > 0) {
     return { transport: -ratio * quantity * unitCost, exact: true };
   }
