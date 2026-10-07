@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Simalytics Sync
 // @namespace    simalytics
-// @version      0.5.0
+// @version      0.5.1
 // @description  Čte data otevřené hry SimCompanies (sklad, cashflow, limitky na burze) a synchronizuje je do Simalytics. Žádné extra requesty na herní servery – jen čte odpovědi, které prohlížeč stejně dostal.
 // @author       Simalytics
 // @match        https://www.simcompanies.com/*
@@ -28,6 +28,7 @@
  * Nastavení (menu Tampermonkey):
  *  – „Simalytics: nastavit URL“          – např. https://simalytics.vercel.app
  *  – „Simalytics: nastavit token“        – hodnota GAME_SYNC_SECRET
+ *  – „Simalytics: test spojení“          – ověří URL + token jedním klikem
  *  – „Simalytics: sync teď“              – pošle poslední nasbíraný sklad
  *  – „Simalytics: debug režim zap/vyp“   – sleduje VŠECHNY /api/ odpovědi
  *  – „Simalytics: zkopírovat dump“       – zkopíruje/stáhne dump pro vývojáře
@@ -73,6 +74,63 @@
           "Otevři sklad, pak dej „Simalytics: zkopírovat dump“."
         : "Debug režim vypnutý."
     );
+  });
+
+  // ── Test spojení (diagnostika URL + tokenu) ────────────────────
+  GM_registerMenuCommand("Simalytics: test spojení", () => {
+    if (!token) {
+      alert(
+        "Chybí token – nastav ho v menu „Simalytics: nastavit token“ " +
+        "(hodnota GAME_SYNC_SECRET z .env.local)."
+      );
+      return;
+    }
+    alert(
+      "Testuji spojení…\nEndpoint: " + endpoint +
+      "\n(Výsledek přijde dalším oknem.)"
+    );
+    GM_xmlhttpRequest({
+      method: "POST",
+      url: `${endpoint}/api/import/sync`,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      data: JSON.stringify({ source: "test-spojeni" }),
+      timeout: 15_000,
+      onload: (res) => {
+        if (res.status === 200) {
+          alert(
+            "✅ Spojení OK – push ze hry by měl fungovat.\nEndpoint: " +
+            endpoint
+          );
+          return;
+        }
+        if (res.status === 401) {
+          alert(
+            "❌ Server odpověděl 401 Unauthorized – token nesedí.\n" +
+            "Nastav v menu „Simalytics: nastavit token“ hodnotu " +
+            "GAME_SYNC_SECRET z .env.local (lokální server).\n" +
+            "Endpoint: " + endpoint
+          );
+          return;
+        }
+        alert(
+          "❌ Server odpověděl HTTP " + res.status +
+          "\nEndpoint: " + endpoint +
+          "\nOdpověď: " + String(res.responseText ?? "").slice(0, 300)
+        );
+      },
+      onerror: () => {
+        alert(
+          "❌ Spojení selhalo (síťová chyba).\nEndpoint: " + endpoint +
+          "\n\nZkontroluj:\n" +
+          "– běží Simalytics na té URL? (lokálně: npm run dev → http://localhost:3000)\n" +
+          "– nemáš v URL překlep/omlítka na konci?"
+        );
+      },
+      ontimeout: () => alert("❌ Timeout – server neodpověděl do 15 s.\nEndpoint: " + endpoint),
+    });
   });
 
   // ── Sběr dat ────────────────────────────────────────────────────
@@ -321,7 +379,7 @@
     const urls = [...new Set(rawSamples.map((s) => s.url))];
     return {
       generatedAt: new Date().toISOString(),
-      scriptVersion: "0.5.0",
+      scriptVersion: "0.5.1",
       debugMode,
       hasToken: Boolean(token),
       matchedUrlRe: String(CAPTURE_URL_RE),

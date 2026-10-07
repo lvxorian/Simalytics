@@ -110,7 +110,7 @@ export function HeaderSearch() {
           onKeyDown={onKeyDown}
           placeholder="Hledat instrument…"
           aria-label="Hledat instrument"
-          className="h-9 w-40 rounded-full border border-border bg-secondary/50 pl-9 pr-8 text-sm text-foreground placeholder:text-muted-foreground transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] focus:w-56 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/30 sm:w-48 sm:focus:w-64"
+          className="h-9 w-32 rounded-full border border-border bg-secondary/50 pl-9 pr-8 text-sm text-foreground placeholder:text-muted-foreground transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] focus:w-44 focus:border-ring/60 focus:outline-none focus:ring-2 focus:ring-ring/30 sm:w-36 sm:focus:w-52 lg:w-40 lg:focus:w-56"
         />
         {query && (
           <button
