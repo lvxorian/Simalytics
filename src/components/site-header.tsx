@@ -7,6 +7,7 @@ import {
   BarChart3,
   Bell,
   Briefcase,
+  Calculator,
   Percent,
   Radar,
   Star,
@@ -29,6 +30,7 @@ const NAV = [
   { href: "/alerts", label: "Alerty", icon: Bell },
   { href: "/statistiky", label: "Statistiky", icon: BarChart3 },
   { href: "/kalkulacka", label: "Kalkulačka", icon: Percent },
+  { href: "/profit", label: "Profit", icon: Calculator },
 ] as const;
 
 export function SiteHeader({

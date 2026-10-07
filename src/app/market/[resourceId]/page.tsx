@@ -12,6 +12,7 @@ import { StarButton } from "@/components/star-button";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { HeroLivePrice } from "@/components/live-price";
 import { OrderbookPanel } from "@/components/orderbook-panel";
+import { QualityAsksPanel } from "@/components/quality-asks-panel";
 import { ItemIcon } from "@/components/item-icon";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -535,9 +536,12 @@ export default async function MarketItemPage({
         </CardContent>
       </Card>
 
-      {/* ── Mini orderbook + „Firemní profil“ ────────────────── */}
+      {/* ── Mini orderbook + žebříček kvalit + „Firemní profil“ ── */}
       <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
-        <OrderbookPanel itemId={id} />
+        <div className="space-y-4">
+          <OrderbookPanel itemId={id} />
+          <QualityAsksPanel itemId={id} />
+        </div>
         <ItemProfile itemId={id} />
       </div>
 

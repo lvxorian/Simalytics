@@ -260,6 +260,17 @@ src/components/            # vizní komponenty (viz níže)
     triggeruje i ASK ≤ práh (nabídka na úrovni = příležitost koupit hned,
     nemusí čekat na obchod). Sell strana zůstává na posledním obchodě
     (prodej se řídí bidem, který API nevidí).
+  - **Žebříček kvalit na burze** (`quality-asks-panel.tsx` na market page,
+    pod mini orderbookem): nejnižší ask KAŽDÉ kvality, kterou burza aktuálně
+    nabízí, s Σ nabízenými ks a prémií vs. Q0. Hub agreguje ladder z TÉŽE
+    upstream odpovědi jako top-5 orderbook (getOfficialOrdersAllQualities –
+    path 0 = kompletní kniha, nula requestů navíc) a posílá ji ve STEJNÉM
+    'orderbook' SSE eventu (pole `qualities`; hello too) → useLiveQualityAsks
+    v live-prices. REST fallback /api/live/asks?item=X (offline, 15 s,
+    server cache 5 s). Panel se skryje, když má burza jen jedinou kvalitu
+    (výzkumy, Software, Přeprava). HUB STAV: pole qualityAsks v globalThis
+    stavu MUSÍ mít migraci v state() (stará perzistovaná instance bez nového
+    pole padala na „reading 'get'“).
   - **Cena vs. ask (AKTUALIZOVÁNO)**: market page hero i fullscreen hlavička
     grafu ukazují jako HLAVNÍ cenu ASK (nejnižší aktivní nabídka – za kolik
     lze koupit HNED; badge „ask“/fallback „obchod“); poslední obchod je jen

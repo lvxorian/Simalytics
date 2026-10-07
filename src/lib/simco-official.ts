@@ -133,6 +133,65 @@ export async function getLowestAsk(
   return { price: best.price, quantity: best.quantity };
 }
 
+/** Per-kvalitní souhrn (žebříček kvalit na burze, market page). */
+export type QualityAskSummary = {
+  quality: number;
+  /** Nejnižší ask kvality. */
+  price: number;
+  /** Σ nabízených ks napříč nabídkami kvality (hloubka trhu). */
+  quantity: number;
+  /** Počet aktivních nabídek. */
+  offers: number;
+};
+
+/**
+ * Agregace RAW orderů (getOfficialOrdersAllQualities) na per-kvalitní
+ * žebříček: nejnižší ask, celkový objem a počet nabídek. Jedna upstream
+ * odpověď (kompletní kniha) tak obslouží mini orderbook (Q0 top-5) i
+ * žebříček všech kvalit – nula requestů navíc.
+ */
+export function aggregateQualityAsks(
+  orders: OfficialOrder[]
+): QualityAskSummary[] {
+  const byQuality = new Map<number, QualityAskSummary>();
+  for (const o of orders) {
+    const cur = byQuality.get(o.quality);
+    if (!cur) {
+      byQuality.set(o.quality, {
+        quality: o.quality,
+        price: o.price,
+        quantity: o.quantity,
+        offers: 1,
+      });
+    } else {
+      cur.price = Math.min(cur.price, o.price);
+      cur.quantity += o.quantity;
+      cur.offers += 1;
+    }
+  }
+  return [...byQuality.values()].sort((a, b) => a.quality - b.quality);
+}
+
+/**
+ * Top N nejnižších nabídek dané kvality z RAW orderů – bez dalšího
+ * fetch (hub stejně stahuje kompletní knihu a potřebuje z ní Q0 i kvality).
+ */
+export function topAsksFrom(
+  orders: OfficialOrder[],
+  quality = 0,
+  topN = 5
+): { price: number; quantity: number; npc: boolean }[] {
+  return orders
+    .filter((o) => o.quality === quality)
+    .sort((a, b) => a.price - b.price)
+    .slice(0, topN)
+    .map((o) => ({
+      price: o.price,
+      quantity: o.quantity,
+      npc: o.seller?.npc ?? false,
+    }));
+}
+
 /**
  * Top N nejnižších nabídek (ask strana orderbooku) seřazené vzestupně –
  * hloubka trhu na straně nákupu (Fáze 3C: mini orderbook).

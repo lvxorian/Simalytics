@@ -49,6 +49,18 @@ export type LiveAsk = {
   npc: boolean;
 };
 
+/**
+ * Per-kvalitní žebříček asků (market page: „Kvality na burze“) –
+ * jede ve stejném 'orderbook' eventu jako LiveAsk (hub agreguje obě
+ * podoby z jedné upstream odpovědi).
+ */
+export type LiveQualityAsk = {
+  quality: number;
+  price: number;
+  quantity: number;
+  offers: number;
+};
+
 export type LiveSnapshot = {
   status: LiveStatus;
   items: ReadonlyMap<number, LiveItem>;
@@ -58,6 +70,8 @@ export type LiveSnapshot = {
   events: readonly LiveAlertEvent[];
   /** Orderbooky položek požadovaných přes useLiveOrderbook (id → top asky). */
   orderbooks: ReadonlyMap<number, readonly LiveAsk[]>;
+  /** Žebříček kvalit téže položky (id → per-kvalitní asky). */
+  qualities: ReadonlyMap<number, readonly LiveQualityAsk[]>;
 };
 
 const SERVER_SNAPSHOT: LiveSnapshot = {
@@ -67,6 +81,7 @@ const SERVER_SNAPSHOT: LiveSnapshot = {
   lastUpdatedMs: null,
   events: [],
   orderbooks: new Map(),
+  qualities: new Map(),
 };
 
 const REST_FALLBACK_MS = 10_000;
@@ -156,16 +171,23 @@ class LiveStore {
         const data = JSON.parse(e.data) as {
           items: LiveItem[];
           stale?: boolean;
-          orderbooks?: { item: number; asks: LiveAsk[] | null }[];
+          orderbooks?: {
+            item: number;
+            asks: LiveAsk[] | null;
+            qualities?: LiveQualityAsk[] | null;
+          }[];
           serverTime: string;
         };
         this.applyItems(data.items, data.serverTime);
         if (data.orderbooks) {
           const ob = new Map(this.snap.orderbooks);
+          const qm = new Map(this.snap.qualities);
           for (const o of data.orderbooks) {
             if (o.asks && o.asks.length > 0) ob.set(o.item, o.asks);
+            if (o.qualities && o.qualities.length > 0) qm.set(o.item, o.qualities);
+            else qm.delete(o.item);
           }
-          this.set({ orderbooks: ob });
+          this.set({ orderbooks: ob, qualities: qm });
         }
         this.set({
           status: data.stale ? "offline" : "live",
@@ -204,15 +226,27 @@ class LiveStore {
 
     const onOrderbook = (e: MessageEvent) => {
       try {
-        const data = JSON.parse(e.data) as { item: number; asks: LiveAsk[] };
+        const data = JSON.parse(e.data) as {
+          item: number;
+          asks: LiveAsk[];
+          qualities?: LiveQualityAsk[];
+        };
         if (!Array.isArray(data.asks)) return;
         const ob = new Map(this.snap.orderbooks);
+        const qm = new Map(this.snap.qualities);
         if (data.asks.length > 0) {
           ob.set(data.item, data.asks);
         } else {
           ob.delete(data.item); // burza prázdná
         }
-        this.set({ orderbooks: ob });
+        if (Array.isArray(data.qualities)) {
+          if (data.qualities.length > 0) {
+            qm.set(data.item, data.qualities);
+          } else {
+            qm.delete(data.item);
+          }
+        }
+        this.set({ orderbooks: ob, qualities: qm });
       } catch {
         // ignore
       }
@@ -475,6 +509,67 @@ export function useLiveOrderbook(
   }, [ob, itemId, status]);
 
   return { asks, source };
+}
+
+/**
+ * Žebříček asků všech kvalit položky (market page: „Kvality na burze“).
+ * Využívá STEJNOU registraci zájmu jako useLiveOrderbook (hub polluje
+ * položku jednou a 'orderbook' event nese i qualities) – žádný další
+ * upstream request. REST fallback (/api/live/asks) jen v offline režimu.
+ *
+ * Vrací null dokud nejsou data, poté pole per kvalitu (vzestupně).
+ */
+export function useLiveQualityAsks(
+  itemId: number
+): { qualities: LiveQualityAsk[] | null; source: "sse" | "rest" | "none" } {
+  const [qualities, setQualities] = useState<LiveQualityAsk[] | null>(null);
+  const [source, setSource] = useState<"sse" | "rest" | "none">("none");
+  const { status } = useLiveSnapshot();
+
+  // Registrace zájmu (idempotentní vůči useLiveOrderbook téže položky)
+  useEffect(() => {
+    livePrices.wantOrderbook(itemId);
+    return () => livePrices.forgetOrderbook(itemId);
+  }, [itemId]);
+
+  const qs = useSyncExternalStore(
+    livePrices.subscribe,
+    () => livePrices.getSnapshot().qualities.get(itemId) ?? null,
+    () => null
+  );
+
+  useEffect(() => {
+    if (qs !== null) {
+      setQualities([...qs]);
+      setSource("sse");
+      return;
+    }
+    if (status === "offline") {
+      setSource("rest");
+      let cancelled = false;
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      const poll = async () => {
+        try {
+          const res = await fetch(`/api/live/asks?item=${itemId}`, {
+            cache: "no-store",
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = (await res.json()) as { qualities?: LiveQualityAsk[] };
+          if (!cancelled) setQualities(data.qualities ?? []);
+        } catch {
+          // tiché – panel zůstane s posledními daty
+        }
+        if (!cancelled) timer = setTimeout(poll, 15_000);
+      };
+      void poll();
+      return () => {
+        cancelled = true;
+        if (timer) clearTimeout(timer);
+      };
+    }
+  }, [qs, itemId, status]);
+
+  return { qualities, source };
 }
 
 /**

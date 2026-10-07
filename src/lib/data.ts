@@ -3646,6 +3646,58 @@ async function matchSalePrice(
   return { price, matchedUnits: units };
 }
 
+// ── PROFIT KALKULAČKA (vstupy serveru, reuse interních cache) ────────
+
+/**
+ * Transportation poměr per položka + exaktní cena Přepravy (item 13)
+ * na skladu – vstupy pro exaktní náklad přepravy v /profit. Používá
+ * STEJNOU cache jako prodeje (getTransportationRatio, 24 h) – žádné
+ * nové volání Simco Tools mimo ohřátí cache.
+ */
+export type TransportInputs = {
+  /** ratio per itemId (null = neznámý → fallback % z tržby). */
+  ratios: Record<number, number | null>;
+  /** Cena 1 ks Přepravy na skladu (null = sklad prázdný/nesyncnutý). */
+  transportUnitCost: number | null;
+};
+
+export async function getTransportInputs(): Promise<TransportInputs> {
+  const db = getDb();
+  // Všechna id z items (151 položek); getTransportationRatio drží
+  // vlastní cache 24 h – po prvním načtení čte z paměti, žádné volání API.
+  const items = (await db`
+    select id from items order by id
+  `) as unknown as { id: number }[];
+  const ratios: Record<number, number | null> = {};
+  for (const row of items) {
+    ratios[row.id] = await getTransportationRatio(row.id);
+  }
+  const transportUnitCost = await getTransportUnitCost(db);
+  return { ratios, transportUnitCost };
+}
+
+/**
+ * Průměrně prodáno ks/den pro (položka, kvalita) z herního cashflow
+ * (maloobchod + burza + kontrakty) za posledních `days` dní. Vstup
+ * research ROI kalkulačky („při mém throughputu se výzkum vrátí za…“).
+ * Bez herního syncu vrací 0 – UI na to reaguje textem.
+ */
+export async function getGameSalesUnitsPerDay(
+  itemId: number,
+  quality: number,
+  days = 7
+): Promise<number> {
+  const db = getDb();
+  const rows = (await db`
+    select coalesce(sum(quantity), 0)::int as units
+    from game_cashflow
+    where item_id = ${itemId}
+      and quality = ${quality}
+      and kind in ('retail_sale', 'market_sale', 'contract_sale')
+      and datetime > now() - make_interval(days => ${days})
+  `) as unknown as { units: number }[];
+  return (rows[0]?.units ?? 0) / days;
+}
 /** Položka pro kalkulačku kontraktů – id, název, ikona, kategorie +
  *  poslední tržní cena per kvalita (reference „100 % MP“). */
 export type MarketInstrument = {

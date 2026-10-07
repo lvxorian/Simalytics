@@ -121,6 +121,43 @@ export async function sendEmail(
   }
 }
 
+/**
+ * E-mail s vlastním HTML/textem (týdenní report) – stejná Resend
+ * konfigurace jako alerty, jen jiný obsah. Vrací false bez konfigurace.
+ */
+export async function sendCustomEmail(args: {
+  subject: string;
+  text: string;
+  html: string;
+  to: string;
+}): Promise<boolean> {
+  const apiKey = process.env.ALERT_RESEND_API_KEY;
+  const from = process.env.ALERT_EMAIL_FROM;
+
+  if (!apiKey || !from) return false;
+
+  try {
+    const res = await fetch(RESEND_API, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from,
+        to: [args.to],
+        subject: args.subject,
+        text: args.text,
+        html: args.html,
+      }),
+    });
+
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 /** Jednoduchý HTML e-mail v barvách appky (dark, ink navy). */
 function renderAlertEmailHtml(notification: AlertNotification): string {
   const link = notification.url

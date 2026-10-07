@@ -665,6 +665,16 @@ export function ContractCalculator({
                   ))}
                 </div>
 
+                {/* Herní limit: burza i kontrakty kontrolují ceny ±30 %
+                    od reference ceny (24h aktivita; dřív 40 %). Rozsah
+                    přepínače (−50…+50) je širší než limit – upozorníme. */}
+                {Number.isFinite(pctNum) && Math.abs(pctNum) > 30 && (
+                  <p className="text-[11px] text-destructive">
+                    Mimo herní limit ±30 % od reference – hra takovou cenu
+                    na kontraktu/burze pravděpodobně nepřijme.
+                  </p>
+                )}
+
                 <div className="space-y-2">
                   <Label htmlFor="cc-qty">Množství (ks) – pro celkem</Label>
                   <Input

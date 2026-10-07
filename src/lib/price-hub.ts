@@ -1,6 +1,11 @@
 import { getDb } from "@/lib/db";
 import { getFollowedSummaries, getMarketPrices } from "@/lib/simcotools";
-import { getLowestAsk, getOrderbookAsks } from "@/lib/simco-official";
+import {
+  getLowestAsk,
+  getOfficialOrdersAllQualities,
+  aggregateQualityAsks,
+  topAsksFrom,
+} from "@/lib/simco-official";
 import {
   evaluateLiveAlerts,
   persistTicks,
@@ -37,6 +42,17 @@ export type HubAsk = {
   price: number;
   quantity: number;
   npc: boolean;
+};
+
+/**
+ * Per-kvalitní žebříček asků (market page: „Kvality na burze“) –
+ * agregace téže upstream odpovědi, ze které jde mini orderbook Q0.
+ */
+export type HubQualityAsk = {
+  quality: number;
+  price: number;
+  quantity: number;
+  offers: number;
 };
 
 const HUB_STEP_MS = 2_000; // střídavě A/B → každý endpoint dotazován 1× za 4 s
@@ -78,6 +94,8 @@ type HubState = {
   askWatch: Map<number, number>;
   /** Full orderbook top-5 asků pro položky otevřené diváky (SSE push). */
   orderbook: Map<number, HubAsk[]>;
+  /** Žebříček kvalit pro tytéž položky (agregát z téže odpovědi). */
+  qualityAsks: Map<number, HubQualityAsk[]>;
   /** Položky, které si klienti výslovně vyžádali (?items= v SSE). */
   requestedOrderbookIds: Set<number>;
   /**
@@ -120,6 +138,7 @@ function state(): HubState {
       lastEvalMs: 0,
       askWatch: new Map(),
       orderbook: new Map(),
+      qualityAsks: new Map(),
       requestedOrderbookIds: new Set(),
       nonAuthoritative: new Set(),
       pendingFootprint: null,
@@ -134,7 +153,11 @@ function state(): HubState {
       stale: false,
     };
   }
-  return g.__simalyticsHub;
+  const s = g.__simalyticsHub;
+  // Migrace perzistovaného stavu (HMR / deploy nové verze nad starým
+  // globalThis): stará instance nemá novější pole → doplň.
+  if (!(s.qualityAsks instanceof Map)) s.qualityAsks = new Map();
+  return s;
 }
 
 function snapshotTicks(): HubTick[] {
@@ -377,7 +400,12 @@ async function orderbookStep(s: HubState) {
     const id = ids[s.orderbookCursor % ids.length];
     s.orderbookCursor = (s.orderbookCursor + 1) % ids.length;
     try {
-      const asks = await getOrderbookAsks(id, 0, 5);
+      // JEDNA upstream odpověď = kompletní kniha VŠECH kvalit (quirk v3:
+      // path 0 vrací vše) – poslouží mini orderbooku (Q0 top-5) I žebříčku
+      // kvalit. Proti původnímu stavu žádný request navíc.
+      const all = await getOfficialOrdersAllQualities(id);
+      const asks = topAsksFrom(all, 0, 5);
+      const quals = aggregateQualityAsks(all);
       const prev = s.orderbook.get(id);
       const next = asks.length > 0 ? asks : null;
       if (next === null) {
@@ -385,9 +413,18 @@ async function orderbookStep(s: HubState) {
       } else {
         s.orderbook.set(id, next);
       }
-      // Publish jen při skutečné změně (JSON srovnání – 5 položek, levné)
+      const prevQ = s.qualityAsks.get(id);
+      const nextQ = quals.length > 0 ? quals : null;
+      if (nextQ === null) {
+        s.qualityAsks.delete(id);
+      } else {
+        s.qualityAsks.set(id, nextQ);
+      }
+      // Publish jen při skutečné změně (JSON srovnání – ≤ 5 + ≤ 11 položek,
+      // levné). Změna kterékoli části pošle event s OBOU aktuálními hodnotami.
       const changed =
-        JSON.stringify(prev ?? null) !== JSON.stringify(next ?? null);
+        JSON.stringify(prev ?? null) !== JSON.stringify(next ?? null) ||
+        JSON.stringify(prevQ ?? null) !== JSON.stringify(nextQ ?? null);
       if (changed) {
         s.lastOrderbookChangeMs = Date.now();
         publish({ type: "orderbook", orderbookIds: [id] });
@@ -471,11 +508,16 @@ export function hubIsStale(): boolean {
  */
 export function registerOrderbookInterest(
   itemId: number
-): { asks: HubAsk[] | null; unregister: () => void } {
+): {
+  asks: HubAsk[] | null;
+  qualities: HubQualityAsk[] | null;
+  unregister: () => void;
+} {
   const s = state();
   s.requestedOrderbookIds.add(itemId);
   return {
     asks: s.orderbook.get(itemId) ?? null,
+    qualities: s.qualityAsks.get(itemId) ?? null,
     unregister: () => {
       s.requestedOrderbookIds.delete(itemId);
       // Cache necháme (další divák téže položky dostane hned data);
@@ -483,6 +525,7 @@ export function registerOrderbookInterest(
       // cyklu – jednoduchost předána na malou velikost mapy (max pár IDS).
       if (s.requestedOrderbookIds.size === 0) {
         s.orderbook.clear();
+        s.qualityAsks.clear();
       }
     },
   };
@@ -491,6 +534,11 @@ export function registerOrderbookInterest(
 /** Orderbook snapshot pro položku (SSE 'hello' event). */
 export function hubOrderbook(itemId: number): HubAsk[] | null {
   return state().orderbook.get(itemId) ?? null;
+}
+
+/** Žebříček kvalit pro položku (SSE 'hello'/'orderbook' event). */
+export function hubQualityAsks(itemId: number): HubQualityAsk[] | null {
+  return state().qualityAsks.get(itemId) ?? null;
 }
 
 /** Změnil se orderbook od času ms? (pro rozhodnutí o refetch fallbacku) */

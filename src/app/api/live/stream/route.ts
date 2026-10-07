@@ -3,8 +3,10 @@ import {
   hubSnapshot,
   hubIsStale,
   hubOrderbook,
+  hubQualityAsks,
   registerOrderbookInterest,
   type HubAsk,
+  type HubQualityAsk,
 } from "@/lib/price-hub";
 
 export const dynamic = "force-dynamic";
@@ -60,11 +62,19 @@ export async function GET(req: Request) {
       };
 
       // Okamžitý „hello" – snapshot (i prázdný) + stav + orderbooky
-      const orderbooks: { item: number; asks: HubAsk[] | null }[] = [];
+      const orderbooks: {
+        item: number;
+        asks: HubAsk[] | null;
+        qualities: HubQualityAsk[] | null;
+      }[] = [];
       for (const id of requestedIds) {
         const interest = registerOrderbookInterest(id);
         unregisterOrderbook.push(interest.unregister);
-        orderbooks.push({ item: id, asks: interest.asks });
+        orderbooks.push({
+          item: id,
+          asks: interest.asks,
+          qualities: interest.qualities,
+        });
       }
       send("hello", {
         items: hubSnapshot(),
@@ -82,7 +92,11 @@ export async function GET(req: Request) {
           for (const id of ev.orderbookIds ?? []) {
             if (!requestedIds.includes(id)) continue;
             const asks = hubOrderbook(id);
-            send("orderbook", { item: id, asks: asks ?? [] });
+            send("orderbook", {
+              item: id,
+              asks: asks ?? [],
+              qualities: hubQualityAsks(id) ?? [],
+            });
           }
         } else {
           send("stale", { stale: true });
