@@ -2166,6 +2166,24 @@ export async function reconcileGameWarehouse(
               updated_at = now()
       `;
 
+      // 1a) Re-alignment pořizovací ceny: hra průběžně přepočítává cost
+      // šarží (výroba, nákupy, FIFO spotřeba starších šarží) – loty
+      // vzniklé dříve by jinak VĚČNĚ nesly starou cenu (např. dýně Q0
+      // 4,72 z 9/14 vs. aktuálních 6,30 ve hře) a P/L ani „pořizovací
+      // cena" by neseděly s herním dialogem prodeje. Základ pravdy =
+      // unit_cost snapshotu; jen otevřené game loty, manuál se nesahá.
+      if (entry.unit_cost !== null && entry.unit_cost > 0) {
+        await sql`
+          update positions
+          set buy_price = ${entry.unit_cost}
+          where item_id = ${entry.item_id}
+            and quality = ${entry.quality}
+            and closed_at is null
+            and source = 'game'
+            and buy_price <> ${entry.unit_cost}
+        `;
+      }
+
       // 2) stav otevřených game pozic dané položky A kvality
       // + jednotky vložené na burzu (vlastní nabídky) – ty se ve hře
       // PŘESUNOU ze skladu, ale nejsou to prodej ani spotřeba; bez
@@ -2189,15 +2207,25 @@ export async function reconcileGameWarehouse(
 
       if (diff === 0) continue;
 
-      // poslední tržní cena (tick Q0) – fallback pro ceny
+      // poslední tržní cena TÉTO kvality (fallback pro ceny; Q0 tick jako
+      // záloha, když kvalita nemá vlastní obchody)
       const priceRows = (await sql`
         select price from price_history
-        where item_id = ${entry.item_id} and quality = 0
+        where item_id = ${entry.item_id} and quality = ${entry.quality}
         order by recorded_at desc limit 1
       `) as unknown as { price: string }[];
       const marketPrice =
         priceRows[0] && Number(priceRows[0].price) > 0
           ? Number(priceRows[0].price)
+          : 0;
+      const q0PriceRows = marketPrice === 0 ? (await sql`
+        select price from price_history
+        where item_id = ${entry.item_id} and quality = 0
+        order by recorded_at desc limit 1
+      `) as unknown as { price: string }[] : [];
+      const q0FallbackPrice =
+        q0PriceRows[0] && Number(q0PriceRows[0].price) > 0
+          ? Number(q0PriceRows[0].price)
           : 0;
 
       if (diff > 0) {
@@ -2236,6 +2264,10 @@ export async function reconcileGameWarehouse(
         if (buyPrice === null && marketPrice > 0) {
           buyPrice = marketPrice;
           priceSource = "tržní tick (odhad)";
+        }
+        if (buyPrice === null && q0FallbackPrice > 0) {
+          buyPrice = q0FallbackPrice;
+          priceSource = "tržní tick Q0 (hrubý odhad – kvalita nemá obchody)";
         }
         if (buyPrice === null) {
           buyPrice = 0.001;
@@ -2352,7 +2384,9 @@ export async function reconcileGameWarehouse(
               ? matched.price
               : marketPrice > 0
                 ? marketPrice
-                : null;
+                : q0FallbackPrice > 0
+                  ? q0FallbackPrice
+                  : null;
 
           // Rozpad nákladů – jen když máme reálnou cenu z cashflow.
           // Hrubá tržba + přepravní jednotky se sčítají per prodejní
@@ -2574,12 +2608,12 @@ export async function syncGameMarketOrders(
 
       const [watch] = (await sql`
         select threshold from alerts
-        where item_id = ${itemId} and quality = 0 and kind = 'limit_sell'
+        where item_id = ${itemId} and quality = ${quality} and kind = 'limit_sell'
       `) as unknown as { threshold: string }[];
       if (!watch || Number(watch.threshold) !== a.minPrice) {
         await sql`
           insert into alerts (item_id, quality, kind, direction, threshold, note)
-          values (${itemId}, 0, 'limit_sell', 'above', ${a.minPrice},
+          values (${itemId}, ${quality}, 'limit_sell', 'above', ${a.minPrice},
                   'Limitní prodej z herní burzy')
           on conflict (item_id, quality, kind) where kind = 'limit_sell' do update
             set threshold = ${a.minPrice},
@@ -2600,20 +2634,20 @@ export async function syncGameMarketOrders(
     await sql`
       delete from alerts a
       where a.kind = 'limit_sell'
-        and a.quality = 0
         and (
           (a.note = 'Limitní prodej z herní burzy'
             and not exists (
               select 1 from game_market_orders g
-              where g.item_id = a.item_id
+              where g.item_id = a.item_id and g.quality = a.quality
             ))
           or (not exists (
                 select 1 from positions p
-                where p.item_id = a.item_id and p.closed_at is null
+                where p.item_id = a.item_id and p.quality = a.quality
+                  and p.closed_at is null
               )
               and not exists (
                 select 1 from game_market_orders g
-                where g.item_id = a.item_id
+                where g.item_id = a.item_id and g.quality = a.quality
               ))
         )
     `;
@@ -2654,11 +2688,13 @@ export async function getGameMarketOrders(): Promise<
     est_fee: number;
     /** true = poplatek nahlásila hra u nabídky, false = odhad 4 % */
     fee_from_game: boolean;
-    /** odhad nákladu přepravy (záporný; exaktní dle skladu, fallback %) */
+    /** odhad nákladu přepravy (záporný; exaktní dle skladu, fallback %) –
+     *  do net_total jde jen exaktní (transport_exact), fallback je jen info */
     est_transport: number;
     /** true = přeprava exaktně (poměr × cena Přepravy ze skladu) */
     transport_exact: boolean;
-    /** netto tržba = hrubá + poplatek + přeprava */
+    /** netto tržba = hrubá − poplatek − přeprava (herní parita prodejního
+     *  dialogu; přeprava jen u položek s poměrem > 0, kalibrováno 2026-10-07) */
     net_total: number;
     /** netto na ks */
     net_unit: number;
@@ -2697,7 +2733,7 @@ export async function getGameMarketOrders(): Promise<
     left join lateral (
       select price
       from price_history ph
-      where ph.item_id = g.item_id and ph.quality = 0
+      where ph.item_id = g.item_id and ph.quality = g.quality
       order by ph.recorded_at desc
       limit 1
     ) latest on true
@@ -2719,8 +2755,10 @@ export async function getGameMarketOrders(): Promise<
 
   // Náklady prodeje: burzovní poplatek (MARKET_FEE_PCT z tržby – hradí se
   // při odklepnutí; přesnou částku, hlásí-li ji hra u nabídky, bereme z ní)
-  // + přeprava exaktně (poměr položky × cena Přepravy na skladu),
-  // fallback % z tržby – sdíleno přes lib/sale-costs.
+  // + přeprava (exaktně poměr × cena Přepravy na skladu; položky s poměrem
+  // 0 ji nemají, neexaktní % odhad se nezapočítává) – HERNÍ PARITA
+  // prodejního dialogu (kalibrováno na Dýni Q3 2026-10-07: hra ukazuje
+  // „Náklady na přepravu“ a odečítá je z „Odhadovaného zisku“).
   const trUnitCost = await getTransportUnitCost(db);
   const ratioCache = new Map<number, number | null>();
   const ratioFor = async (itemId: number) => {
@@ -2741,9 +2779,12 @@ export async function getGameMarketOrders(): Promise<
       const estFee = est.fee;
       const feeFromGame = est.fromGame;
       const ratio = await ratioFor(r.item_id);
-      const useExact = ratio !== null && trUnitCost !== null && ratio > 0;
+      // Poměr 0 = známá hodnota (položka přepravu nespotřebuje), ne chybějící data.
+      const useExact = ratio !== null && (ratio === 0 || (trUnitCost !== null && ratio > 0));
+      // Informativní přeprava (tooltip) – do netto jde jen exaktní částka.
       const transport = estimateTransport(gross, quantity, ratio, trUnitCost).transport;
-      const netTotal = gross + estFee + transport;
+      // Herní parita: netto = hrubá − poplatek − přeprava (exaktní).
+      const netTotal = gross + estFee + (useExact ? transport : 0);
       const avgBuyRaw = r.avg_price_quality ?? r.avg_price_any;
       const avgBuy = avgBuyRaw === null ? null : Number(avgBuyRaw);
       const plTotal =
@@ -2976,7 +3017,8 @@ export async function syncGameCashflow(rows: GameCashflowRow[]): Promise<number>
 
 let transportationCache: {
   loadedAt: number;
-  ratios: Map<number, number>;
+  /** Poměr per položka; null = API hodnotu neposlalo (→ fallback, NE exaktní 0). */
+  ratios: Map<number, number | null>;
 } | null = null;
 
 /**
@@ -2996,7 +3038,13 @@ async function getTransportationRatio(
       transportationCache = {
         loadedAt: now,
         ratios: new Map(
-          resources.map((r) => [r.id, Number(r.transportation) || 0])
+          resources.map((r) => {
+            const n = Number(r.transportation);
+            // Jen konečná hodnota je "známý poměr" (0 včetně – energie,
+            // research). Chybějící/nekorektní pole → null = fallback,
+            // ať se náhodná nula nesází jako exaktní nulová přeprava.
+            return [r.id, Number.isFinite(n) ? n : null];
+          })
         ),
       };
     } catch {
@@ -3510,8 +3558,10 @@ async function computeSaleCosts(
 }> {
   const ratio = await getTransportationRatio(opts.itemId);
   const trUnitCost = await getTransportUnitCost(sql);
+  // Poměr 0 = známá hodnota (energie, research) → exaktní nula, NE fallback.
   const useExact =
-    ratio !== null && trUnitCost !== null && ratio > 0 && trUnitCost > 0;
+    ratio !== null &&
+    (ratio === 0 || (trUnitCost !== null && ratio > 0 && trUnitCost > 0));
 
   if (useExact) {
     return {
@@ -3594,6 +3644,81 @@ async function matchSalePrice(
   }
   const price = units > 0 && costSum > 0 ? costSum / units : null;
   return { price, matchedUnits: units };
+}
+
+/** Položka pro kalkulačku kontraktů – id, název, ikona, kategorie +
+ *  poslední tržní cena per kvalita (reference „100 % MP“). */
+export type MarketInstrument = {
+  id: number;
+  name: string;
+  image_url: string | null;
+  category: string | null;
+  /** Poslední obchod per kvalita Q0–Q7 (null = žádný tick). */
+  prices: Record<string, number | null>;
+  /** Položka s kvalitami (výzkumy a Software mají JEN univerzální Q0 –
+   *  viz kalkulačka). False = selektor kvality skrýt. */
+  hasQualities: boolean;
+};
+
+/**
+ * Položky BEZ kvalit (jen univerzální Q0): výzkumy + Software.
+ * Ve hře nemají žádné varianty kvality; ověřeno v orderbooku ofiko API
+ * (2026-10-06: path 0 vrací výhradně order quality=0; Simco Tools flag
+ * isResearch u nich NAHODU nelže (false), proto explicitní whitelist.
+ */
+const NO_QUALITY_ITEMS = new Set([
+  35, // Software
+  29, 30, 31, 32, 33, 34, 58, 59, 100, 113, // výzkumy
+  13, // Přeprava (také jen univerzální Q0)
+]);
+
+/**
+ * Položky se sběrem ticků + poslední cena PRO KAŽDOU KVALITU s daty –
+ * seznam pro kalkulačku kontraktů (% MP ↔ cena; kontrakty se uzavírají
+ * i na kvality, takže Q3 „boty na podpatku“ se počítá z ceny Q3).
+ * Řazeno dle názvu.
+ */
+export async function getMarketInstruments(): Promise<MarketInstrument[]> {
+  const db = getDb();
+  const rows = (await db`
+    select i.id, i.name, i.image_url, i.category,
+           q.quality, q.price
+    from items i
+    join lateral (
+      select distinct on (ph.quality) ph.quality, ph.price
+      from price_history ph
+      where ph.item_id = i.id
+      order by ph.quality, ph.recorded_at desc
+    ) q on true
+    where exists (select 1 from price_history ph where ph.item_id = i.id)
+    order by i.name, q.quality
+  `) as unknown as {
+    id: number;
+    name: string;
+    image_url: string | null;
+    category: string | null;
+    quality: number;
+    price: string | null;
+  }[];
+
+  const byItem = new Map<number, MarketInstrument>();
+  for (const r of rows) {
+    let inst = byItem.get(r.id);
+    if (!inst) {
+      inst = {
+        id: r.id,
+        name: r.name,
+        image_url: r.image_url,
+        category: r.category,
+        prices: {},
+        hasQualities: !NO_QUALITY_ITEMS.has(r.id),
+      };
+      byItem.set(r.id, inst);
+    }
+    const p = r.price === null ? null : Number(r.price);
+    inst.prices[String(r.quality)] = p !== null && p > 0 ? p : null;
+  }
+  return [...byItem.values()];
 }
 
 /**
