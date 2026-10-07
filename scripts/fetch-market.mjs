@@ -90,10 +90,23 @@ async function fetchJson(url) {
   throw new Error("vyčerpané pokusy (rate limit?)");
 }
 
-/** Nejnižší aktivní nabídka (ask) z pole orderů. */
-function extractLowestAsk(payload) {
+/**
+ * Nejnižší aktivní nabídka (ask) z pole orderů PRO KONKRÉTNÍ KVALITU.
+ *
+ * QUIRK ofiko API (změřeno 2026-10-06): endpoint market/{quality}/{id}/
+ * ignoruje kvalitu v path (path Q3 vrací prázdný objekt {}) a vrací JEDNU
+ * odpověď se VŠEMI kvalitami Q0–Q10. Proto fetchujeme vždy path 0 a
+ * kvalitu dobíráme filtrem na o.quality – bez toho by „nejnižší ask“
+ * míchal kvality (Cukr: Q0 18,00 vs Q3 18,70).
+ */
+function extractLowestAsk(payload, quality) {
   const orders = (Array.isArray(payload) ? payload : [])
-    .filter((o) => Number(o?.quantity) > 0 && Number(o?.price) > 0)
+    .filter(
+      (o) =>
+        Number(o?.quantity) > 0 &&
+        Number(o?.price) > 0 &&
+        Number(o?.quality) === quality
+    )
     .sort((a, b) => Number(a.price) - Number(b.price));
 
   if (orders.length === 0) return null;
@@ -142,16 +155,20 @@ async function fetchAndStorePrices(items) {
   const recordedAt = new Date();
   let inserted = 0;
   let failed = 0;
+  const pending = [];
 
-  for (const quality of QUALITIES) {
-    console.log(`\n💱 Kvalita ${quality} – ${items.length} položek…`);
-    const pending = [];
+  console.log(`\n💱 ${items.length} položek × kvality [${QUALITIES.join(", ")}]…`);
 
-    for (const item of items) {
-      const url = `${API_BASE}/market/${quality}/${item.id}/`;
-      try {
-        const payload = await fetchJson(url);
-        const best = extractLowestAsk(payload);
+  // Jedna odpověď obsahuje VŠECHNY kvality → fetch per POLOŽKA (path 0)
+  // a rozděl na požadované kvality filtrem. (Fetch per kvalita by u
+  // path≠0 vracel {} a znásobil by počet requestů zbytečně.)
+  for (const item of items) {
+    const url = `${API_BASE}/market/0/${item.id}/`;
+    try {
+      const payload = await fetchJson(url);
+
+      for (const quality of QUALITIES) {
+        const best = extractLowestAsk(payload, quality);
 
         if (!best) {
           console.warn(`  ⚠️  ${item.name} (q${quality}): žádná aktivní nabídka.`);
@@ -169,17 +186,18 @@ async function fetchAndStorePrices(items) {
         console.log(
           `  ✔ ${item.name} (q${quality}): ${best.price} × ${best.quantity}`
         );
-      } catch (err) {
-        failed++;
-        console.error(`  ✖ ${item.name} (q${quality}): ${err.message}`);
       }
-
-      await sleep(REQUEST_DELAY_MS);
+    } catch (err) {
+      failed += QUALITIES.length;
+      console.error(`  ✖ ${item.name}: ${err.message}`);
     }
 
-    // Flush po každé kvalitě – částečná data přežijí i případný timeout
-    await upsertPricePoints(pending);
+    await sleep(REQUEST_DELAY_MS);
   }
+
+  // Flush na konci – částečná data by šla i per item, ale jeden bulk je
+  // rychlejší; při fatálním pádu se nic neuloží (stejné riziko jako dřív).
+  await upsertPricePoints(pending);
 
   return { inserted, failed };
 }

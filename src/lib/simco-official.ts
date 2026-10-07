@@ -37,7 +37,14 @@ export type OfficialOrder = {
 };
 
 /**
- * Aktivní nabídky (ask strana orderbooku) pro resource+kvalitu.
+ * Aktivní nabídky (ask strana orderbooku) pro resource+KVALITU.
+ *
+ * DŮLEŽITÉ (změřeno 2026-10-06): ofiko v3 endpoint `market/{quality}/{id}/`
+ * IGNORUJE kvalitu v path (path Q3 dokonce vrací prázdný objekt) a vrací
+ * JEDNU odpověď s VŠEMI kvalitami Q0–Q10. Správná cena per kvalita se
+ * proto získá FILTREM na `quality` v datech – jinak „nejnižší ask“
+ * míchá kvality (u Cukru se Q0 min 18,00 tvářilo jako cena i pro Q3,
+ * jehož reálné minimum je 18,70).
  * Odpověď = pole orderů (nejlevnější dole v UI hry; my si seřadíme sami).
  */
 export async function getOfficialOrders(
@@ -45,7 +52,9 @@ export async function getOfficialOrders(
   quality = 0
 ): Promise<OfficialOrder[]> {
   return throttled(async () => {
-    const res = await fetch(`${BASE}/market/${quality}/${resourceId}/`, {
+    // Path vždy 0 – jediná varianta, která vrací kompletní knihu;
+    // požadovaná kvalita se dobere filtrem níže.
+    const res = await fetch(`${BASE}/market/0/${resourceId}/`, {
       headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
       cache: "no-store",
     });
@@ -58,11 +67,55 @@ export async function getOfficialOrders(
       seller?: { company?: string; npc?: boolean } | null;
     }>;
     return (Array.isArray(data) ? data : [])
-      .filter((o) => Number(o?.quantity) > 0 && Number(o?.price) > 0)
+      .filter(
+        (o) =>
+          Number(o?.quantity) > 0 &&
+          Number(o?.price) > 0 &&
+          Number(o?.quality) === quality
+      )
       .map((o) => ({
         price: Number(o.price),
         quantity: Number(o.quantity),
-        quality: Number(o.quality ?? quality),
+        quality,
+        posted: o.posted ?? "",
+        seller: o.seller ?? null,
+      }));
+  });
+}
+
+/**
+ * RAW aktivní nabídky VŠECH KVALIT (path 0 = kompletní kniha, změřeno
+ * 2026-10-06) bez filtru na kvalitu – každý order nese `quality`.
+ * Základ pro per-kvalitní asky jedním requestem (držby, fallback cen Q>0).
+ */
+export async function getOfficialOrdersAllQualities(
+  resourceId: number
+): Promise<OfficialOrder[]> {
+  return throttled(async () => {
+    const res = await fetch(`${BASE}/market/0/${resourceId}/`, {
+      headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
+      cache: "no-store",
+    });
+    if (!res.ok) throw new Error(`SimCompanies v3 HTTP ${res.status}`);
+    const data = (await res.json()) as Array<{
+      quantity?: number;
+      price?: number;
+      quality?: number;
+      posted?: string;
+      seller?: { company?: string; npc?: boolean } | null;
+    }>;
+    return (Array.isArray(data) ? data : [])
+      .filter(
+        (o) =>
+          Number(o?.quantity) > 0 &&
+          Number(o?.price) > 0 &&
+          Number.isInteger(Number(o?.quality)) &&
+          Number(o?.quality) >= 0
+      )
+      .map((o) => ({
+        price: Number(o.price),
+        quantity: Number(o.quantity),
+        quality: Number(o.quality),
         posted: o.posted ?? "",
         seller: o.seller ?? null,
       }));
