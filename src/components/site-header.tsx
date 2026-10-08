@@ -8,8 +8,10 @@ import {
   Bell,
   Briefcase,
   Calculator,
+  CalendarRange,
   Percent,
   Radar,
+  ReceiptText,
   Star,
   TrendingUp,
 } from "lucide-react";
@@ -29,8 +31,10 @@ const NAV = [
   { href: "/portfolio", label: "Portfolio", icon: Briefcase },
   { href: "/alerts", label: "Alerty", icon: Bell },
   { href: "/statistiky", label: "Statistiky", icon: BarChart3 },
+  { href: "/sezonalita", label: "Sezonalita", icon: CalendarRange },
   { href: "/kalkulacka", label: "Kalkulačka", icon: Percent },
   { href: "/profit", label: "Profit", icon: Calculator },
+  { href: "/cenik", label: "Ceník", icon: ReceiptText },
 ] as const;
 
 export function SiteHeader({

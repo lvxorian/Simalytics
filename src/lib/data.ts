@@ -3803,3 +3803,63 @@ async function matchBuyPrice(
   const price = units > 0 && costSum > 0 ? costSum / units : null;
   return { price, matchedUnits: units };
 }
+
+// ── SEZONALITA (měsíční uzávěry → monthly returns heatmapa) ─────────
+
+export type MonthlyClose = {
+  /** YYYY-MM (první den měsíce, ISO string). */
+  month: string;
+  close: number;
+};
+
+/**
+ * Měsíční uzávěry pro sezonalitu = ARCHIVNÍ měsíční svíčky
+ * (market_candles_archive, granularity='1M', od 2022-02, backfill
+ * skriptem) doplněné o ČERSTVÝ běžící měsíc agregovaný z denních
+ * svíček (market_candles_daily) – archiv ho přebírá až po konci
+ * měsíce. Vrací rostoucí dle měsíce.
+ */
+export async function getMonthlyCloses(
+  itemId: number,
+  quality = 0
+): Promise<MonthlyClose[]> {
+  const db = getDb();
+  // 1) Archivní měsíční svíčky (uzávěry) – od 2022-02.
+  const archive = (await db`
+    select bucket_start::text as bucket_start, close
+    from market_candles_archive
+    where resource_id = ${itemId}
+      and quality = ${quality}
+      and granularity = '1M'
+    order by bucket_start asc
+  `) as unknown as { bucket_start: string; close: string }[];
+
+  // 2) Čerstvý běžící měsíc z denních svíček (close posledního dne).
+  const recent = (await db`
+    select date_trunc('month', day)::text as month, close
+    from (
+      select day, close,
+             row_number() over (partition by date_trunc('month', day)
+                                order by day desc) as rn
+      from market_candles_daily
+      where resource_id = ${itemId}
+        and quality = ${quality}
+        and day >= date_trunc('month', now())
+    ) t
+    where rn = 1
+    order by month asc
+  `) as unknown as { month: string; close: string }[];
+
+  const byMonth = new Map<string, number>();
+  for (const r of archive) {
+    byMonth.set(r.bucket_start.slice(0, 7), Number(r.close));
+  }
+  for (const r of recent) {
+    // Čerstvý měsíc přebije archivní hodnotu (může být starší/plochá).
+    byMonth.set(r.month.slice(0, 7), Number(r.close));
+  }
+
+  return [...byMonth.entries()]
+    .map(([month, close]) => ({ month, close }))
+    .sort((a, b) => a.month.localeCompare(b.month));
+}
