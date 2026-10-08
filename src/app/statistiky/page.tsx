@@ -71,6 +71,23 @@ export default async function StatistikyPage() {
     .filter((e) => new Date(e.until) >= now)
     .sort((a, b) => a.speedModifier - b.speedModifier);
 
+  // Zakázky: API vrací i DÁVNO EXPIROVANÉ (audit 2026-10-08: 21 z 25).
+  // Expirace = created + daysToFulfill dní; filtrujeme a ukazujeme
+  // ZBÝVAJÍCÍ dny místo celkové doby plnění.
+  const liveOrders = orders.filter((o) => {
+    const deadline =
+      new Date(o.created).getTime() + o.daysToFulfill * 86_400_000;
+    return deadline >= now.getTime();
+  });
+  const daysLeft = (o: (typeof orders)[number]): number =>
+    Math.max(
+      0,
+      Math.ceil(
+        (new Date(o.created).getTime() + o.daysToFulfill * 86_400_000 - now.getTime()) /
+          86_400_000
+      )
+    );
+
   return (
     <div className="space-y-8">
       <AutoRefresh intervalMs={120_000} />
@@ -123,8 +140,9 @@ export default async function StatistikyPage() {
             />
           </div>
           <p className="text-xs text-muted-foreground">
-            Denní data z {formatDate(macro.date)} · zdroj Simco Tools
-            realm summaries.
+            Denní data z {formatDate(macro.date)} (poslední dokončený den –
+            dnešní API doplňuje až za den) · delta vs. předchozí den ·
+            zdroj Simco Tools.
           </p>
         </section>
       )}
@@ -250,7 +268,16 @@ export default async function StatistikyPage() {
                       {e.resourceName}
                     </Link>
                     <div className="truncate text-xs text-muted-foreground">
-                      {e.producedAtName} · do {formatDate(e.until)}
+                      {e.producedAtName} · do {formatDate(e.until)} ({
+                        Math.max(
+                          0,
+                          Math.ceil(
+                            (new Date(e.until).getTime() - now.getTime()) /
+                              86_400_000
+                          )
+                        )
+                      }{" "}
+                      d)
                     </div>
                   </div>
                   <Badge
@@ -404,7 +431,7 @@ export default async function StatistikyPage() {
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {[...certDemand.values()]
               .sort((a, b) => b.holderCount - a.holderCount)
-              .slice(0, 9)
+              .slice(0, 15)
               .map((row) => (
                 <div
                   key={row.itemId}
@@ -452,9 +479,9 @@ export default async function StatistikyPage() {
           Velké poptávkové signály – kdo nakoupí suroviny dřív, než se rozjede
           plnění zakázky, vyhrává.
         </p>
-        {orders.length > 0 ? (
+        {liveOrders.length > 0 ? (
           <div className="grid gap-2 lg:grid-cols-2">
-            {orders.map((o) => (
+            {liveOrders.map((o) => (
               <div
                 key={o.id}
                 className="rounded-xl border border-border/80 bg-card p-4"
@@ -464,8 +491,17 @@ export default async function StatistikyPage() {
                     <AlertTriangle className="size-4 text-primary" />
                     {o.projectName}
                   </div>
-                  <Badge variant="outline" className="font-mono text-[10px]">
-                    {o.daysToFulfill} dní
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "font-mono text-[10px]",
+                      daysLeft(o) <= 1 &&
+                        "border-red-500/40 bg-red-500/10 text-down"
+                    )}
+                  >
+                    {daysLeft(o) <= 0
+                      ? "poslední den"
+                      : `zbývá ${daysLeft(o)} d`}
                   </Badge>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-1.5">
@@ -490,7 +526,9 @@ export default async function StatistikyPage() {
           </div>
         ) : (
           <div className="rounded-lg border border-dashed border-border bg-card p-6 text-sm text-muted-foreground">
-            Zakázky se nepodařilo načíst.
+            {orders.length > 0
+              ? "Žádné aktivní zakázky – všechny vypsane už vypršely."
+              : "Zakázky se nepodařilo načíst."}
           </div>
         )}
       </section>
@@ -530,7 +568,7 @@ function MacroStat({
           )}
         >
           {delta > 0 ? "+" : ""}
-          {delta.toFixed(2)} % vs. včera
+          {delta.toFixed(2)} % d/d
         </div>
       )}
     </div>
