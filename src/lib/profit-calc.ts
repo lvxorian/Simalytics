@@ -73,9 +73,9 @@ export type ProfitBreakdown = {
   net: number;
   /** Zisk na kus. */
   netPerUnit: number;
-  /** Marže = net / gross (%) – smysl jen při gross > 0. */
+  /** Marže = net / gross v PROCENTECH (25 = 25 %) – smysl jen při gross > 0. */
   marginPct: number | null;
-  /** Návratnost = net / náklad nákupu (%) – při nákladu > 0. */
+  /** Návratnost = net / náklad nákupu v PROCENTECH – při nákladu > 0. */
   roiPct: number | null;
   /** Přeprava exaktní (poměr × skladová cena) vs. fallback % z tržby. */
   transportExact: boolean;
@@ -119,8 +119,10 @@ export function computeBreakdown(
     transport,
     net,
     netPerUnit: inputs.quantity > 0 ? net / inputs.quantity : 0,
-    marginPct: gross > 0 ? net / gross : null,
-    roiPct: cost > 0 ? net / cost : null,
+    // ×100 – pole *Pct nesou PROCENTA (konvence pl_pct / change24h);
+    // UI formátuje formatPercent(), který čeká procenta, ne zlomek.
+    marginPct: gross > 0 ? (net / gross) * 100 : null,
+    roiPct: cost > 0 ? (net / cost) * 100 : null,
     transportExact: exact,
   };
 }

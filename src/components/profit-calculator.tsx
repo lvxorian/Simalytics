@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 
+import { AssetPins } from "@/components/asset-pins";
 import { ItemCombobox, type ComboboxItem } from "@/components/ui/combobox";
 import { ItemIcon } from "@/components/item-icon";
 import { Button } from "@/components/ui/button";
@@ -310,6 +311,19 @@ export function ProfitCalculator({
     Number.isFinite(qtyNum) &&
     qtyNum > 0;
 
+  // COGS divergence: zadaná cena vs. herní FIFO unit_cost ze skladu.
+  // Hra účtuje zisk proti FIFO COGS celého inventáře (starší šarže se
+  // míchají s novými) – když se liší, herní „Zisk" v účetnictví bude
+  // jiný než náš výpočet (reálný případ: Rostlinný výzkum 8.10. 2026,
+  // zadáno 84,50, herní FIFO 85,688 → rozdíl 3 565 $ na 3000 ks).
+  const cogsDivergence =
+    inputsValid &&
+    whRow?.unit_cost != null &&
+    whRow.unit_cost > 0 &&
+    Math.abs(buyNum - whRow.unit_cost) / whRow.unit_cost > 0.01
+      ? { calc: buyNum, game: whRow.unit_cost }
+      : null;
+
   // Efektivní prodejní cena/ks: ručně nebo z −% MP reference.
   const sellUnit: number | null =
     sellMode === "price"
@@ -470,6 +484,12 @@ export function ProfitCalculator({
                   onChange={pickItem}
                   placeholder="Vyber komoditu…"
                 />
+                <AssetPins
+                  items={items}
+                  value={itemId}
+                  onSelect={pickItem}
+                  storageKey="simalytics.pins.profit"
+                />
 
                 {selected && (
                   <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-secondary/30 px-3 py-2.5">
@@ -553,6 +573,19 @@ export function ProfitCalculator({
                               : ""}
                         </span>
                       </div>
+                    )}
+                    {cogsDivergence && (
+                      <p
+                        className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] leading-snug text-amber-600 dark:text-amber-400"
+                        title="Hra počítá zisk proti FIFO COGS celého skladu – směs starých i nových šarží"
+                      >
+                        ⚠ Zadaná cena {formatPrice(cogsDivergence.calc)} se liší od
+                        unit_cost na skladu {formatPrice(cogsDivergence.game)} (
+                        {formatPercent(((cogsDivergence.calc - cogsDivergence.game) / cogsDivergence.game) * 100)}).
+                        Herní účetnictví účtuje FIFO z celého inventáře – jeho „Zisk“
+                        bude jiný než tento výpočet. Pro shodu s herní účetnictví
+                        použij „Naplnit ze skladu“.
+                      </p>
                     )}
                     <p className="text-[11px] leading-snug text-muted-foreground">
                       {ratio !== null && ratio === 0

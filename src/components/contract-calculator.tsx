@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 
+import { AssetPins } from "@/components/asset-pins";
 import { ItemCombobox, type ComboboxItem } from "@/components/ui/combobox";
 import { ItemIcon } from "@/components/item-icon";
 import { Button } from "@/components/ui/button";
@@ -333,6 +334,12 @@ export function ContractCalculator({
               value={itemId}
               onChange={pickItem}
               placeholder="Vyber komoditu…"
+            />
+            <AssetPins
+              items={items}
+              value={itemId}
+              onSelect={pickItem}
+              storageKey="simalytics.pins.contract"
             />
             <p className="text-xs text-muted-foreground">
               Reference = aktivní nabídka z burzy pro vybranou KVALITU
