@@ -157,6 +157,11 @@ export function PortfolioHoldingsTable({
     () => assets.map((h) => refineRow(h, asks.get(hKey(h)))),
     [assets, asks]
   );
+  // Celková tržní hodnota portfolia – pro % alokace řádků (viz Podíl).
+  const totalMarketValue = useMemo(
+    () => rows.reduce((s, h) => s + (h.market_value ?? h.invested), 0),
+    [rows]
+  );
 
   // Skupiny per položka – zachováme pořadí dle investice (první výskyt).
   const groups: AssetGroup[] = [];
@@ -195,13 +200,21 @@ export function PortfolioHoldingsTable({
       </TableCell>
 
       <TableCell className="text-right font-mono tabular-nums">
-        {formatPrice(h.avg_buy_price)}
+        {/* Za řádek ZAINVESTOVÁNO (hlavní číslo – „kolik v tom mám peněz“),
+            jednotková cena jako doplněk. Stejná hierarchie jak v broker
+            appkách (cost basis dominuje, avg price je detail). */}
+        <span title={`Zainvestováno: ${h.quantity.toLocaleString("cs-CZ")} ks × Ø ${formatPrice(h.avg_buy_price)}`}>
+          {formatPrice(h.invested)}
+        </span>
+        <div className="text-[10px] text-muted-foreground">
+          Ø {formatPrice(h.avg_buy_price)} /ks
+        </div>
         {h.lots.length > 1 && (
           <div
             className="text-[10px] text-muted-foreground"
             title="Vážený průměr napříč všemi nákupy"
           >
-            průměr
+            {h.lots.length} nákupů
           </div>
         )}
       </TableCell>
@@ -220,6 +233,35 @@ export function PortfolioHoldingsTable({
 
       <TableCell className="text-right font-mono tabular-nums">
         {formatPrice(h.market_value)}
+      </TableCell>
+
+      {/* Podíl na celkové tržní hodnotě portfolia (alokace jak v broker
+          appkách) – číslo + jemný bar na šířku buňky. */}
+      <TableCell className="text-right">
+        {(() => {
+          const share =
+            totalMarketValue > 0 && h.market_value !== null
+              ? (h.market_value / totalMarketValue) * 100
+              : null;
+          return (
+            <>
+              <div
+                className="font-mono text-sm tabular-nums text-muted-foreground"
+                title={`Podíl na celkové tržní hodnotě portfolia (${formatPrice(totalMarketValue)})`}
+              >
+                {share === null ? "–" : `${share.toFixed(2)} %`}
+              </div>
+              {share !== null && (
+                <div className="mt-1 h-1 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-primary/60"
+                    style={{ width: `${Math.min(100, share)}%` }}
+                  />
+                </div>
+              )}
+            </>
+          );
+        })()}
       </TableCell>
 
       <TableCell className="text-right">
@@ -377,9 +419,12 @@ export function PortfolioHoldingsTable({
 
         <TableCell
           className="text-right font-mono tabular-nums"
-          title="Vážený průměr pořizovací ceny napříč kvalitami"
+          title={`Zainvestováno do všech ${rows.length} kvalit položky (Ø pořizovací cena ${formatPrice(invested / qty)} /ks)`}
         >
-          {formatPrice(invested / qty)}
+          {formatPrice(invested)}
+          <div className="text-[10px] font-normal text-muted-foreground">
+            Ø {formatPrice(invested / qty)} /ks
+          </div>
         </TableCell>
 
         <TableCell className="text-right font-mono tabular-nums text-muted-foreground">
@@ -389,6 +434,31 @@ export function PortfolioHoldingsTable({
         <TableCell className="text-right font-mono tabular-nums">
           {formatPrice(value)}
         </TableCell>
+
+        {/* Podíl – MUSÍ být ve stejném pořadí jako v renderRow a headeru
+            (… Hodnota, Podíl, P/L …); dřív seděl mezi cenou a hodnotou
+            a celý řádek se tím posunul o sloupec. */}
+        {(() => {
+          const share =
+            totalMarketValue > 0
+              ? (value / totalMarketValue) * 100
+              : null;
+          return (
+            <TableCell className="text-right">
+              <div className="font-mono text-sm tabular-nums text-muted-foreground">
+                {share === null ? "–" : `${share.toFixed(2)} %`}
+              </div>
+              {share !== null && (
+                <div className="mt-1 h-1 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-primary/60"
+                    style={{ width: `${Math.min(100, share)}%` }}
+                  />
+                </div>
+              )}
+            </TableCell>
+          );
+        })()}
 
         <TableCell className="text-right">
           <div
@@ -431,9 +501,10 @@ export function PortfolioHoldingsTable({
           <TableRow className="hover:bg-transparent">
             <TableHead className="pl-4">Aktivum</TableHead>
             <TableHead className="text-right">Množství</TableHead>
-            <TableHead className="text-right">Pořizovací cena</TableHead>
+            <TableHead className="text-right">Pořízení (celkem)</TableHead>
             <TableHead className="text-right">Aktuální cena</TableHead>
             <TableHead className="text-right">Hodnota</TableHead>
+            <TableHead className="text-right">Podíl</TableHead>
             <TableHead className="text-right">Nerealizovaný P/L (netto)</TableHead>
             <TableHead className="hidden text-right md:table-cell">
               Nákupy

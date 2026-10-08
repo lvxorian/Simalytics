@@ -105,6 +105,11 @@ export default async function PortfolioPage({
     0
   );
   const totalPlPct = invested > 0 ? (totalPl / invested) * 100 : null;
+  // Poměr tržní hodnoty k investovanému kapitálu (zhodnocení kapitálu).
+  const priceGainPct =
+    invested > 0 ? ((marketValue - invested) / invested) * 100 : null;
+  // Celkový počet nákupů (lots) napříč aktivy – do hintu Investováno.
+  const lotsTotal = assets.reduce((s, h) => s + h.lots.length, 0);
   const realized = closedPositions.reduce(
     (s, p) => s + (p.realized_pl ?? 0),
     0
@@ -185,15 +190,32 @@ export default async function PortfolioPage({
               className="grid min-w-0 content-start gap-3 sm:grid-cols-2"
               style={{ containerType: "inline-size" }}
             >
+              {/* Investováno ↔ Tržní hodnota jsou provázané: hodnota =
+                  investováno + P/L – vizuální poměr na barze pod číslem
+                  to dá na pohled nahlédnout (jak broker appky). */}
               <SummaryCard
                 label="Investováno"
                 value={formatPrice(invested)}
-                hint="celková pořizovací cena aktiv"
+                sub={
+                  marketValue > 0 && invested > 0
+                    ? `${((invested / marketValue) * 100).toFixed(0)} % hodnoty, zhodnocení +${((Math.max(0, marketValue - invested) / invested) * 100).toFixed(1)} %`
+                    : null
+                }
+                hint={`celková pořizovací cena ${lotsTotal} nákupů – hodnota aktiva na burze = ${marketValue > 0 ? `${((invested / marketValue) * 100).toFixed(0)} % investovaného kapitálu` : "n/a"}`}
               />
               <SummaryCard
                 label="Tržní hodnota"
                 value={formatPrice(marketValue)}
-                hint="podle posledních tržních cen"
+                sub={
+                  priceGainPct === null
+                    ? null
+                    : `${priceGainPct >= 0 ? "+" : "−"}${Math.abs(priceGainPct).toFixed(2)} % oproti pořízení`
+                }
+                hint={
+                  marketValue >= invested
+                    ? "hodnota na burze převyšuje investovaný kapitál (zisk čeká na realizaci)"
+                    : "hodnota na burze je pod investovaným kapitálem (nerealizovaná ztráta)"
+                }
               />
               <SummaryCard
                 label="Nerealizovaný P/L (netto)"
