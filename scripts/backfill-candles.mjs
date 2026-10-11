@@ -2,18 +2,25 @@
 /**
  * Backfill svíček ze Simco Tools → DB (deep historie).
  *
- * Co dělá:
- *   1) DENNÍ svíčky (granularity=1d po 180denních oknech) → market_candles_daily
- *      – retence ~365 dní. Pozor: bez parametrů vrací API jen ~91 dní!
- *   2) TÝDENNÍ archiv (granularity=1W, start 2022) → market_candles_archive
- *      – starý archiv (2022 → konec 2025) bez objemů, recent okno se
- *      agreguje za běhu z denních svíček.
+ * Co dělá (idempotentně, upsert per bucket):
+ *   1) DENNÍ svíčky (granularity=1d, rolling okno ~365 dní po 180denních
+ *      oknech) → market_candles_daily
+ *      – Simco Tools drží denní data jen ~1 rok (start dřívější data
+ *        API ignoruje a vrací rolling okno). Skript proto vždy táhne
+ *        celé dostupné okno → DB nashromažďuje historii trvale.
+ *   2) TÝDENNÍ archiv (granularity=1W, celá dostupná hloubka ~2022)
+ *      → market_candles_archive
+ *      – pozn.: Simco Tools 1W/1M mají VLASTNÍ horní hranici (aktuálně
+ *        ~2026-04 u 1W, ~2026-09 u 1M); čerstvější weekly/monthly
+ *        buckety se agregují za běhu z denních svíček (market page).
  *   3) MĚSÍČNÍ archiv (granularity=1M, start 2022) → market_candles_archive
- *      – archiv až po aktuální měsíc (recent agregace z denních ho přebije).
  *
  * Simco Tools limit je 2 req/s ⇒ mezi requesty 600 ms.
- * Idempotentní (upsert per den/bucket). Spouštěj pravidelně (týdně +
- * po nasazení poprvé pro doplnění celé historie).
+ * Spouštěj pravidelně (1× denně/týdně): denní část je INKREMENTÁLNÍ –
+ * dotahuje jen dny po posledním uloženém dni (+ bezpečnostní přepis
+ * posledních 2 dní, ať se doběhne uzavření svíček). Historie se do DB
+ * kumuluje, první běh (nebo roční pauza) táhne celé 1d okno API.
+ * 1W/1M archiv se dotahuje vždy celý (1 request per granularitu).
  *
  * Použití: npm run backfill:candles
  */
@@ -26,7 +33,7 @@ try {
   for (const line of content.split("\n")) {
     const match = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/);
     if (match && !process.env[match[1]]) {
-      process.env[match[1]] = match[2].replace(/^[\"']|[\"']$/g, "");
+      process.env[match[1]] = match[2].replace(/^["']|["']$/g, "");
     }
   }
 } catch {}
@@ -44,9 +51,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Start archivu – Simco Tools má weekly/monthly data od ~2022-02. */
 const ARCHIVE_START_MS = Date.UTC(2022, 0, 1);
-/** Denní retence API ~365 dní – denní backfill táhne o rok nazpět. */
+/** Denní retence API ~365 dní (rolling) – táhneme plné okno. */
 const DAILY_DAYS_BACK = 365;
-/** Velikost okna pro denní stránkování (API nemá limit řádků, okna jen urychlí dedupe). */
+/** Velikost okna pro denní stránkování. */
 const DAILY_WINDOW_DAYS = 180;
 
 async function fetchJson(url) {
@@ -66,37 +73,40 @@ async function fetchJson(url) {
 
 const candlesUrl = (id, gran, startMs, endMs) =>
   `https://api.simcotools.com/v1/realms/${REALM}/market/resources/${id}/0/candlesticks` +
-  `?granularity=${gran}&start=${Math.floor(startMs)}&end=${Math.floor(endMs)}`;
+  `?granularity=${gran}&start=${Math.floor(startMs)}${endMs ? `&end=${Math.floor(endMs)}` : ""}`;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** ISO pondělí (UTC) daného dne. */
-function mondayIso(date) {
-  const d = new Date(date);
-  const diffToMonday = (d.getUTCDay() + 6) % 7;
-  d.setUTCDate(d.getUTCDate() - diffToMonday);
-  return d.toISOString().slice(0, 10);
-}
-
-/** ISO první den měsíce (UTC). */
-function monthIso(date) {
-  const d = new Date(date);
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-01`;
-}
-
 try {
   const items = await sql`select id, name from items order by id`;
-  console.log(`🕯️  Deep backfill svíček pro ${items.length} položek…`);
+  console.log(`🕯️  Backfill svíček pro ${items.length} položek…`);
 
   let totalDaily = 0;
   let totalArchive = 0;
 
   for (const item of items) {
     try {
-      // ── 1) DENNÍ svíčky (~365 dní) po 180denních oknech ─────────────
+      // ── 1) DENNÍ svíčky – INKREMENTÁLNÍ: jen dny po posledním
+      //      uloženém dni (−2 d přepis pro bezpečné uzavření svíček).
+      //      První běh = celé 365d okno API. ──────────────────────────
       const dailyByDay = new Map();
       const nowMs = Date.now();
-      const dailyFrom = nowMs - DAILY_DAYS_BACK * DAY_MS;
+      const dailyFloor = nowMs - DAILY_DAYS_BACK * DAY_MS; // rolling retence API
+      let dailyFrom = dailyFloor;
+      try {
+        const lastRow = await sql`
+          select max(day) as last_day from market_candles_daily
+          where resource_id = ${item.id}
+        `;
+        const lastMs = lastRow[0]?.last_day
+          ? new Date(lastRow[0].last_day).getTime()
+          : 0;
+        if (lastMs > 0) {
+          dailyFrom = Math.max(lastMs - 2 * DAY_MS, dailyFloor);
+        }
+      } catch (err) {
+        console.error(`  ✖ ${item.name} (last_day query): ${err.message}`);
+      }
       for (let s = dailyFrom; s < nowMs; s += DAILY_WINDOW_DAYS * DAY_MS) {
         const e = Math.min(s + DAILY_WINDOW_DAYS * DAY_MS, nowMs);
         try {
@@ -142,13 +152,14 @@ try {
         totalDaily += rows.length;
         console.log(`  ✔ ${item.name}: ${rows.length} denních svíček`);
       } else {
-        console.log(`  ⚠️  ${item.name}: žádné denní svíčky`);
+        console.log(`  ⚠️  ${item.name}: denní svíčky aktuální (nic nového)`);
       }
 
-      // ── 2) TÝDENNÍ archiv (od 2022) ─────────────────────────────────
+      // ── 2) TÝDENNÍ archiv (celá dostupná hloubka od 2022, bez end –
+      //      API 1W/1M tříbí vlastní horní hranici; recent agreguje page) ─
       try {
         const data = await fetchJson(
-          candlesUrl(item.id, "1W", ARCHIVE_START_MS, nowMs)
+          candlesUrl(item.id, "1W", ARCHIVE_START_MS)
         );
         const candles = data.candlesticks ?? [];
         if (candles.length > 0) {
@@ -189,10 +200,10 @@ try {
       }
       await sleep(600);
 
-      // ── 3) MĚSÍČNÍ archiv (od 2022) ─────────────────────────────────
+      // ── 3) MĚSÍČNÍ archiv (od 2022, bez end) ────────────────────────
       try {
         const data = await fetchJson(
-          candlesUrl(item.id, "1M", ARCHIVE_START_MS, nowMs)
+          candlesUrl(item.id, "1M", ARCHIVE_START_MS)
         );
         const candles = data.candlesticks ?? [];
         if (candles.length > 0) {

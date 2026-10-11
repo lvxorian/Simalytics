@@ -25,11 +25,15 @@ dev-smoke.log
 !.env.example
 
 # vercel
-.vercel
-
-# debug dumpy z hry (obsahují herní data, nikdy necommitovat)
+.vercel# debug dumpy z hry (obsahují herní data, nikdy necommitovat)
 simalytics-dump-*.json
 portfolio-backup-*.json
+contract-dump.json
+scripts/contract-dump.json
+
+# lokální backup svíček (druhý zdroj dat, ne do repa)
+backups/
+scripts/backfill-run.log
 
 # typescript
 *.tsbuildinfo

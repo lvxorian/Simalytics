@@ -1,0 +1,37 @@
+name: Simalytics – daily candles backfill
+
+on:
+  schedule:
+    # Každý den 01:10 UTC – po daily syncu (00:20), až Simco Tools
+    # publikuje uzavřenou denní svíčku (Simalytics chronologie:
+    # denní ticky se uzavírají na půlnoci UTC).
+    - cron: "10 1 * * *"
+  workflow_dispatch: # ruční spuštění z GitHub UI (ruční doplnění / test)
+
+concurrency:
+  group: daily-candles
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Backfill daily candles (incremental) + weekly/monthly archive
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SIMCOTOOLS_REALM: ${{ vars.SIMCOTOOLS_REALM || '0' }}
+        run: npm run backfill:candles
